@@ -10,6 +10,12 @@ FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
+
+# Build-time placeholders — replaced at runtime by entrypoint.sh
+ENV NEXT_PUBLIC_API_URL=NEXT_PUBLIC_API_URL_PLACEHOLDER
+ENV NEXT_PUBLIC_EXPLORER_URL=NEXT_PUBLIC_EXPLORER_URL_PLACEHOLDER
+ENV NEXT_PUBLIC_NETWORK=NEXT_PUBLIC_NETWORK_PLACEHOLDER
+
 RUN npx next build
 
 FROM base AS runner
