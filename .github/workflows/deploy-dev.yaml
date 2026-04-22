@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  DOCKER_TAGS: taprootfreak/zkcoins-app:beta
+  DOCKER_TAGS: zkcoin/app:beta
 
 permissions:
   contents: read
