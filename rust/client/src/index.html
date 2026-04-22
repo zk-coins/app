@@ -1,0 +1,550 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>zkCoins Wallet</title>
+        <style>
+body {
+    font-family: Arial, sans-serif;
+    max-width: 800px;
+    margin: 0 auto;
+    padding: 20px;
+    line-height: 1.6;
+}
+        .container {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        .card {
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .info-display {
+            font-size: 18px;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+        .value {
+            font-weight: normal;
+        }
+        button {
+            background-color: #f7931a;
+            color: white;
+            padding: 10px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        button:hover {
+            background-color: #e78008;
+        }
+        input, select {
+            padding: 8px;
+            margin: 5px 0;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            width: 100%;
+            box-sizing: border-box;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .error {
+            color: red;
+            margin-top: 5px;
+        }
+        .success {
+            color: green;
+            margin-top: 5px;
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        h2 {
+            color: #444;
+            margin-bottom: 15px;
+        }
+        </style>
+    </head>
+    <body>
+        <h1>zkCoins Wallet</h1>
+
+        <div class="container">
+            <!-- Account Selection Card -->
+            <div class="card">
+                <h2>Select Account</h2>
+                <div class="form-group">
+                    <select id="account-selector" onchange="selectAccount()">
+                        <option>Loading addresses...</option>
+                    </select>
+                </div>
+                <button onclick="refreshAddresses()">Refresh Accounts</button>
+            </div>
+
+            <!-- Account Details Card -->
+            <div class="card">
+                <h2>Account Details</h2>
+                <div class="info-display">
+                    Address: <span id="selected-address" class="value">Not selected</span>
+                </div>
+                <div class="info-display">
+                    Balance: <span id="selected-balance" class="value">-</span>
+                </div>
+            </div>
+
+            <!-- Faucet Coins Card -->
+            <div class="card">
+                <h2>Coin Faucet</h2>
+                <div class="form-group">
+                    <label for="mint-amount">Amount:</label>
+                    <input type="number" id="mint-amount" placeholder="Amount" min="1">
+                </div>
+                <div class="form-group" style="display: inline-flex; align-items: center; gap: 10px;">
+                    <button onclick="mintCoins()" style="white-space: nowrap;">Get Coins</button>
+                    <input type="checkbox" id="mint-automatic-receive" name="mint-automatic-receive" value="yes" checked>
+                    <label for="mint-automatic-receive" style="white-space: nowrap;">Receive coin</label>
+                </div>
+                <div id="mint-result"></div>
+                <div id="proof-download-container-mint" style="display: none; margin-top: 15px;">
+                    <a id="proof-download-link-mint" href="#" download="coin_proof.bin" class="success">Download Coin Proof</a>
+                </div>
+            </div>
+
+            <!-- Send Coin Card -->
+            <div class="card">
+                <h2>Send Coins</h2>
+                <div class="form-group">
+                    <label for="send-to">To Address:</label>
+                    <input type="text" id="send-to" placeholder="Recipient Address">
+                </div>
+                <div class="form-group">
+                    <label for="send-amount">Amount:</label>
+                    <input type="number" id="send-amount" placeholder="Amount" min="1">
+                </div>
+                <button onclick="sendCoin()">Send Coins</button>
+                <div id="send-result"></div>
+                <div id="proof-download-container" style="display: none; margin-top: 15px;">
+                    <a id="proof-download-link" href="#" download="coin_proof.bin" class="success">Download Coin Proof</a>
+                </div>
+            </div>
+
+            <!-- Receive Coin Card -->
+            <div class="card">
+                <h2>Receive Coins</h2>
+                <div class="form-group">
+                    <label for="coin-proof">Coin Proof:</label>
+                    <input type="file" id="coin-proof" accept=".bin">
+                </div>
+                <button onclick="receiveCoin()">Receive Coins</button>
+                <div id="receive-result"></div>
+            </div>
+        </div>
+
+        <script>
+            // Update API endpoint base URL to use the /api prefix
+            const API_BASE_URL = '/api';  // Changed from 'http://localhost:4242' to '/api'
+
+            // Track the currently selected account
+            let selectedAccount = null;
+
+            // Function to select an account and update the UI
+            async function selectAccount() {
+                const accountSelector = document.getElementById('account-selector');
+                selectedAccount = accountSelector.value;
+
+                // Update the displayed address
+                document.getElementById('selected-address').textContent = selectedAccount;
+
+                // Fetch and display the balance for this specific account
+                await refreshSelectedBalance();
+            }
+
+            // Function to fetch and display selected account balance
+            async function refreshSelectedBalance() {
+                if (!selectedAccount || selectedAccount === 'Loading addresses...' || 
+                    selectedAccount === 'No addresses available') {
+                    document.getElementById('selected-balance').textContent = '-';
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/balance?address=${encodeURIComponent(selectedAccount)}`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    const data = await response.json();
+                    document.getElementById('selected-balance').textContent = data.balance;
+                } catch (error) {
+                    console.error('Error fetching balance:', error);
+                    document.getElementById('selected-balance').textContent = 'Error loading balance';
+                }
+            }
+
+            // Function to fetch and display wallet addresses
+            async function refreshAddresses() {
+                try {
+                    const response = await fetch(`${API_BASE_URL}/address`);
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+                    const data = await response.json();
+
+                    // Update the account selector dropdown
+                    const accountSelector = document.getElementById('account-selector');
+
+                    // Clear existing options
+                    accountSelector.innerHTML = '';
+
+                    if (data.addresses.length === 0) {
+                        accountSelector.innerHTML = '<option>No addresses available</option>';
+                        selectedAccount = null;
+                        document.getElementById('selected-address').textContent = 'Not selected';
+                        document.getElementById('selected-balance').textContent = '-';
+                    } else {
+                        data.addresses.forEach(address => {
+                            accountSelector.innerHTML += `<option value="${address}">${address}</option>`;
+                        });
+
+                        // Select the first account by default if none is selected
+                        if (!selectedAccount || !data.addresses.includes(selectedAccount)) {
+                            selectedAccount = data.addresses[0];
+                        }
+
+                        // Set the dropdown to the selected account
+                        accountSelector.value = selectedAccount;
+
+                        // Update the UI with the selected account
+                        document.getElementById('selected-address').textContent = selectedAccount;
+                        await refreshSelectedBalance();
+                    }
+                } catch (error) {
+                    console.error('Error fetching addresses:', error);
+                    document.getElementById('account-selector').innerHTML = '<option>Error loading addresses</option>';
+                    selectedAccount = null;
+                    document.getElementById('selected-address').textContent = 'Not selected';
+                    document.getElementById('selected-balance').textContent = '-';
+                }
+            }
+
+            // Function to send coins
+            async function sendCoin() {
+                const resultElement = document.getElementById('send-result');
+                const downloadContainer = document.getElementById('proof-download-container');
+                const downloadLink = document.getElementById('proof-download-link');
+
+                // Hide download link initially
+                downloadContainer.style.display = 'none';
+
+                resultElement.className = '';
+                resultElement.textContent = 'Processing...';
+
+                if (!selectedAccount || selectedAccount === 'No addresses available' || 
+                    selectedAccount === 'Error loading addresses') {
+                    resultElement.className = 'error';
+                    resultElement.textContent = 'Please select a valid account first';
+                    return;
+                }
+
+                const toAddress = document.getElementById('send-to').value;
+                const amount = parseInt(document.getElementById('send-amount').value, 10);
+
+                if (!toAddress) {
+                    resultElement.className = 'error';
+                    resultElement.textContent = 'Please enter a recipient address';
+                    return;
+                }
+
+                if (isNaN(amount) || amount <= 0) {
+                    resultElement.className = 'error';
+                    resultElement.textContent = 'Please enter a valid amount';
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/send`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            account_address: selectedAccount,
+                            recipient: toAddress,
+                            amount: amount
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+
+                    // First check if the transaction was successful
+                    const data = await response.json();
+
+                    if (data.success) {
+                        resultElement.className = 'success';
+                        resultElement.textContent = 'Transaction successful!';
+
+                        // Make a second request to get the binary proof
+                        const proofResponse = await fetch(`${API_BASE_URL}/proof/${data.proof_id}`);
+                        if (proofResponse.ok) {
+                            // Get the binary data
+                            const proofBlob = await proofResponse.blob();
+                            const proofUrl = URL.createObjectURL(proofBlob);
+
+                            downloadLink.href = proofUrl;
+                            downloadContainer.style.display = 'block';
+                        }
+
+                        // Refresh balance after successful transaction
+                        refreshSelectedBalance();
+                    } else {
+                        resultElement.className = 'error';
+                        resultElement.textContent = 'Transaction failed';
+                    }
+                } catch (error) {
+                    console.error('Error sending coins:', error);
+                    resultElement.className = 'error';
+                    resultElement.textContent = `Error: ${error.message}`;
+                }
+            }
+
+            // Function to receive coins
+            async function receiveCoin() {
+                const resultElement = document.getElementById('receive-result');
+                resultElement.className = '';
+                resultElement.textContent = 'Processing...';
+
+                if (!selectedAccount || selectedAccount === 'No addresses available' || 
+                    selectedAccount === 'Error loading addresses') {
+                    resultElement.className = 'error';
+                    resultElement.textContent = 'Please select a valid account first';
+                    return;
+                }
+
+                const fileInput = document.getElementById('coin-proof');
+
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    resultElement.className = 'error';
+                    resultElement.textContent = 'Please select a proof file';
+                    return;
+                }
+
+                try {
+                    const file = fileInput.files[0];
+                    // Read as binary data instead of text
+                    const reader = new FileReader();
+
+                    reader.onload = async function(event) {
+                        const binaryData = event.target.result;
+
+                        // Create a FormData object to send binary data
+                        const formData = new FormData();
+                        formData.append('proof', new Blob([binaryData]), 'proof.bin');
+
+                        // Changed to use a simple fetch with the binary data directly
+                        // instead of FormData since the server doesn't support multipart yet
+                        const response = await fetch(`${API_BASE_URL}/receive?address=${encodeURIComponent(selectedAccount)}`, {
+                            method: 'POST',
+                            body: binaryData
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+
+                        const data = await response.json();
+
+                        if (data.success) {
+                            resultElement.className = 'success';
+                            resultElement.textContent = 'Coins received successfully!';
+                            // Refresh balance after successful transaction
+                            refreshSelectedBalance();
+                        } else {
+                            resultElement.className = 'error';
+                            resultElement.textContent = 'Failed to receive coins';
+                        }
+                    };
+
+                    reader.readAsArrayBuffer(file);
+                } catch (error) {
+                    console.error('Error receiving coins:', error);
+                    resultElement.className = 'error';
+                    resultElement.textContent = `Error: ${error.message}`;
+                }
+            }
+
+            // Initialize the page by loading data
+            window.onload = function() {
+                refreshAddresses();
+            };
+
+            async function mintCoins() {
+                const resultElement = document.getElementById('mint-result');
+                const downloadContainer = document.getElementById('proof-download-container-mint');
+                const downloadLink = document.getElementById('proof-download-link-mint');
+                const automaticReceiveCheckbox = document.getElementById('mint-automatic-receive');
+
+                // Hide download link initially
+                downloadContainer.style.display = 'none';
+
+                resultElement.className = '';
+                resultElement.textContent = 'Processing...';
+
+                if (!selectedAccount || selectedAccount === 'No addresses available' || 
+                    selectedAccount === 'Error loading addresses') {
+                    resultElement.className = 'error';
+                    resultElement.textContent = 'Please select a valid account first';
+                    return;
+                }
+
+                const amount = parseInt(document.getElementById('mint-amount').value, 10);
+
+                if (isNaN(amount) || amount <= 0) {
+                    resultElement.className = 'error';
+                    resultElement.textContent = 'Please enter a valid amount';
+                    return;
+                }
+
+                try {
+                    const response = await fetch(`${API_BASE_URL}/mint`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            account_address: selectedAccount,
+                            amount: amount
+                        })
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! Status: ${response.status}`);
+                    }
+
+                    // First check if the transaction was successful
+                    const data = await response.json();
+
+                    if (data.success) {
+                        resultElement.className = 'success';
+                        resultElement.textContent = 'Transaction successful!';
+
+                        // Make a second request to get the binary proof
+                        const proofResponse = await fetch(`${API_BASE_URL}/proof/${data.proof_id}`);
+                        if (proofResponse.ok) {
+                            // Get the binary data
+                            const proofBlob = await proofResponse.blob();
+                            const proofUrl = URL.createObjectURL(proofBlob);
+                            if (automaticReceiveCheckbox.checked) {
+                                const response = await fetch(`${API_BASE_URL}/receive`, {
+                                    method: 'POST',
+                                    body: proofBlob
+                                });
+
+                                if (!response.ok) {
+                                    throw new Error(`HTTP error! Status: ${response.status}`);
+                                }
+                                const data = await response.json();
+
+                                if (data.success) {
+                                        resultElement.className = 'success';
+                                        resultElement.textContent = 'Coins received successfully!';
+                                        // Refresh balance after successful transaction
+                                        refreshSelectedBalance();
+                                    } else {
+                                            resultElement.className = 'error';
+                                            resultElement.textContent = 'Failed to receive coins';
+                                        }
+                            } else {
+                                downloadLink.href = proofUrl;
+                                downloadContainer.style.display = 'block';
+                            }
+                        }
+                    } else {
+                        resultElement.className = 'error';
+                        resultElement.textContent = 'Transaction failed';
+                    }
+                } catch (error) {
+                    console.error('Error sending coins:', error);
+                    resultElement.className = 'error';
+                    resultElement.textContent = `Error: ${error.message}`;
+                }
+            }
+
+            // Function to receive coins
+            async function receiveCoin() {
+                const resultElement = document.getElementById('receive-result');
+                resultElement.className = '';
+                resultElement.textContent = 'Processing...';
+
+                if (!selectedAccount || selectedAccount === 'No addresses available' || 
+                    selectedAccount === 'Error loading addresses') {
+                    resultElement.className = 'error';
+                    resultElement.textContent = 'Please select a valid account first';
+                    return;
+                }
+
+                const fileInput = document.getElementById('coin-proof');
+
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    resultElement.className = 'error';
+                    resultElement.textContent = 'Please select a proof file';
+                    return;
+                }
+
+                try {
+                    const file = fileInput.files[0];
+                    // Read as binary data instead of text
+                    const reader = new FileReader();
+
+                    reader.onload = async function(event) {
+                        const binaryData = event.target.result;
+
+                        // Create a FormData object to send binary data
+                        const formData = new FormData();
+                        formData.append('proof', new Blob([binaryData]), 'proof.bin');
+
+                        // Changed to use a simple fetch with the binary data directly
+                        // instead of FormData since the server doesn't support multipart yet
+                        const response = await fetch(`${API_BASE_URL}/receive?address=${encodeURIComponent(selectedAccount)}`, {
+                            method: 'POST',
+                            body: binaryData
+                        });
+
+                        if (!response.ok) {
+                            throw new Error(`HTTP error! Status: ${response.status}`);
+                        }
+
+                        const data = await response.json();
+
+                        if (data.success) {
+                            resultElement.className = 'success';
+                            resultElement.textContent = 'Coins received successfully!';
+                            // Refresh balance after successful transaction
+                            refreshSelectedBalance();
+                        } else {
+                            resultElement.className = 'error';
+                            resultElement.textContent = 'Failed to receive coins';
+                        }
+                    };
+
+                    reader.readAsArrayBuffer(file);
+                } catch (error) {
+                    console.error('Error receiving coins:', error);
+                    resultElement.className = 'error';
+                    resultElement.textContent = `Error: ${error.message}`;
+                }
+            }
+
+            // Initialize the page by loading data
+            window.onload = function() {
+                refreshAddresses();
+            };
+        </script>
+    </body>
+</html>

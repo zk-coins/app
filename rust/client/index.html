@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>zkCoins Wallet</title>
+        <style>
+            body {
+                font-family: Arial, sans-serif;
+                max-width: 800px;
+                margin: 0 auto;
+                padding: 20px;
+                line-height: 1.6;
+            }
+            .container {
+                display: flex;
+                flex-direction: column;
+                gap: 20px;
+            }
+            .card {
+                border: 1px solid #ddd;
+                border-radius: 8px;
+                padding: 20px;
+                box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+            .info-display {
+                font-size: 18px;
+                margin-bottom: 10px;
+                font-weight: bold;
+            }
+            .value {
+                font-weight: normal;
+            }
+            button {
+                background-color: #f7931a;
+                color: white;
+                padding: 10px 15px;
+                border: none;
+                border-radius: 4px;
+                cursor: pointer;
+                font-size: 16px;
+            }
+            button:hover {
+                background-color: #e78008;
+            }
+            input, select {
+                padding: 8px;
+                margin: 5px 0;
+                border: 1px solid #ddd;
+                border-radius: 4px;
+                width: 100%;
+                box-sizing: border-box;
+            }
+            .form-group {
+                margin-bottom: 15px;
+            }
+            .error {
+                color: red;
+                margin-top: 5px;
+            }
+            .success {
+                color: green;
+                margin-top: 5px;
+            }
+            h1 {
+                color: #333;
+                text-align: center;
+            }
+            h2 {
+                color: #444;
+                margin-bottom: 15px;
+            }
+        </style>
+    </head>
+    <body>
+        <h1>zkCoins Wallet</h1>
+
+        <div class="container">
+            <!-- Create Account Card -->
+            <div class="card">
+                <h2>Create New Account</h2>
+                <button onclick="createAccount()">Create New Account</button>
+                <div id="create-account-result"></div>
+            </div>
+
+            <!-- Send Coins Card -->
+            <div class="card">
+                <h2>Send Coins</h2>
+                <div class="form-group">
+                    <label for="send-to">To Address:</label>
+                    <input type="text" id="send-to" placeholder="Recipient Address">
+                </div>
+                <div class="form-group">
+                    <label for="send-amount">Amount:</label>
+                    <input type="number" id="send-amount" placeholder="Amount" min="1">
+                </div>
+                <button onclick="sendCoin()">Send Coins</button>
+                <div id="send-result"></div>
+            </div>
+
+            <!-- Debug Output Card -->
+            <div class="card">
+                <h2>Debug Output</h2>
+                <pre id="debug-output" style="white-space: pre-wrap; word-wrap: break-word;"></pre>
+            </div>
+        </div>
+
+        <script type="module">
+            import init, { create_and_store_new_account, send_coins_from_browser } from './pkg/client.js';
+
+            async function run() {
+                await init();
+                window.createAccount = async function() {
+                    try {
+                        const result = await create_and_store_new_account();
+                        document.getElementById('create-account-result').textContent = 
+                            `Created new account: ${result}`;
+                        document.getElementById('debug-output').textContent += 
+                            `\nCreated new account: ${result}`;
+                    } catch (error) {
+                        document.getElementById('create-account-result').textContent = 
+                            `Error: ${error}`;
+                        document.getElementById('debug-output').textContent += 
+                            `\nError creating account: ${error}`;
+                    }
+                };
+
+                window.sendCoin = async function() {
+                    const toAddress = document.getElementById('send-to').value;
+                    const amount = document.getElementById('send-amount').value;
+                    const resultElement = document.getElementById('send-result');
+
+                    if (!toAddress || !amount) {
+                        resultElement.textContent = 'Please fill in all fields';
+                        return;
+                    }
+
+                    try {
+                        const result = await send_coins_from_browser(
+                            document.getElementById('create-account-result').textContent.split(': ')[1],
+                            toAddress,
+                            amount
+                        );
+                        resultElement.textContent = `Success: ${result}`;
+                        document.getElementById('debug-output').textContent += 
+                            `\nSent coins: ${result}`;
+                    } catch (error) {
+                        resultElement.textContent = `Error: ${error}`;
+                        document.getElementById('debug-output').textContent += 
+                            `\nError sending coins: ${error}`;
+                    }
+                };
+            }
+
+            run();
+        </script>
+    </body>
+</html>
+

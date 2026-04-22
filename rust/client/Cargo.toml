@@ -1,0 +1,46 @@
+[package]
+name = "client"
+version.workspace = true
+edition.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+console_error_panic_hook = []
+
+[dependencies]
+wasm-bindgen = "=0.2.95"
+web-sys = { version = "0.3", features = [
+    "Window", 
+    "Request", 
+    "RequestInit", 
+    "RequestMode", 
+    "Headers", 
+    "Response", 
+    "Storage",
+    "console",
+    "Document",
+    "Element",
+    "HtmlElement",
+    "Node",
+    "Text",
+    "Performance",
+    "PerformanceTiming",
+    "Location"
+] }
+wasm-bindgen-futures = "0.4"
+serde = { workspace = true }
+serde_json = "1.0"
+serde-wasm-bindgen = "0.6"
+bitcoin = { workspace = true, default-features = false, features = ["std", "rand", "serde", "rand-std"] }
+bincode = { workspace = true }
+shared = { path = "../shared/" }
+hex = "0.4.3"
+
+[dependencies.getrandom]
+version = "0.2.15"
+features = ["js"]
+
+[package.metadata.wasm-pack.profile.release]
+wasm-opt = false
