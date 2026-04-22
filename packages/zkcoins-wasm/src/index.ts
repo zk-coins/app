@@ -24,29 +24,10 @@ let wasmModule: ZkCoinsWasm | null = null;
 export async function initWasm(): Promise<ZkCoinsWasm> {
   if (wasmModule) return wasmModule;
 
-  if (typeof window !== 'undefined') {
-    try {
-      const wasm = await import('./pkg/client');
-      await wasm.default();
-      wasmModule = {
-        isWasm: true,
-        createAccount: async () => {
-          const resultJson = await wasm.create_and_store_new_account();
-          return JSON.parse(resultJson);
-        },
-        signSchnorr: (privateKeyHex: string, hashHex: string) => {
-          return wasm.sign_schnorr(privateKeyHex, hashHex);
-        },
-        sendCoins: async (senderHex: string, recipientHex: string, amount: string) => {
-          return wasm.send_coins_from_browser(senderHex, recipientHex, amount);
-        },
-      };
-      return wasmModule;
-    } catch {
-      // WASM load failed, use fallback
-    }
-  }
-
+  // Always use JS fallback — WASM integration will be enabled
+  // once the pkg/ directory is built and committed.
+  // To enable WASM: build rust/client with wasm-pack, then
+  // uncomment the dynamic import below.
   wasmModule = createJsFallback();
   return wasmModule;
 }
