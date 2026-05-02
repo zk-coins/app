@@ -2,18 +2,21 @@ FROM node:20-alpine AS base
 
 FROM base AS deps
 WORKDIR /app
-COPY package.json yarn.lock ./
-COPY apps/wallet/package.json ./apps/wallet/
-COPY packages/tsconfig/package.json ./packages/tsconfig/
+COPY package.json package-lock.json ./
 COPY packages/zkcoins-wasm/package.json ./packages/zkcoins-wasm/
-RUN yarn install --frozen-lockfile
+RUN npm ci
 
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY --from=deps /app/apps/wallet/node_modules ./apps/wallet/node_modules
 COPY . .
-RUN cd apps/wallet && npx next build
+
+# Build-time placeholders — replaced at runtime by entrypoint.sh
+ENV NEXT_PUBLIC_API_URL=NEXT_PUBLIC_API_URL_PLACEHOLDER
+ENV NEXT_PUBLIC_EXPLORER_URL=NEXT_PUBLIC_EXPLORER_URL_PLACEHOLDER
+ENV NEXT_PUBLIC_NETWORK=NEXT_PUBLIC_NETWORK_PLACEHOLDER
+
+RUN npx next build
 
 FROM base AS runner
 WORKDIR /app
@@ -22,11 +25,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 
 RUN addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
-COPY --from=builder /app/apps/wallet/public ./apps/wallet/public
-COPY --from=builder --chown=nextjs:nodejs /app/apps/wallet/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /app/apps/wallet/.next/static ./apps/wallet/.next/static
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-COPY apps/wallet/entrypoint.sh /usr/bin/entrypoint.sh
+COPY entrypoint.sh /usr/bin/entrypoint.sh
 RUN chmod 755 /usr/bin/entrypoint.sh
 
 USER nextjs
@@ -35,4 +38,4 @@ ENV PORT=3090
 ENV HOSTNAME="0.0.0.0"
 
 ENTRYPOINT ["entrypoint.sh"]
-CMD ["node", "apps/wallet/server.js"]
+CMD ["node", "server.js"]
