@@ -1,11 +1,14 @@
 'use client';
 
+const SHARED_LINKS = [{ label: 'GitHub', href: 'https://github.com/zk-coins' }];
+
 const PRD_LINKS = [
   { label: 'Docs', href: 'https://docs.zkcoins.app' },
   { label: 'API', href: 'https://api.zkcoins.app' },
   { label: 'Explorer', href: 'https://explorer.zkcoins.app' },
   { label: 'Blog', href: 'https://blog.zkcoins.app' },
   { label: 'Status', href: 'https://status.zkcoins.app' },
+  ...SHARED_LINKS,
 ];
 
 const DEV_LINKS = [
@@ -14,6 +17,7 @@ const DEV_LINKS = [
   { label: 'Explorer', href: 'https://dev-explorer.zkcoins.app' },
   { label: 'Blog', href: 'https://dev-blog.zkcoins.app' },
   { label: 'Status', href: 'https://dev-status.zkcoins.app' },
+  ...SHARED_LINKS,
 ];
 
 function useLinks() {
