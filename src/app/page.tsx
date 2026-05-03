@@ -1,6 +1,7 @@
 'use client';
 
 import { Header } from '@/components/Header';
+import { Footer } from '@/components/Footer';
 import { WalletCard } from '@/components/WalletCard';
 import { SendForm } from '@/components/SendForm';
 import { TransactionLog } from '@/components/TransactionLog';
@@ -21,6 +22,7 @@ export default function Home() {
           </>
         )}
       </div>
+      <Footer />
     </main>
   );
 }
