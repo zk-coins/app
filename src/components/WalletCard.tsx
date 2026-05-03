@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback } from 'react';
 import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 import { api } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
 
@@ -16,10 +17,11 @@ export function WalletCard() {
     setError,
     loadFromStorage,
   } = useWalletStore();
+  const activeNetwork = useNetworkStore((s) => s.activeNetwork);
 
   useEffect(() => {
     loadFromStorage();
-  }, [loadFromStorage]);
+  }, [activeNetwork, loadFromStorage]);
 
   useEffect(() => {
     if (!account) return;

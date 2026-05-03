@@ -1,7 +1,11 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4242';
+import { useNetworkStore } from '@/stores/network';
+
+function getApiUrl(): string {
+  return useNetworkStore.getState().apiUrl;
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getApiUrl()}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -36,6 +40,10 @@ export interface SendResponse {
   proof_id: string;
 }
 
+export interface InfoResponse {
+  network: string;
+}
+
 export const api = {
   mint: (data: MintRequest) =>
     request<MintResponse>('/api/mint', {
@@ -50,4 +58,6 @@ export const api = {
     }),
 
   balance: (address: string) => request<BalanceResponse>(`/api/balance?address=${address}`),
+
+  info: () => request<InfoResponse>('/api/info'),
 };
