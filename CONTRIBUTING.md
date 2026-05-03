@@ -58,7 +58,7 @@ app/
 | `develop` | Default branch, active development | dfxdev (DEV) |
 | `main` | Production releases | dfxprd (PRD) |
 
-- **Push directly to `develop`** — no PR required for regular work
+- **Push to `develop` via feature branch + PR** (branch ruleset active) — no PR required for regular work
 - **`main` is protected** — changes only via PR (auto-created by Release PR workflow)
 - Never force-push, never amend published commits
 
