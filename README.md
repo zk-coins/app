@@ -90,8 +90,8 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 | Workflow | Trigger | Action |
 |---|---|---|
 | `ci.yaml` | Push develop, PR | Lint + Build |
-| `deploy-dev.yaml` | Push develop | Docker → `zkcoin/app:beta` → dfxdev |
-| `deploy-prd.yaml` | Push main | Docker → `zkcoin/app:latest` → dfxprd |
+| `deploy-dev.yaml` | Push develop | Docker → `zkcoin/app:beta` → DEV server |
+| `deploy-prd.yaml` | Push main | Docker → `zkcoin/app:latest` → PRD server |
 | `auto-release-pr.yaml` | Push develop | Creates Release PR (develop → main) |
 
 ## Signup Flow (Planned)
@@ -119,6 +119,7 @@ Details: [docs.zkcoins.app/architecture/signup-flow](https://docs.zkcoins.app/ar
 |---|---|
 | [zk-coins/server](https://github.com/zk-coins/server) | Rust backend (API, ZK proofs, Bitcoin scanner) |
 | [zk-coins/docs](https://github.com/zk-coins/docs) | Documentation ([docs.zkcoins.app](https://docs.zkcoins.app)) |
+| [zk-coins/research](https://github.com/zk-coins/research) | Protocol research, upstream repos, paper PDF |
 
 ## Protocol
 

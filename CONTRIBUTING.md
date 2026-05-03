@@ -55,10 +55,10 @@ app/
 
 | Branch | Purpose | Deploy target |
 |---|---|---|
-| `develop` | Default branch, active development | dfxdev (DEV) |
-| `main` | Production releases | dfxprd (PRD) |
+| `develop` | Default branch, active development | DEV server |
+| `main` | Production releases | PRD server |
 
-- **Push directly to `develop`** — no PR required for regular work
+- **Push to `develop` via feature branch + PR** (branch ruleset active) — no PR required for regular work
 - **`main` is protected** — changes only via PR (auto-created by Release PR workflow)
 - Never force-push, never amend published commits
 
@@ -228,8 +228,8 @@ The Dockerfile sets placeholder values at build time (`NEXT_PUBLIC_API_URL_PLACE
 | Workflow | Trigger | Action |
 |---|---|---|
 | `ci.yaml` | Push to develop, PR | Lint + Build |
-| `deploy-dev.yaml` | Push to develop | Docker build → push `zkcoin/app:beta` → deploy to dfxdev |
-| `deploy-prd.yaml` | Push to main | Docker build → push `zkcoin/app:latest` → deploy to dfxprd |
+| `deploy-dev.yaml` | Push to develop | Docker build → push `zkcoin/app:beta` → deploy to DEV |
+| `deploy-prd.yaml` | Push to main | Docker build → push `zkcoin/app:latest` → deploy to PRD |
 | `auto-release-pr.yaml` | Push to develop | Creates Release PR (develop → main) |
 
 ### Before Pushing
