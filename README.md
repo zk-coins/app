@@ -119,6 +119,7 @@ Details: [docs.zkcoins.app/architecture/signup-flow](https://docs.zkcoins.app/ar
 |---|---|
 | [zk-coins/server](https://github.com/zk-coins/server) | Rust backend (API, ZK proofs, Bitcoin scanner) |
 | [zk-coins/docs](https://github.com/zk-coins/docs) | Documentation ([docs.zkcoins.app](https://docs.zkcoins.app)) |
+| [zk-coins/research](https://github.com/zk-coins/research) | Protocol research, upstream repos, paper PDF |
 
 ## Protocol
 
