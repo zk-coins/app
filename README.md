@@ -90,8 +90,8 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 | Workflow | Trigger | Action |
 |---|---|---|
 | `ci.yaml` | Push develop, PR | Lint + Build |
-| `deploy-dev.yaml` | Push develop | Docker → `zkcoin/app:beta` → dfxdev |
-| `deploy-prd.yaml` | Push main | Docker → `zkcoin/app:latest` → dfxprd |
+| `deploy-dev.yaml` | Push develop | Docker → `zkcoin/app:beta` → DEV server |
+| `deploy-prd.yaml` | Push main | Docker → `zkcoin/app:latest` → PRD server |
 | `auto-release-pr.yaml` | Push develop | Creates Release PR (develop → main) |
 
 ## Signup Flow (Planned)
