@@ -35,12 +35,12 @@ test.describe('Wallet', () => {
 
     // Wait for account creation (WASM init + key generation + API call attempt)
     await expect(page.getByText('Balance')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Address')).toBeVisible();
+    await expect(page.getByText('Address', { exact: true })).toBeVisible();
 
     // Verify xpriv was stored in localStorage (WASM generated real keys)
     const walletData = await page.evaluate(() => {
-      const key = Object.keys(localStorage).find((k) => k.startsWith('zkcoins_wallet_'));
-      return key ? JSON.parse(localStorage.getItem(key)!) : null;
+      const data = localStorage.getItem('zkcoins_wallet');
+      return data ? JSON.parse(data) : null;
     });
     expect(walletData).not.toBeNull();
     expect(walletData.account.xpriv).toContain('xprv');

@@ -1,9 +1,9 @@
 /**
  * @zkcoins/wasm — TypeScript wrapper for the Rust WASM crypto module.
  *
- * Provides HD wallet creation, Schnorr signing, and public key derivation
- * via the compiled Rust WASM module. Falls back to JS crypto for
- * account creation if WASM is unavailable.
+ * Provides HD wallet creation, BIP-39 mnemonics, Schnorr signing,
+ * and public key derivation via the compiled Rust WASM module.
+ * Falls back to JS crypto for account creation if WASM is unavailable.
  */
 
 export interface AccountData {
@@ -19,6 +19,9 @@ export interface PublicKeys {
 
 export interface ZkCoinsWasm {
   createAccount(): Promise<AccountData>;
+  createAccountFromMnemonic(mnemonic: string, passphrase?: string): Promise<AccountData>;
+  generateMnemonic(): string;
+  validateMnemonic(phrase: string): boolean;
   signSchnorr(privateKeyHex: string, hashHex: string): string;
   derivePublicKeys(xpriv: string, numPubkeys: number): PublicKeys;
   isWasm: boolean;
@@ -44,6 +47,17 @@ export async function initWasm(): Promise<ZkCoinsWasm> {
           numPubkeys: data.num_pubkeys,
         };
       },
+      createAccountFromMnemonic: async (mnemonic: string, passphrase = '') => {
+        const json = wasm.generate_account_keys_from_mnemonic(mnemonic, passphrase);
+        const data = JSON.parse(json);
+        return {
+          address: data.address_hex,
+          xpriv: data.xpriv_str,
+          numPubkeys: data.num_pubkeys,
+        };
+      },
+      generateMnemonic: () => wasm.generate_mnemonic(),
+      validateMnemonic: (phrase: string) => wasm.validate_mnemonic(phrase),
       signSchnorr: (privateKeyHex: string, hashHex: string) =>
         wasm.sign_schnorr(privateKeyHex, hashHex),
       derivePublicKeys: (xpriv: string, numPubkeys: number) => {
@@ -72,6 +86,15 @@ function createJsFallback(): ZkCoinsWasm {
         .map((b) => b.toString(16).padStart(2, '0'))
         .join('');
       return { address, xpriv: '', numPubkeys: 0 };
+    },
+    createAccountFromMnemonic: async () => {
+      throw new Error('Mnemonic account creation requires WASM module');
+    },
+    generateMnemonic: () => {
+      throw new Error('Mnemonic generation requires WASM module');
+    },
+    validateMnemonic: () => {
+      throw new Error('Mnemonic validation requires WASM module');
     },
     signSchnorr: () => {
       throw new Error('Schnorr signing requires WASM module');

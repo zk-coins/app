@@ -1,5 +1,4 @@
 import { create } from 'zustand';
-import { useNetworkStore } from '@/stores/network';
 
 export interface Account {
   address: string;
@@ -33,10 +32,7 @@ interface WalletState {
   saveToStorage: () => void;
 }
 
-function getStorageKey(): string {
-  const network = useNetworkStore.getState().activeNetwork;
-  return `zkcoins_wallet_${network}`;
-}
+const STORAGE_KEY = 'zkcoins_wallet';
 
 export const useWalletStore = create<WalletState>((set, get) => ({
   account: null,
@@ -76,7 +72,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   loadFromStorage: () => {
     if (typeof window === 'undefined') return;
     try {
-      const stored = localStorage.getItem(getStorageKey());
+      const stored = localStorage.getItem(STORAGE_KEY);
       if (stored) {
         const data = JSON.parse(stored);
         set({
@@ -94,6 +90,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   saveToStorage: () => {
     if (typeof window === 'undefined') return;
     const { account, transactions } = get();
-    localStorage.setItem(getStorageKey(), JSON.stringify({ account, transactions }));
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ account, transactions }));
   },
 }));

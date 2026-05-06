@@ -57,6 +57,24 @@ pub fn new_master_private_key() -> Xpriv {
     Xpriv::new_master(Network::Bitcoin, &seed).expect("Failed to create private key.")
 }
 
+pub fn master_private_key_from_seed(seed: &[u8]) -> Xpriv {
+    Xpriv::new_master(Network::Bitcoin, seed).expect("Failed to create private key from seed.")
+}
+
+pub fn generate_mnemonic() -> bip39::Mnemonic {
+    let mut entropy = [0u8; 16]; // 128 bits = 12 words
+    OsRng.fill_bytes(&mut entropy);
+    bip39::Mnemonic::from_entropy(&entropy).expect("Failed to generate mnemonic")
+}
+
+pub fn mnemonic_to_seed(mnemonic: &bip39::Mnemonic, passphrase: &str) -> [u8; 64] {
+    mnemonic.to_seed(passphrase)
+}
+
+pub fn validate_mnemonic(phrase: &str) -> bool {
+    phrase.parse::<bip39::Mnemonic>().is_ok()
+}
+
 impl ClientAccount {
     pub fn generate_public_key(&self, index: u32) -> PublicKey {
         Xpub::from_priv(&SECP256K1, &self.private_key)
