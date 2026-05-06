@@ -2,6 +2,7 @@
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
 export function derive_public_keys(a: number, b: number, c: number): Array;
+export function derive_signing_key(a: number, b: number, c: number): Array;
 export function generate_account_keys(): Array;
 export function generate_account_keys_from_mnemonic(a: number, b: number, c: number, d: number): Array;
 export function generate_mnemonic(): Array;

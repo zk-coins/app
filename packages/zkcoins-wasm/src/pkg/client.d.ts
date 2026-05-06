@@ -7,14 +7,6 @@
  */
 export function generate_mnemonic(): string;
 /**
- * Derive the current and next compressed public keys for a send transaction.
- * Returns JSON: { public_key, next_public_key } (hex-encoded compressed SEC1)
- * @param {string} xpriv_str
- * @param {number} num_pubkeys
- * @returns {string}
- */
-export function derive_public_keys(xpriv_str: string, num_pubkeys: number): string;
-/**
  * Sign a 32-byte hash with a Schnorr signature.
  * Both inputs are hex-encoded 32-byte strings.
  * Returns hex-encoded Schnorr signature.
@@ -23,6 +15,22 @@ export function derive_public_keys(xpriv_str: string, num_pubkeys: number): stri
  * @returns {string}
  */
 export function sign_schnorr(private_key_hex: string, hash_hex: string): string;
+/**
+ * Derive the current and next compressed public keys for a send transaction.
+ * Returns JSON: { public_key, next_public_key } (hex-encoded compressed SEC1)
+ * @param {string} xpriv_str
+ * @param {number} num_pubkeys
+ * @returns {string}
+ */
+export function derive_public_keys(xpriv_str: string, num_pubkeys: number): string;
+/**
+ * Derive the raw 32-byte private key at a given BIP32 index.
+ * Returns hex-encoded private key bytes for use with sign_schnorr.
+ * @param {string} xpriv_str
+ * @param {number} index
+ * @returns {string}
+ */
+export function derive_signing_key(xpriv_str: string, index: number): string;
 /**
  * Generate a new HD wallet: master xpriv, derived address, initial pubkey count.
  * Returns JSON: { address_hex, num_pubkeys, xpriv_str }
@@ -57,6 +65,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 export interface InitOutput {
   readonly memory: WebAssembly.Memory;
   readonly derive_public_keys: (a: number, b: number, c: number) => Array;
+  readonly derive_signing_key: (a: number, b: number, c: number) => Array;
   readonly generate_account_keys: () => Array;
   readonly generate_account_keys_from_mnemonic: (a: number, b: number, c: number, d: number) => Array;
   readonly generate_mnemonic: () => Array;

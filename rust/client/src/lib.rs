@@ -110,6 +110,18 @@ pub fn mnemonic_from_entropy(entropy_hex: &str) -> Result<String, JsValue> {
     Ok(mnemonic.to_string())
 }
 
+/// Derive the raw 32-byte private key at a given BIP32 index.
+/// Returns hex-encoded private key bytes for use with sign_schnorr.
+#[wasm_bindgen]
+pub fn derive_signing_key(xpriv_str: &str, index: u32) -> Result<String, JsValue> {
+    let xpriv = Xpriv::from_str(xpriv_str)
+        .map_err(|e| JsValue::from_str(&format!("Invalid xpriv: {}", e)))?;
+    let child = xpriv
+        .derive_priv(&shared::SECP256K1, &[bitcoin::bip32::ChildNumber::Normal { index }])
+        .map_err(|e| JsValue::from_str(&format!("Failed to derive key: {}", e)))?;
+    Ok(hex::encode(child.private_key.secret_bytes()))
+}
+
 /// Sign a 32-byte hash with a Schnorr signature.
 /// Both inputs are hex-encoded 32-byte strings.
 /// Returns hex-encoded Schnorr signature.
