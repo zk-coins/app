@@ -42,13 +42,16 @@ export function WalletCard() {
     try {
       const wasm = await initWasm();
       const accountData = await wasm.createAccount();
-      const newAccount = { address: accountData.address, balance: 0, numPubkeys: 0 };
+      const newAccount = {
+        address: accountData.address,
+        balance: 0,
+        numPubkeys: accountData.numPubkeys,
+        xpriv: accountData.xpriv,
+      };
       setAccount(newAccount);
-      const address = accountData.address;
 
-      // Mint initial coins
-      await api.mint({ address });
-      const { balance } = await api.balance(address);
+      await api.mint(accountData.address);
+      const { balance } = await api.balance(accountData.address);
       setBalance(balance);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create account');
@@ -86,7 +89,7 @@ export function WalletCard() {
         <button
           onClick={async () => {
             try {
-              await api.mint({ address: account.address });
+              await api.mint(account.address);
               const { balance } = await api.balance(account.address);
               setBalance(balance);
             } catch {

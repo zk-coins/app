@@ -3,6 +3,7 @@
 import { useState, useCallback } from 'react';
 import { useWalletStore } from '@/stores/wallet';
 import { api } from '@/lib/api/client';
+import { initWasm } from '@zkcoins/wasm';
 
 export function SendForm() {
   const { account, setBalance, incrementPubkeys, addTransaction } = useWalletStore();
@@ -30,23 +31,32 @@ export function SendForm() {
     setSuccess(null);
 
     try {
+      const wasm = await initWasm();
+      if (!account.xpriv) {
+        throw new Error('No private key available — account was created without WASM');
+      }
+
+      const keys = wasm.derivePublicKeys(account.xpriv, account.numPubkeys);
+
       const res = await api.send({
-        sender: account.address,
+        account_address: account.address,
         recipient,
         amount: amountNum,
-        sender_public_key: '', // TODO: derive from WASM
-        sender_next_public_key: '', // TODO: derive from WASM
+        public_key: keys.publicKey,
+        next_public_key: keys.nextPublicKey,
       });
 
-      incrementPubkeys();
-      addTransaction({
-        id: res.proof_id,
-        type: 'send',
-        amount: amountNum,
-        counterparty: recipient,
-        timestamp: Date.now(),
-        proofId: res.proof_id,
-      });
+      if (res.success) {
+        incrementPubkeys();
+        addTransaction({
+          id: res.proof_id?.toString() ?? `send-${Date.now()}`,
+          type: 'send',
+          amount: amountNum,
+          counterparty: recipient,
+          timestamp: Date.now(),
+          proofId: res.proof_id?.toString(),
+        });
+      }
 
       const { balance } = await api.balance(account.address);
       setBalance(balance);

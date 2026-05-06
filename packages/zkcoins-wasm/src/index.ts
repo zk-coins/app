@@ -1,7 +1,7 @@
 /**
  * @zkcoins/wasm — TypeScript wrapper for the Rust WASM crypto module.
  *
- * Provides HD wallet creation, Schnorr signing, and coin transfers
+ * Provides HD wallet creation, Schnorr signing, and public key derivation
  * via the compiled Rust WASM module. Falls back to JS crypto for
  * account creation if WASM is unavailable.
  */
@@ -12,10 +12,15 @@ export interface AccountData {
   numPubkeys: number;
 }
 
+export interface PublicKeys {
+  publicKey: string;
+  nextPublicKey: string;
+}
+
 export interface ZkCoinsWasm {
   createAccount(): Promise<AccountData>;
   signSchnorr(privateKeyHex: string, hashHex: string): string;
-  sendCoins(senderHex: string, recipientHex: string, amount: string): Promise<unknown>;
+  derivePublicKeys(xpriv: string, numPubkeys: number): PublicKeys;
   isWasm: boolean;
 }
 
@@ -24,11 +29,36 @@ let wasmModule: ZkCoinsWasm | null = null;
 export async function initWasm(): Promise<ZkCoinsWasm> {
   if (wasmModule) return wasmModule;
 
-  // Always use JS fallback — WASM integration will be enabled
-  // once the pkg/ directory is built and committed.
-  // To enable WASM: build rust/client with wasm-pack, then
-  // uncomment the dynamic import below.
-  wasmModule = createJsFallback();
+  try {
+    const wasm = await import('./pkg/client.js');
+    await wasm.default();
+
+    wasmModule = {
+      isWasm: true,
+      createAccount: async () => {
+        const json = wasm.generate_account_keys();
+        const data = JSON.parse(json);
+        return {
+          address: data.address_hex,
+          xpriv: data.xpriv_str,
+          numPubkeys: data.num_pubkeys,
+        };
+      },
+      signSchnorr: (privateKeyHex: string, hashHex: string) =>
+        wasm.sign_schnorr(privateKeyHex, hashHex),
+      derivePublicKeys: (xpriv: string, numPubkeys: number) => {
+        const json = wasm.derive_public_keys(xpriv, numPubkeys);
+        const data = JSON.parse(json);
+        return {
+          publicKey: data.public_key,
+          nextPublicKey: data.next_public_key,
+        };
+      },
+    };
+  } catch {
+    wasmModule = createJsFallback();
+  }
+
   return wasmModule;
 }
 
@@ -46,8 +76,8 @@ function createJsFallback(): ZkCoinsWasm {
     signSchnorr: () => {
       throw new Error('Schnorr signing requires WASM module');
     },
-    sendCoins: () => {
-      throw new Error('Coin transfer requires WASM module');
+    derivePublicKeys: () => {
+      throw new Error('Public key derivation requires WASM module');
     },
   };
 }

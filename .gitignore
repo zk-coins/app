@@ -9,4 +9,4 @@ dist/
 .env.*.local
 *.pem
 rust/target/
-packages/zkcoins-wasm/src/pkg/
+packages/zkcoins-wasm/src/pkg/README.md

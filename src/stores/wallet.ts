@@ -5,6 +5,7 @@ export interface Account {
   address: string;
   balance: number;
   numPubkeys: number;
+  xpriv: string;
 }
 
 export interface Transaction {

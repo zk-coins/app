@@ -16,28 +16,21 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export interface MintRequest {
-  address: string;
-}
-
 export interface SendRequest {
-  sender: string;
+  account_address: string;
   recipient: string;
   amount: number;
-  sender_public_key: string;
-  sender_next_public_key: string;
+  public_key: string;
+  next_public_key: string;
 }
 
 export interface BalanceResponse {
   balance: number;
 }
 
-export interface MintResponse {
-  proof_id: string;
-}
-
 export interface SendResponse {
-  proof_id: string;
+  success: boolean;
+  proof_id: number | null;
 }
 
 export interface InfoResponse {
@@ -45,10 +38,10 @@ export interface InfoResponse {
 }
 
 export const api = {
-  mint: (data: MintRequest) =>
-    request<MintResponse>('/api/mint', {
+  mint: (address: string, amount: number = 10_000) =>
+    request<SendResponse>('/api/mint', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ account_address: address, amount }),
     }),
 
   send: (data: SendRequest) =>
