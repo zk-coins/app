@@ -23,6 +23,7 @@ export interface SendRequest {
   amount: number;
   public_key: string;
   next_public_key: string;
+  prev_commitment_pubkey?: string;
 }
 
 export interface SignedSendRequest extends SendRequest {

@@ -68,6 +68,10 @@ export function useZkCoins() {
         }
 
         const keys = w.derivePublicKeys(account.xpriv, account.numPubkeys);
+        const prevPk =
+          account.numPubkeys > 0
+            ? w.derivePublicKeys(account.xpriv, account.numPubkeys - 1).publicKey
+            : undefined;
 
         const res = await api.send({
           account_address: account.address,
@@ -75,6 +79,7 @@ export function useZkCoins() {
           amount,
           public_key: keys.publicKey,
           next_public_key: keys.nextPublicKey,
+          prev_commitment_pubkey: prevPk,
         });
 
         if (res.success) {

@@ -37,6 +37,10 @@ export function SendForm() {
       }
 
       const keys = wasm.derivePublicKeys(account.xpriv, account.numPubkeys);
+      const prevPk =
+        account.numPubkeys > 0
+          ? wasm.derivePublicKeys(account.xpriv, account.numPubkeys - 1).publicKey
+          : undefined;
 
       const res = await api.sendSigned(
         {
@@ -45,6 +49,7 @@ export function SendForm() {
           amount: amountNum,
           public_key: keys.publicKey,
           next_public_key: keys.nextPublicKey,
+          prev_commitment_pubkey: prevPk,
         },
         account.xpriv,
         account.numPubkeys,
