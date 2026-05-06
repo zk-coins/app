@@ -13,12 +13,12 @@ npm run dev    # http://localhost:3090
 
 ## Prerequisites
 
-| Tool | Version | Purpose |
-|---|---|---|
-| Node.js | 20+ | Runtime |
-| npm | 10+ | Package manager |
-| Rust | 1.81+ | WASM crypto module (optional, JS fallback available) |
-| LLVM | 21+ with wasm32 target | secp256k1 C compilation for WASM |
+| Tool    | Version                | Purpose                                              |
+| ------- | ---------------------- | ---------------------------------------------------- |
+| Node.js | 20+                    | Runtime                                              |
+| npm     | 10+                    | Package manager                                      |
+| Rust    | 1.81+                  | WASM crypto module (optional, JS fallback available) |
+| LLVM    | 21+ with wasm32 target | secp256k1 C compilation for WASM                     |
 
 ## Project Structure
 
@@ -53,10 +53,10 @@ app/
 
 ### Branches
 
-| Branch | Purpose | Deploy target |
-|---|---|---|
-| `develop` | Default branch, active development | DEV server |
-| `main` | Production releases | PRD server |
+| Branch    | Purpose                            | Deploy target |
+| --------- | ---------------------------------- | ------------- |
+| `develop` | Default branch, active development | DEV server    |
+| `main`    | Production releases                | PRD server    |
 
 - **Push to `develop` via feature branch + PR** (branch ruleset active) — no PR required for regular work
 - **`main` is protected** — changes only via PR (auto-created by Release PR workflow)
@@ -64,7 +64,7 @@ app/
 
 ### Commit Messages
 
-Write in English. Be concise. Describe *what* changed, not *how*.
+Write in English. Be concise. Describe _what_ changed, not _how_.
 
 ```
 # Good
@@ -148,14 +148,14 @@ export function MyComponent() {
 - **Bitcoin orange** — `bg-bitcoin`, `text-bitcoin`, `hover:bg-bitcoin-dark`
 - **Consistent spacing** — `p-6` for cards, `gap-3` for form fields, `space-y-6` for sections
 
-| Color | Tailwind class | Hex |
-|---|---|---|
-| Background | `bg-zkcoins-bg` | `#0a0a0a` |
-| Card | `bg-zkcoins-card` | `#141414` |
-| Border | `border-zkcoins-border` | `#1f1f1f` |
-| Text | `text-zkcoins-text` | `#e5e5e5` |
-| Muted | `text-zkcoins-muted` | `#737373` |
-| Bitcoin Orange | `bg-bitcoin` | `#f7931a` |
+| Color          | Tailwind class          | Hex       |
+| -------------- | ----------------------- | --------- |
+| Background     | `bg-zkcoins-bg`         | `#0a0a0a` |
+| Card           | `bg-zkcoins-card`       | `#141414` |
+| Border         | `border-zkcoins-border` | `#1f1f1f` |
+| Text           | `text-zkcoins-text`     | `#e5e5e5` |
+| Muted          | `text-zkcoins-muted`    | `#737373` |
+| Bitcoin Orange | `bg-bitcoin`            | `#f7931a` |
 
 ### State Management
 
@@ -225,12 +225,12 @@ The Dockerfile sets placeholder values at build time (`NEXT_PUBLIC_API_URL_PLACE
 
 ## CI/CD
 
-| Workflow | Trigger | Action |
-|---|---|---|
-| `ci.yaml` | Push to develop, PR | Lint + Build |
-| `deploy-dev.yaml` | Push to develop | Docker build → push `zkcoin/app:beta` → deploy to DEV |
-| `deploy-prd.yaml` | Push to main | Docker build → push `zkcoin/app:latest` → deploy to PRD |
-| `auto-release-pr.yaml` | Push to develop | Creates Release PR (develop → main) |
+| Workflow               | Trigger             | Action                                                  |
+| ---------------------- | ------------------- | ------------------------------------------------------- |
+| `ci.yaml`              | Push to develop, PR | Lint + Build                                            |
+| `deploy-dev.yaml`      | Push to develop     | Docker build → push `zkcoin/app:beta` → deploy to DEV   |
+| `deploy-prd.yaml`      | Push to main        | Docker build → push `zkcoin/app:latest` → deploy to PRD |
+| `auto-release-pr.yaml` | Push to develop     | Creates Release PR (develop → main)                     |
 
 ### Before Pushing
 
