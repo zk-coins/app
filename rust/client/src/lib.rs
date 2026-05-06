@@ -5,7 +5,7 @@ use bitcoin::{
 };
 use core::str::FromStr;
 use serde::{Deserialize, Serialize};
-use shared::{ClientAccount, new_master_private_key};
+use shared::{ClientAccount, new_master_private_key, master_private_key_from_seed};
 use wasm_bindgen::prelude::*;
 
 #[derive(Serialize, Deserialize)]
@@ -60,6 +60,42 @@ pub fn derive_public_keys(xpriv_str: &str, num_pubkeys: u32) -> Result<String, J
     };
 
     serde_json::to_string(&result)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize: {}", e)))
+}
+
+/// Generate a new BIP-39 mnemonic (12 words).
+/// Returns the mnemonic phrase as a string.
+#[wasm_bindgen]
+pub fn generate_mnemonic() -> Result<String, JsValue> {
+    let mnemonic = shared::generate_mnemonic();
+    Ok(mnemonic.to_string())
+}
+
+/// Validate a BIP-39 mnemonic phrase.
+/// Returns true if the phrase is valid.
+#[wasm_bindgen]
+pub fn validate_mnemonic(phrase: &str) -> bool {
+    shared::validate_mnemonic(phrase)
+}
+
+/// Generate account keys from a BIP-39 mnemonic phrase.
+/// Returns JSON: { address_hex, num_pubkeys, xpriv_str }
+#[wasm_bindgen]
+pub fn generate_account_keys_from_mnemonic(mnemonic_phrase: &str, passphrase: &str) -> Result<String, JsValue> {
+    let mnemonic: bip39::Mnemonic = mnemonic_phrase.parse()
+        .map_err(|e: bip39::Error| JsValue::from_str(&format!("Invalid mnemonic: {}", e)))?;
+
+    let seed = shared::mnemonic_to_seed(&mnemonic, passphrase);
+    let master_xpriv = master_private_key_from_seed(&seed);
+    let client_account = ClientAccount::new(master_xpriv);
+
+    let data = AccountKeys {
+        address_hex: hex::encode(client_account.address),
+        num_pubkeys: 0,
+        xpriv_str: client_account.private_key.to_string(),
+    };
+
+    serde_json::to_string(&data)
         .map_err(|e| JsValue::from_str(&format!("Failed to serialize: {}", e)))
 }
 

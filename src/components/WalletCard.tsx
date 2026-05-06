@@ -1,9 +1,13 @@
 'use client';
 
-import { useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useWalletStore } from '@/stores/wallet';
 import { api } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
+import { SeedPhraseSetup } from './SeedPhraseSetup';
+import { SeedPhraseImport } from './SeedPhraseImport';
+
+type AuthView = 'choose' | 'seed-create' | 'seed-import';
 
 export function WalletCard() {
   const {
@@ -16,6 +20,8 @@ export function WalletCard() {
     setError,
     loadFromStorage,
   } = useWalletStore();
+
+  const [authView, setAuthView] = useState<AuthView>('choose');
 
   useEffect(() => {
     loadFromStorage();
@@ -34,31 +40,80 @@ export function WalletCard() {
     return () => clearInterval(interval);
   }, [account, setBalance]);
 
-  const createAccount = useCallback(async () => {
-    setLoading(true);
-    setError(null);
-    try {
-      const wasm = await initWasm();
-      const accountData = await wasm.createAccount();
-      const newAccount = {
-        address: accountData.address,
-        balance: 0,
-        numPubkeys: accountData.numPubkeys,
-        xpriv: accountData.xpriv,
-      };
-      setAccount(newAccount);
+  const createFromMnemonic = useCallback(
+    async (mnemonic: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const wasm = await initWasm();
+        const accountData = await wasm.createAccountFromMnemonic(mnemonic);
+        const newAccount = {
+          address: accountData.address,
+          balance: 0,
+          numPubkeys: accountData.numPubkeys,
+          xpriv: accountData.xpriv,
+        };
+        setAccount(newAccount);
 
-      await api.mint(accountData.address);
-      const { balance } = await api.balance(accountData.address);
-      setBalance(balance);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create account');
-    } finally {
-      setLoading(false);
-    }
-  }, [setAccount, setBalance, setLoading, setError]);
+        try {
+          await api.mint(accountData.address);
+          const { balance } = await api.balance(accountData.address);
+          setBalance(balance);
+        } catch {
+          // mint may fail if server is not available — account is still created
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to create account');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setAccount, setBalance, setLoading, setError],
+  );
+
+  const restoreFromMnemonic = useCallback(
+    async (mnemonic: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const wasm = await initWasm();
+        const accountData = await wasm.createAccountFromMnemonic(mnemonic);
+        const newAccount = {
+          address: accountData.address,
+          balance: 0,
+          numPubkeys: accountData.numPubkeys,
+          xpriv: accountData.xpriv,
+        };
+        setAccount(newAccount);
+
+        try {
+          const { balance } = await api.balance(accountData.address);
+          setBalance(balance);
+        } catch {
+          // balance fetch may fail — account is still restored
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to restore account');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setAccount, setBalance, setLoading, setError],
+  );
 
   if (!account) {
+    if (authView === 'seed-create') {
+      return (
+        <SeedPhraseSetup onComplete={createFromMnemonic} onBack={() => setAuthView('choose')} />
+      );
+    }
+
+    if (authView === 'seed-import') {
+      return (
+        <SeedPhraseImport onComplete={restoreFromMnemonic} onBack={() => setAuthView('choose')} />
+      );
+    }
+
     return (
       <div className="rounded-xl border border-zkcoins-border bg-zkcoins-card p-8 text-center">
         <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-bitcoin/10">
@@ -66,15 +121,24 @@ export function WalletCard() {
         </div>
         <h2 className="mb-2 text-lg font-semibold text-white">Create Wallet</h2>
         <p className="mb-6 text-sm text-zkcoins-muted">
-          Generate a new HD wallet with BIP32 key derivation. Your keys stay local.
+          Create a new wallet with a 12-word recovery phrase, or restore an existing one.
         </p>
-        <button
-          onClick={createAccount}
-          disabled={isLoading}
-          className="rounded-lg bg-bitcoin px-6 py-3 font-semibold text-black transition-colors hover:bg-bitcoin-dark disabled:opacity-50"
-        >
-          {isLoading ? 'Creating...' : 'Create Account'}
-        </button>
+        <div className="flex flex-col items-center gap-3">
+          <button
+            onClick={() => setAuthView('seed-create')}
+            disabled={isLoading}
+            className="w-64 rounded-lg bg-bitcoin px-6 py-3 font-semibold text-black transition-colors hover:bg-bitcoin-dark disabled:opacity-50"
+          >
+            New Wallet
+          </button>
+          <button
+            onClick={() => setAuthView('seed-import')}
+            disabled={isLoading}
+            className="w-64 rounded-lg border border-zkcoins-border px-6 py-3 text-sm text-zkcoins-muted transition-colors hover:border-bitcoin hover:text-bitcoin disabled:opacity-50"
+          >
+            Restore from Seed Phrase
+          </button>
+        </div>
         {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
       </div>
     );
