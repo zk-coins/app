@@ -180,8 +180,8 @@ All backend communication goes through `src/lib/api/client.ts`:
 ```typescript
 import { api } from '@/lib/api/client';
 
-await api.mint({ address });
-await api.send({ sender, recipient, amount, ... });
+await api.mint(address);
+await api.send({ account_address, recipient, amount, public_key, next_public_key });
 const { balance } = await api.balance(address);
 ```
 
