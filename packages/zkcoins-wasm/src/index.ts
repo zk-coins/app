@@ -22,6 +22,7 @@ export interface ZkCoinsWasm {
   createAccountFromMnemonic(mnemonic: string, passphrase?: string): Promise<AccountData>;
   generateMnemonic(): string;
   validateMnemonic(phrase: string): boolean;
+  mnemonicFromEntropy(entropyHex: string): string;
   signSchnorr(privateKeyHex: string, hashHex: string): string;
   derivePublicKeys(xpriv: string, numPubkeys: number): PublicKeys;
   isWasm: boolean;
@@ -58,6 +59,7 @@ export async function initWasm(): Promise<ZkCoinsWasm> {
       },
       generateMnemonic: () => wasm.generate_mnemonic(),
       validateMnemonic: (phrase: string) => wasm.validate_mnemonic(phrase),
+      mnemonicFromEntropy: (entropyHex: string) => wasm.mnemonic_from_entropy(entropyHex),
       signSchnorr: (privateKeyHex: string, hashHex: string) =>
         wasm.sign_schnorr(privateKeyHex, hashHex),
       derivePublicKeys: (xpriv: string, numPubkeys: number) => {
@@ -95,6 +97,9 @@ function createJsFallback(): ZkCoinsWasm {
     },
     validateMnemonic: () => {
       throw new Error('Mnemonic validation requires WASM module');
+    },
+    mnemonicFromEntropy: () => {
+      throw new Error('Mnemonic from entropy requires WASM module');
     },
     signSchnorr: () => {
       throw new Error('Schnorr signing requires WASM module');

@@ -5,6 +5,7 @@ export function derive_public_keys(a: number, b: number, c: number): Array;
 export function generate_account_keys(): Array;
 export function generate_account_keys_from_mnemonic(a: number, b: number, c: number, d: number): Array;
 export function generate_mnemonic(): Array;
+export function mnemonic_from_entropy(a: number, b: number): Array;
 export function sign_schnorr(a: number, b: number, c: number, d: number): Array;
 export function validate_mnemonic(a: number, b: number): number;
 export function rustsecp256k1_v0_10_0_context_create(a: number): number;

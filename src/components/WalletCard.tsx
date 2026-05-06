@@ -2,12 +2,15 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useWalletStore } from '@/stores/wallet';
+import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
+import { isPasskeySupported } from '@/lib/crypto/passkey';
 import { SeedPhraseSetup } from './SeedPhraseSetup';
 import { SeedPhraseImport } from './SeedPhraseImport';
+import { PasskeySetup } from './PasskeySetup';
 
-type AuthView = 'choose' | 'seed-create' | 'seed-import';
+type AuthView = 'choose' | 'passkey-create' | 'passkey-restore' | 'seed-create' | 'seed-import';
 
 export function WalletCard() {
   const {
@@ -21,11 +24,15 @@ export function WalletCard() {
     loadFromStorage,
   } = useWalletStore();
 
+  const { setAuth, loadFromStorage: loadAuth } = useAuthStore();
   const [authView, setAuthView] = useState<AuthView>('choose');
+  const [passkeyAvailable, setPasskeyAvailable] = useState(false);
 
   useEffect(() => {
     loadFromStorage();
-  }, [loadFromStorage]);
+    loadAuth();
+    setPasskeyAvailable(isPasskeySupported());
+  }, [loadFromStorage, loadAuth]);
 
   useEffect(() => {
     if (!account) return;
@@ -54,13 +61,14 @@ export function WalletCard() {
           xpriv: accountData.xpriv,
         };
         setAccount(newAccount);
+        setAuth('seed');
 
         try {
           await api.mint(accountData.address);
           const { balance } = await api.balance(accountData.address);
           setBalance(balance);
         } catch {
-          // mint may fail if server is not available — account is still created
+          // mint may fail — account is still created
         }
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to create account');
@@ -68,7 +76,7 @@ export function WalletCard() {
         setLoading(false);
       }
     },
-    [setAccount, setBalance, setLoading, setError],
+    [setAccount, setBalance, setLoading, setError, setAuth],
   );
 
   const restoreFromMnemonic = useCallback(
@@ -85,6 +93,7 @@ export function WalletCard() {
           xpriv: accountData.xpriv,
         };
         setAccount(newAccount);
+        setAuth('seed');
 
         try {
           const { balance } = await api.balance(accountData.address);
@@ -98,10 +107,93 @@ export function WalletCard() {
         setLoading(false);
       }
     },
-    [setAccount, setBalance, setLoading, setError],
+    [setAccount, setBalance, setLoading, setError, setAuth],
+  );
+
+  const createFromPasskey = useCallback(
+    async (mnemonic: string, credentialId: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const wasm = await initWasm();
+        const accountData = await wasm.createAccountFromMnemonic(mnemonic);
+        const newAccount = {
+          address: accountData.address,
+          balance: 0,
+          numPubkeys: accountData.numPubkeys,
+          xpriv: accountData.xpriv,
+        };
+        setAccount(newAccount);
+        setAuth('passkey', credentialId);
+
+        try {
+          await api.mint(accountData.address);
+          const { balance } = await api.balance(accountData.address);
+          setBalance(balance);
+        } catch {
+          // mint may fail — account is still created
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to create account');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setAccount, setBalance, setLoading, setError, setAuth],
+  );
+
+  const restoreFromPasskey = useCallback(
+    async (mnemonic: string, credentialId: string) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const wasm = await initWasm();
+        const accountData = await wasm.createAccountFromMnemonic(mnemonic);
+        const newAccount = {
+          address: accountData.address,
+          balance: 0,
+          numPubkeys: accountData.numPubkeys,
+          xpriv: accountData.xpriv,
+        };
+        setAccount(newAccount);
+        setAuth('passkey', credentialId);
+
+        try {
+          const { balance } = await api.balance(accountData.address);
+          setBalance(balance);
+        } catch {
+          // balance fetch may fail — account is still restored
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to restore account');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [setAccount, setBalance, setLoading, setError, setAuth],
   );
 
   if (!account) {
+    if (authView === 'passkey-create') {
+      return (
+        <PasskeySetup
+          mode="create"
+          onComplete={createFromPasskey}
+          onBack={() => setAuthView('choose')}
+        />
+      );
+    }
+
+    if (authView === 'passkey-restore') {
+      return (
+        <PasskeySetup
+          mode="restore"
+          onComplete={restoreFromPasskey}
+          onBack={() => setAuthView('choose')}
+        />
+      );
+    }
+
     if (authView === 'seed-create') {
       return (
         <SeedPhraseSetup onComplete={createFromMnemonic} onBack={() => setAuthView('choose')} />
@@ -121,23 +213,50 @@ export function WalletCard() {
         </div>
         <h2 className="mb-2 text-lg font-semibold text-white">Create Wallet</h2>
         <p className="mb-6 text-sm text-zkcoins-muted">
-          Create a new wallet with a 12-word recovery phrase, or restore an existing one.
+          Create a new wallet or restore an existing one.
         </p>
         <div className="flex flex-col items-center gap-3">
+          {passkeyAvailable && (
+            <button
+              onClick={() => setAuthView('passkey-create')}
+              disabled={isLoading}
+              className="w-64 rounded-lg bg-bitcoin px-6 py-3 font-semibold text-black transition-colors hover:bg-bitcoin-dark disabled:opacity-50"
+            >
+              Create with Passkey
+            </button>
+          )}
           <button
             onClick={() => setAuthView('seed-create')}
             disabled={isLoading}
-            className="w-64 rounded-lg bg-bitcoin px-6 py-3 font-semibold text-black transition-colors hover:bg-bitcoin-dark disabled:opacity-50"
+            className={`w-64 rounded-lg px-6 py-3 font-semibold transition-colors disabled:opacity-50 ${
+              passkeyAvailable
+                ? 'border border-zkcoins-border text-sm text-zkcoins-muted hover:border-bitcoin hover:text-bitcoin'
+                : 'bg-bitcoin text-black hover:bg-bitcoin-dark'
+            }`}
           >
-            New Wallet
+            {passkeyAvailable ? 'Create with Seed Phrase' : 'New Wallet'}
           </button>
-          <button
-            onClick={() => setAuthView('seed-import')}
-            disabled={isLoading}
-            className="w-64 rounded-lg border border-zkcoins-border px-6 py-3 text-sm text-zkcoins-muted transition-colors hover:border-bitcoin hover:text-bitcoin disabled:opacity-50"
-          >
-            Restore from Seed Phrase
-          </button>
+          <div className="mt-2 border-t border-zkcoins-border pt-4">
+            <p className="mb-3 text-xs text-zkcoins-muted">Restore existing wallet</p>
+            <div className="flex flex-col items-center gap-2">
+              {passkeyAvailable && (
+                <button
+                  onClick={() => setAuthView('passkey-restore')}
+                  disabled={isLoading}
+                  className="w-64 rounded-lg border border-zkcoins-border px-5 py-2 text-sm text-zkcoins-muted transition-colors hover:border-bitcoin hover:text-bitcoin disabled:opacity-50"
+                >
+                  Restore with Passkey
+                </button>
+              )}
+              <button
+                onClick={() => setAuthView('seed-import')}
+                disabled={isLoading}
+                className="w-64 rounded-lg border border-zkcoins-border px-5 py-2 text-sm text-zkcoins-muted transition-colors hover:border-bitcoin hover:text-bitcoin disabled:opacity-50"
+              >
+                Restore from Seed Phrase
+              </button>
+            </div>
+          </div>
         </div>
         {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
       </div>
