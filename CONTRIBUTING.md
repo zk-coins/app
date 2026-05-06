@@ -30,13 +30,22 @@ app/
 │   │   ├── Header.tsx
 │   │   ├── WalletCard.tsx
 │   │   ├── SendForm.tsx
-│   │   └── TransactionLog.tsx
+│   │   ├── TransactionLog.tsx
+│   │   ├── SeedPhraseSetup.tsx
+│   │   ├── SeedPhraseImport.tsx
+│   │   ├── SetPassword.tsx
+│   │   ├── UnlockWallet.tsx
+│   │   ├── PasskeySetup.tsx
+│   │   └── Footer.tsx
 │   ├── hooks/             # React hooks
 │   │   └── useZkCoins.ts  # WASM integration
 │   ├── lib/
-│   │   └── api/           # REST API client (backend communication)
+│   │   ├── api/           # REST API client (backend communication)
+│   │   └── crypto/        # Encryption, key derivation, passkey, storage
 │   └── stores/            # Zustand state management
-│       └── wallet.ts
+│       ├── auth.ts        # Auth flow state
+│       ├── network.ts     # API URL, network name
+│       └── wallet.ts      # Account, encrypted persistence
 ├── packages/
 │   └── zkcoins-wasm/      # TypeScript wrapper for Rust WASM module
 │       └── src/
@@ -160,9 +169,9 @@ export function MyComponent() {
 ### State Management
 
 - **Zustand** for all application state
-- **localStorage persistence** via `saveToStorage()` / `loadFromStorage()`
+- **Encrypted IndexedDB persistence** via `saveEncryptedWallet()` / `loadEncryptedWallet()` (AES-GCM)
 - **No React Context** for state — Zustand stores are global singletons
-- Store slices: `account`, `transactions`, `isLoading`, `error`
+- Wallet state: `account`, `transactions`, `isLoading`, `isLocked`, `hasStoredWallet`, `error`
 
 ### API Client
 

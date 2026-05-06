@@ -17,7 +17,7 @@ Web application for [zkcoins.app](https://zkcoins.app) — private Bitcoin trans
 | Framework | Next.js 14 (App Router)   | SSR, standalone Docker output, largest React ecosystem      |
 | Language  | TypeScript (strict)       | Type safety                                                 |
 | Styling   | Tailwind CSS              | Dark theme (#0a0a0a), Bitcoin orange (#f7931a)              |
-| State     | Zustand                   | Minimal boilerplate, localStorage persistence               |
+| State     | Zustand                   | Minimal boilerplate, encrypted IndexedDB persistence        |
 | Crypto    | Rust → WASM               | secp256k1 + BIP32 from bitcoin crate (same as Bitcoin Core) |
 | PWA       | Service Worker + Manifest | Installable, offline-capable, standalone mode               |
 
@@ -48,14 +48,27 @@ src/
 │   ├── Header.tsx      # Logo + network badge
 │   ├── WalletCard.tsx  # Balance display + account creation
 │   ├── SendForm.tsx    # Coin transfer form
-│   └── TransactionLog.tsx
+│   ├── TransactionLog.tsx
+│   ├── SeedPhraseSetup.tsx   # 12-word mnemonic generation
+│   ├── SeedPhraseImport.tsx  # Restore from seed phrase
+│   ├── SetPassword.tsx       # Password encryption setup
+│   ├── UnlockWallet.tsx      # Unlock encrypted wallet
+│   ├── PasskeySetup.tsx      # WebAuthn passkey registration
+│   └── Footer.tsx
 ├── hooks/
 │   └── useZkCoins.ts   # WASM integration hook
-├── lib/api/
-│   └── client.ts       # REST API client (backend communication)
+├── lib/
+│   ├── api/
+│   │   └── client.ts   # REST API client (backend communication)
+│   └── crypto/
+│       ├── encryption.ts     # AES-GCM encrypt/decrypt via Web Crypto
+│       ├── key-derivation.ts # PBKDF2 from password, HKDF from passkey PRF
+│       ├── passkey.ts        # WebAuthn credential create/get + PRF
+│       └── storage.ts        # IndexedDB encrypted wallet persistence
 └── stores/
+    ├── auth.ts          # Zustand store (auth flow state)
     ├── network.ts       # Zustand store (API URL, network name)
-    └── wallet.ts        # Zustand store (account, transactions)
+    └── wallet.ts        # Zustand store (account, encrypted persistence)
 
 packages/zkcoins-wasm/   # TypeScript wrapper for Rust WASM module
 rust/client/             # Rust WASM crate (BIP32, Schnorr, secp256k1)
@@ -107,10 +120,10 @@ Details: [docs.zkcoins.app/architecture/signup-flow](https://docs.zkcoins.app/ar
 ## Open Tasks
 
 - [ ] WASM real integration (currently JS fallback for Schnorr + BIP32)
-- [ ] Frontend ↔ API connection (CORS headers in server)
-- [ ] BIP-39 seed phrase signup UI (12 words)
-- [ ] Passkey signup (WebAuthn)
-- [ ] Encrypted key storage (IndexedDB + AES-GCM, replace localStorage)
+- [x] Frontend ↔ API connection (CORS headers in server)
+- [x] BIP-39 seed phrase signup UI (12 words)
+- [x] Passkey signup (WebAuthn)
+- [x] Encrypted key storage (IndexedDB + AES-GCM)
 - [ ] Account backup/restore
 - [ ] Explorer app (explorer.zkcoins.app)
 
