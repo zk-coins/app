@@ -40,6 +40,7 @@ export function WalletCard() {
   const [authView, setAuthView] = useState<AuthView>('choose');
   const [passkeyAvailable, setPasskeyAvailable] = useState(false);
   const [pendingMnemonic, setPendingMnemonic] = useState<string | null>(null);
+  const [pendingIsNew, setPendingIsNew] = useState(false);
 
   useEffect(() => {
     checkForStoredWallet();
@@ -60,84 +61,67 @@ export function WalletCard() {
     return () => clearInterval(interval);
   }, [account, setBalance]);
 
-  const createFromMnemonic = useCallback(
-    async (mnemonic: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const wasm = await initWasm();
-        const accountData = await wasm.createAccountFromMnemonic(mnemonic);
-        const newAccount = {
-          address: accountData.address,
-          balance: 0,
-          numPubkeys: accountData.numPubkeys,
-          xpriv: accountData.xpriv,
-        };
-        setAccount(newAccount);
-        setAuth('seed');
-        setPendingMnemonic(mnemonic);
-        setAuthView('set-password');
+  // Seed phrase flow: store mnemonic, go to password screen FIRST
+  const onMnemonicReady = useCallback((mnemonic: string, isNew: boolean) => {
+    setPendingMnemonic(mnemonic);
+    setPendingIsNew(isNew);
+    setAuthView('set-password');
+  }, []);
 
-        try {
-          await api.mint(accountData.address);
-          const { balance } = await api.balance(accountData.address);
-          setBalance(balance);
-        } catch {
-          // mint may fail — account is still created
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to create account');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [setAccount, setBalance, setLoading, setError, setAuth],
-  );
-
-  const restoreFromMnemonic = useCallback(
-    async (mnemonic: string) => {
-      setLoading(true);
-      setError(null);
-      try {
-        const wasm = await initWasm();
-        const accountData = await wasm.createAccountFromMnemonic(mnemonic);
-        const newAccount = {
-          address: accountData.address,
-          balance: 0,
-          numPubkeys: accountData.numPubkeys,
-          xpriv: accountData.xpriv,
-        };
-        setAccount(newAccount);
-        setAuth('seed');
-        setPendingMnemonic(null);
-        setAuthView('set-password');
-
-        try {
-          const { balance } = await api.balance(accountData.address);
-          setBalance(balance);
-        } catch {
-          // balance fetch may fail — account is still restored
-        }
-      } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to restore account');
-      } finally {
-        setLoading(false);
-      }
-    },
-    [setAccount, setBalance, setLoading, setError, setAuth],
-  );
-
+  // After password is set: create account, encrypt, save, then mint
   const handlePasswordSet = useCallback(
     async (password: string) => {
+      if (!pendingMnemonic) return;
+      setLoading(true);
+      setError(null);
       try {
+        const wasm = await initWasm();
+        const accountData = await wasm.createAccountFromMnemonic(pendingMnemonic);
+        const newAccount = {
+          address: accountData.address,
+          balance: 0,
+          numPubkeys: accountData.numPubkeys,
+          xpriv: accountData.xpriv,
+        };
+        setAccount(newAccount);
+        setAuth('seed');
         await saveWithPassword(password);
+
         setPendingMnemonic(null);
         setAuthView('choose');
+
+        if (pendingIsNew) {
+          try {
+            await api.mint(accountData.address);
+            const { balance } = await api.balance(accountData.address);
+            setBalance(balance);
+          } catch {
+            // mint may fail — wallet is already saved
+          }
+        } else {
+          try {
+            const { balance } = await api.balance(accountData.address);
+            setBalance(balance);
+          } catch {
+            // balance fetch may fail
+          }
+        }
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to save wallet');
+        setError(err instanceof Error ? err.message : 'Failed to create wallet');
+      } finally {
+        setLoading(false);
       }
     },
-    [saveWithPassword, setError],
+    [
+      pendingMnemonic,
+      pendingIsNew,
+      setAccount,
+      setBalance,
+      setLoading,
+      setError,
+      setAuth,
+      saveWithPassword,
+    ],
   );
 
   const createFromPasskey = useCallback(
@@ -248,13 +232,19 @@ export function WalletCard() {
 
     if (authView === 'seed-create') {
       return (
-        <SeedPhraseSetup onComplete={createFromMnemonic} onBack={() => setAuthView('choose')} />
+        <SeedPhraseSetup
+          onComplete={(m) => onMnemonicReady(m, true)}
+          onBack={() => setAuthView('choose')}
+        />
       );
     }
 
     if (authView === 'seed-import') {
       return (
-        <SeedPhraseImport onComplete={restoreFromMnemonic} onBack={() => setAuthView('choose')} />
+        <SeedPhraseImport
+          onComplete={(m) => onMnemonicReady(m, false)}
+          onBack={() => setAuthView('choose')}
+        />
       );
     }
 

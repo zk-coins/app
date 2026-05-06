@@ -38,13 +38,17 @@ export function SendForm() {
 
       const keys = wasm.derivePublicKeys(account.xpriv, account.numPubkeys);
 
-      const res = await api.send({
-        account_address: account.address,
-        recipient,
-        amount: amountNum,
-        public_key: keys.publicKey,
-        next_public_key: keys.nextPublicKey,
-      });
+      const res = await api.sendSigned(
+        {
+          account_address: account.address,
+          recipient,
+          amount: amountNum,
+          public_key: keys.publicKey,
+          next_public_key: keys.nextPublicKey,
+        },
+        account.xpriv,
+        account.numPubkeys,
+      );
 
       if (res.success) {
         incrementPubkeys();
