@@ -10,3 +10,4 @@ dist/
 *.pem
 rust/target/
 packages/zkcoins-wasm/src/pkg/README.md
+test-results/
