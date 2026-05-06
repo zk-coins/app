@@ -31,9 +31,7 @@ export function Header() {
         <div className="flex items-center gap-2">
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs ${
-              isMainnet
-                ? 'bg-green-900/30 text-green-400'
-                : 'bg-yellow-900/30 text-yellow-400'
+              isMainnet ? 'bg-green-900/30 text-green-400' : 'bg-yellow-900/30 text-yellow-400'
             }`}
           >
             <span
