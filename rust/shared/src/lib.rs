@@ -33,9 +33,7 @@ pub struct AccountState {
 
 impl AccountState {
     pub fn new(initial_public_key: Vec<u8>) -> Self {
-        let mut rng = rand::thread_rng();
-        let random_bytes: [u8; 32] = rng.gen();
-        let address = hash(&[initial_public_key.clone(), random_bytes.to_vec()].concat());
+        let address = hash(&initial_public_key);
         AccountState {
             owner: address,
             balance: 0,
