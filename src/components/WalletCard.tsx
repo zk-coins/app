@@ -205,9 +205,8 @@ export function WalletCard() {
   }
 
   if (!account) {
-    if (authView === 'set-password' && account !== null) {
-      // This won't render because account is null in this branch.
-      // The password set step happens while account IS set.
+    if (authView === 'set-password') {
+      return <SetPassword onComplete={handlePasswordSet} />;
     }
 
     if (authView === 'passkey-create') {

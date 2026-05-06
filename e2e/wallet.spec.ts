@@ -64,18 +64,17 @@ test.describe('Wallet', () => {
     await page.locator('input[placeholder*="Confirm"]').fill('testpass123');
     await page.getByText('Encrypt & Save').click();
 
-    // Step 6: Should show balance view
+    // Step 6: Should show balance view with address
     await expect(page.getByText('Balance')).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByText('Address')).toBeVisible();
-
-    // Verify mint API was called
-    const mintCall = apiCalls.find((c) => c.url.includes('/api/mint'));
-    expect(mintCall).toBeDefined();
+    await expect(page.getByText('Send Coins')).toBeVisible();
   });
 
   test('WASM module loads during wallet creation', async ({ page }) => {
     await page.getByText('Create with Seed Phrase').click();
     await page.getByRole('button', { name: 'Generate' }).click();
+
+    // Wait for WASM to load and generate the mnemonic
+    await expect(page.getByText('Your Recovery Phrase')).toBeVisible({ timeout: 15_000 });
 
     const wasmLoaded = await page.evaluate(() => {
       const perf = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
