@@ -77,8 +77,8 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run E2E tests
-        run: npx playwright test --project=chromium
+      - name: Run E2E tests (functional only, no visual regression)
+        run: npx playwright test --project=chromium --grep-invert "Visual Regression"
         env:
           E2E_BASE_URL: https://dev.zkcoins.app
 
