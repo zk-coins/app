@@ -2,6 +2,7 @@
 
 import { useEffect, useCallback } from 'react';
 import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 import { api } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
 
@@ -16,10 +17,11 @@ export function WalletCard() {
     setError,
     loadFromStorage,
   } = useWalletStore();
+  const activeNetwork = useNetworkStore((s) => s.activeNetwork);
 
   useEffect(() => {
     loadFromStorage();
-  }, [loadFromStorage]);
+  }, [activeNetwork, loadFromStorage]);
 
   useEffect(() => {
     if (!account) return;
@@ -40,13 +42,16 @@ export function WalletCard() {
     try {
       const wasm = await initWasm();
       const accountData = await wasm.createAccount();
-      const newAccount = { address: accountData.address, balance: 0, numPubkeys: 0 };
+      const newAccount = {
+        address: accountData.address,
+        balance: 0,
+        numPubkeys: accountData.numPubkeys,
+        xpriv: accountData.xpriv,
+      };
       setAccount(newAccount);
-      const address = accountData.address;
 
-      // Mint initial coins
-      await api.mint({ address });
-      const { balance } = await api.balance(address);
+      await api.mint(accountData.address);
+      const { balance } = await api.balance(accountData.address);
       setBalance(balance);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create account');
@@ -84,7 +89,7 @@ export function WalletCard() {
         <button
           onClick={async () => {
             try {
-              await api.mint({ address: account.address });
+              await api.mint(account.address);
               const { balance } = await api.balance(account.address);
               setBalance(balance);
             } catch {

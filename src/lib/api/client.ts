@@ -1,7 +1,11 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:4242';
+import { useNetworkStore } from '@/stores/network';
+
+function getApiUrl(): string {
+  return useNetworkStore.getState().apiUrl;
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
+  const res = await fetch(`${getApiUrl()}${path}`, {
     headers: { 'Content-Type': 'application/json' },
     ...options,
   });
@@ -12,35 +16,32 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   return res.json();
 }
 
-export interface MintRequest {
-  address: string;
-}
-
 export interface SendRequest {
-  sender: string;
+  account_address: string;
   recipient: string;
   amount: number;
-  sender_public_key: string;
-  sender_next_public_key: string;
+  public_key: string;
+  next_public_key: string;
 }
 
 export interface BalanceResponse {
   balance: number;
 }
 
-export interface MintResponse {
-  proof_id: string;
+export interface SendResponse {
+  success: boolean;
+  proof_id: number | null;
 }
 
-export interface SendResponse {
-  proof_id: string;
+export interface InfoResponse {
+  network: string;
 }
 
 export const api = {
-  mint: (data: MintRequest) =>
-    request<MintResponse>('/api/mint', {
+  mint: (address: string, amount: number = 10_000) =>
+    request<SendResponse>('/api/mint', {
       method: 'POST',
-      body: JSON.stringify(data),
+      body: JSON.stringify({ account_address: address, amount }),
     }),
 
   send: (data: SendRequest) =>
@@ -50,4 +51,6 @@ export const api = {
     }),
 
   balance: (address: string) => request<BalanceResponse>(`/api/balance?address=${address}`),
+
+  info: () => request<InfoResponse>('/api/info'),
 };

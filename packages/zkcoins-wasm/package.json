@@ -8,5 +8,7 @@
     "build:wasm": "cd ../../rust/client && wasm-pack build --target web --out-dir ../../packages/zkcoins-wasm/src/pkg",
     "build": "echo 'WASM package - no TS build needed'"
   },
-  "files": ["src"]
+  "files": [
+    "src"
+  ]
 }

@@ -18,7 +18,7 @@ export function useZkCoins() {
         setIsReady(true);
       })
       .catch(() => {
-        setIsReady(true); // fallback mode
+        setIsReady(true);
       });
   }, []);
 
@@ -33,10 +33,11 @@ export function useZkCoins() {
         address: accountData.address,
         balance: 0,
         numPubkeys: accountData.numPubkeys,
+        xpriv: accountData.xpriv,
       };
       setAccount(newAccount);
 
-      await api.mint({ address: accountData.address });
+      await api.mint(accountData.address);
       const { balance } = await api.balance(accountData.address);
       setBalance(balance);
 
@@ -61,23 +62,32 @@ export function useZkCoins() {
       setLoading(true);
       setError(null);
       try {
+        const w = wasm || (await initWasm());
+        if (!account.xpriv) {
+          throw new Error('No private key available');
+        }
+
+        const keys = w.derivePublicKeys(account.xpriv, account.numPubkeys);
+
         const res = await api.send({
-          sender: account.address,
+          account_address: account.address,
           recipient,
           amount,
-          sender_public_key: '',
-          sender_next_public_key: '',
+          public_key: keys.publicKey,
+          next_public_key: keys.nextPublicKey,
         });
 
-        incrementPubkeys();
-        addTransaction({
-          id: res.proof_id,
-          type: 'send',
-          amount,
-          counterparty: recipient,
-          timestamp: Date.now(),
-          proofId: res.proof_id,
-        });
+        if (res.success) {
+          incrementPubkeys();
+          addTransaction({
+            id: res.proof_id?.toString() ?? `send-${Date.now()}`,
+            type: 'send',
+            amount,
+            counterparty: recipient,
+            timestamp: Date.now(),
+            proofId: res.proof_id?.toString(),
+          });
+        }
 
         const { balance } = await api.balance(account.address);
         setBalance(balance);
@@ -88,7 +98,7 @@ export function useZkCoins() {
         setLoading(false);
       }
     },
-    [setBalance, setLoading, setError, incrementPubkeys, addTransaction],
+    [wasm, setBalance, setLoading, setError, incrementPubkeys, addTransaction],
   );
 
   return { isReady, createAccount, sendCoins };
