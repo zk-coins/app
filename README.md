@@ -45,7 +45,7 @@ npm run dev    # http://localhost:3090
 src/
 ├── app/                # Next.js App Router (layout, pages)
 ├── components/         # React components
-│   ├── Header.tsx      # Logo + testnet badge
+│   ├── Header.tsx      # Logo + network badge
 │   ├── WalletCard.tsx  # Balance display + account creation
 │   ├── SendForm.tsx    # Coin transfer form
 │   └── TransactionLog.tsx
@@ -54,6 +54,7 @@ src/
 ├── lib/api/
 │   └── client.ts       # REST API client (backend communication)
 └── stores/
+    ├── network.ts       # Zustand store (API URL, network name)
     └── wallet.ts        # Zustand store (account, transactions)
 
 packages/zkcoins-wasm/   # TypeScript wrapper for Rust WASM module
@@ -79,7 +80,7 @@ wasm-bindgen --out-dir ../../packages/zkcoins-wasm/src/pkg --target web \
 docker build -t zkcoin/app .
 docker run -p 3090:3090 \
   -e NEXT_PUBLIC_API_URL=https://api.zkcoins.app \
-  -e NEXT_PUBLIC_NETWORK=mainnet \
+  -e NEXT_PUBLIC_EXPLORER_URL=https://explorer.zkcoins.app \
   zkcoin/app
 ```
 
