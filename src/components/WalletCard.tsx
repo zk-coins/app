@@ -9,30 +9,43 @@ import { isPasskeySupported } from '@/lib/crypto/passkey';
 import { SeedPhraseSetup } from './SeedPhraseSetup';
 import { SeedPhraseImport } from './SeedPhraseImport';
 import { PasskeySetup } from './PasskeySetup';
+import { SetPassword } from './SetPassword';
+import { UnlockWallet } from './UnlockWallet';
 
-type AuthView = 'choose' | 'passkey-create' | 'passkey-restore' | 'seed-create' | 'seed-import';
+type AuthView =
+  | 'choose'
+  | 'passkey-create'
+  | 'passkey-restore'
+  | 'seed-create'
+  | 'seed-import'
+  | 'set-password';
 
 export function WalletCard() {
   const {
     account,
     isLoading,
+    isLocked,
+    hasStoredWallet,
     error,
     setAccount,
     setBalance,
     setLoading,
     setError,
-    loadFromStorage,
+    saveWithPassword,
+    saveWithPrf,
+    checkForStoredWallet,
   } = useWalletStore();
 
-  const { setAuth, loadFromStorage: loadAuth } = useAuthStore();
+  const { setAuth, hydrate } = useAuthStore();
   const [authView, setAuthView] = useState<AuthView>('choose');
   const [passkeyAvailable, setPasskeyAvailable] = useState(false);
+  const [pendingMnemonic, setPendingMnemonic] = useState<string | null>(null);
 
   useEffect(() => {
-    loadFromStorage();
-    loadAuth();
+    checkForStoredWallet();
+    hydrate();
     setPasskeyAvailable(isPasskeySupported());
-  }, [loadFromStorage, loadAuth]);
+  }, [checkForStoredWallet, hydrate]);
 
   useEffect(() => {
     if (!account) return;
@@ -62,6 +75,8 @@ export function WalletCard() {
         };
         setAccount(newAccount);
         setAuth('seed');
+        setPendingMnemonic(mnemonic);
+        setAuthView('set-password');
 
         try {
           await api.mint(accountData.address);
@@ -94,6 +109,8 @@ export function WalletCard() {
         };
         setAccount(newAccount);
         setAuth('seed');
+        setPendingMnemonic(null);
+        setAuthView('set-password');
 
         try {
           const { balance } = await api.balance(accountData.address);
@@ -108,6 +125,19 @@ export function WalletCard() {
       }
     },
     [setAccount, setBalance, setLoading, setError, setAuth],
+  );
+
+  const handlePasswordSet = useCallback(
+    async (password: string) => {
+      try {
+        await saveWithPassword(password);
+        setPendingMnemonic(null);
+        setAuthView('choose');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Failed to save wallet');
+      }
+    },
+    [saveWithPassword, setError],
   );
 
   const createFromPasskey = useCallback(
@@ -126,6 +156,14 @@ export function WalletCard() {
         setAccount(newAccount);
         setAuth('passkey', credentialId);
 
+        // For passkey, PRF output is not available here anymore.
+        // The PasskeySetup already saved credential metadata.
+        // We need to re-authenticate to get PRF for encryption.
+        // Instead, we authenticate again to encrypt the wallet.
+        const { authenticatePasskey } = await import('@/lib/crypto/passkey');
+        const result = await authenticatePasskey(credentialId);
+        await saveWithPrf(result.prfOutput);
+
         try {
           await api.mint(accountData.address);
           const { balance } = await api.balance(accountData.address);
@@ -139,7 +177,7 @@ export function WalletCard() {
         setLoading(false);
       }
     },
-    [setAccount, setBalance, setLoading, setError, setAuth],
+    [setAccount, setBalance, setLoading, setError, setAuth, saveWithPrf],
   );
 
   const restoreFromPasskey = useCallback(
@@ -158,6 +196,10 @@ export function WalletCard() {
         setAccount(newAccount);
         setAuth('passkey', credentialId);
 
+        const { authenticatePasskey } = await import('@/lib/crypto/passkey');
+        const result = await authenticatePasskey(credentialId);
+        await saveWithPrf(result.prfOutput);
+
         try {
           const { balance } = await api.balance(accountData.address);
           setBalance(balance);
@@ -170,10 +212,20 @@ export function WalletCard() {
         setLoading(false);
       }
     },
-    [setAccount, setBalance, setLoading, setError, setAuth],
+    [setAccount, setBalance, setLoading, setError, setAuth, saveWithPrf],
   );
 
+  // Show unlock screen for stored encrypted wallet
+  if ((isLocked || hasStoredWallet) && !account) {
+    return <UnlockWallet />;
+  }
+
   if (!account) {
+    if (authView === 'set-password' && account !== null) {
+      // This won't render because account is null in this branch.
+      // The password set step happens while account IS set.
+    }
+
     if (authView === 'passkey-create') {
       return (
         <PasskeySetup
@@ -261,6 +313,11 @@ export function WalletCard() {
         {error && <p className="mt-4 text-sm text-red-400">{error}</p>}
       </div>
     );
+  }
+
+  // Account exists — show set-password if needed for seed wallets
+  if (authView === 'set-password') {
+    return <SetPassword onComplete={handlePasswordSet} />;
   }
 
   return (

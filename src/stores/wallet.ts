@@ -1,4 +1,12 @@
 import { create } from 'zustand';
+import { encrypt, decrypt, deriveKeyFromPassword, deriveKeyFromPrf } from '@/lib/crypto/encryption';
+import {
+  saveEncryptedWallet,
+  loadEncryptedWallet,
+  deleteEncryptedWallet,
+  clearLegacyStorage,
+  type StoredWallet,
+} from '@/lib/crypto/storage';
 
 export interface Account {
   address: string;
@@ -20,6 +28,10 @@ interface WalletState {
   account: Account | null;
   transactions: Transaction[];
   isLoading: boolean;
+  isLocked: boolean;
+  hasStoredWallet: boolean;
+  storedAddress: string | null;
+  storedAuthMethod: 'passkey' | 'seed' | null;
   error: string | null;
 
   setAccount: (account: Account | null) => void;
@@ -28,28 +40,51 @@ interface WalletState {
   addTransaction: (tx: Transaction) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
-  loadFromStorage: () => void;
-  saveToStorage: () => void;
+
+  // Encrypted storage operations
+  saveWithPassword: (password: string) => Promise<void>;
+  saveWithPrf: (prfOutput: Uint8Array) => Promise<void>;
+  unlockWithPassword: (password: string) => Promise<void>;
+  unlockWithPrf: (prfOutput: Uint8Array) => Promise<void>;
+  lock: () => void;
+  checkForStoredWallet: () => Promise<void>;
+  deleteWallet: () => Promise<void>;
 }
 
-const STORAGE_KEY = 'zkcoins_wallet';
+// Keep transactions in localStorage (not sensitive)
+const TX_STORAGE_KEY = 'zkcoins_transactions';
+
+function loadTransactions(): Transaction[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const stored = localStorage.getItem(TX_STORAGE_KEY);
+    return stored ? JSON.parse(stored) : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveTransactions(transactions: Transaction[]): void {
+  if (typeof window === 'undefined') return;
+  localStorage.setItem(TX_STORAGE_KEY, JSON.stringify(transactions));
+}
 
 export const useWalletStore = create<WalletState>((set, get) => ({
   account: null,
   transactions: [],
   isLoading: false,
+  isLocked: false,
+  hasStoredWallet: false,
+  storedAddress: null,
+  storedAuthMethod: null,
   error: null,
 
-  setAccount: (account) => {
-    set({ account });
-    get().saveToStorage();
-  },
+  setAccount: (account) => set({ account }),
 
   setBalance: (balance) => {
     const { account } = get();
     if (account) {
       set({ account: { ...account, balance } });
-      get().saveToStorage();
     }
   },
 
@@ -57,39 +92,156 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const { account } = get();
     if (account) {
       set({ account: { ...account, numPubkeys: account.numPubkeys + 1 } });
-      get().saveToStorage();
     }
   },
 
   addTransaction: (tx) => {
-    set((state) => ({ transactions: [tx, ...state.transactions] }));
-    get().saveToStorage();
+    const transactions = [tx, ...get().transactions];
+    set({ transactions });
+    saveTransactions(transactions);
   },
 
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
 
-  loadFromStorage: () => {
-    if (typeof window === 'undefined') return;
+  saveWithPassword: async (password: string) => {
+    const { account, transactions } = get();
+    if (!account) return;
+
+    const walletData = JSON.stringify({ account, transactions });
+    const { key, salt } = await deriveKeyFromPassword(password);
+    const encrypted = await encrypt(walletData, key, salt);
+
+    await saveEncryptedWallet({
+      encrypted,
+      authMethod: 'seed',
+      address: account.address,
+      createdAt: Date.now(),
+    });
+
+    clearLegacyStorage();
+  },
+
+  saveWithPrf: async (prfOutput: Uint8Array) => {
+    const { account, transactions } = get();
+    if (!account) return;
+
+    const walletData = JSON.stringify({ account, transactions });
+    const key = await deriveKeyFromPrf(prfOutput);
+    const encrypted = await encrypt(walletData, key);
+
+    await saveEncryptedWallet({
+      encrypted,
+      authMethod: 'passkey',
+      address: account.address,
+      createdAt: Date.now(),
+    });
+
+    clearLegacyStorage();
+  },
+
+  unlockWithPassword: async (password: string) => {
+    const stored = await loadEncryptedWallet();
+    if (!stored) throw new Error('No stored wallet found');
+
+    const salt = stored.encrypted.salt
+      ? (() => {
+          const binary = atob(stored.encrypted.salt!);
+          const bytes = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) {
+            bytes[i] = binary.charCodeAt(i);
+          }
+          return bytes;
+        })()
+      : undefined;
+
+    if (!salt) throw new Error('No salt found in stored wallet');
+
+    const { key } = await deriveKeyFromPassword(password, salt);
+    const decrypted = await decrypt(stored.encrypted, key);
+    const data = JSON.parse(decrypted);
+
+    set({
+      account: data.account,
+      transactions: data.transactions || [],
+      isLocked: false,
+    });
+  },
+
+  unlockWithPrf: async (prfOutput: Uint8Array) => {
+    const stored = await loadEncryptedWallet();
+    if (!stored) throw new Error('No stored wallet found');
+
+    const key = await deriveKeyFromPrf(prfOutput);
+    const decrypted = await decrypt(stored.encrypted, key);
+    const data = JSON.parse(decrypted);
+
+    set({
+      account: data.account,
+      transactions: data.transactions || [],
+      isLocked: false,
+    });
+  },
+
+  lock: () => {
+    const { account } = get();
+    set({
+      account: null,
+      isLocked: true,
+      storedAddress: account?.address ?? get().storedAddress,
+    });
+  },
+
+  checkForStoredWallet: async () => {
+    // Check IndexedDB for encrypted wallet
     try {
-      const stored = localStorage.getItem(STORAGE_KEY);
+      const stored = await loadEncryptedWallet();
       if (stored) {
-        const data = JSON.parse(stored);
         set({
-          account: data.account || null,
-          transactions: data.transactions || [],
+          hasStoredWallet: true,
+          storedAddress: stored.address,
+          storedAuthMethod: stored.authMethod,
+          isLocked: true,
         });
-      } else {
-        set({ account: null, transactions: [] });
+        return;
       }
     } catch {
-      // ignore parse errors
+      // IndexedDB not available
+    }
+
+    // Check legacy localStorage
+    if (typeof window !== 'undefined') {
+      try {
+        const legacy = localStorage.getItem('zkcoins_wallet');
+        if (legacy) {
+          const data = JSON.parse(legacy);
+          if (data.account) {
+            // Load legacy data directly (will be migrated on next save)
+            set({
+              account: data.account,
+              transactions: data.transactions || [],
+              isLocked: false,
+              hasStoredWallet: false,
+            });
+          }
+        }
+      } catch {
+        // ignore
+      }
     }
   },
 
-  saveToStorage: () => {
-    if (typeof window === 'undefined') return;
-    const { account, transactions } = get();
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ account, transactions }));
+  deleteWallet: async () => {
+    await deleteEncryptedWallet();
+    clearLegacyStorage();
+    localStorage.removeItem(TX_STORAGE_KEY);
+    set({
+      account: null,
+      transactions: [],
+      isLocked: false,
+      hasStoredWallet: false,
+      storedAddress: null,
+      storedAuthMethod: null,
+    });
   },
 }));
