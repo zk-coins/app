@@ -11,3 +11,5 @@ dist/
 rust/target/
 packages/zkcoins-wasm/src/pkg/README.md
 test-results/
+playwright-report/
+coverage/
