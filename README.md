@@ -120,10 +120,6 @@ Details: [docs.zkcoins.app/architecture/signup-flow](https://docs.zkcoins.app/ar
 ## Open Tasks
 
 - [ ] WASM real integration (currently JS fallback for Schnorr + BIP32)
-- [x] Frontend ↔ API connection (CORS headers in server)
-- [x] BIP-39 seed phrase signup UI (12 words)
-- [x] Passkey signup (WebAuthn)
-- [x] Encrypted key storage (IndexedDB + AES-GCM)
 - [ ] Account backup/restore
 - [ ] Explorer app (explorer.zkcoins.app)
 
