@@ -171,7 +171,7 @@ export function MyComponent() {
 - **Zustand** for all application state
 - **Encrypted IndexedDB persistence** via `saveEncryptedWallet()` / `loadEncryptedWallet()` (AES-GCM)
 - **No React Context** for state — Zustand stores are global singletons
-- Wallet state: `account`, `transactions`, `isLoading`, `isLocked`, `hasStoredWallet`, `error`
+- Wallet state: `account`, `transactions`, `isLoading`, `isLocked`, `hasStoredWallet`, `storedAddress`, `storedAuthMethod`, `error`
 
 ### API Client
 

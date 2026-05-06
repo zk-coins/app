@@ -108,7 +108,7 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 | `deploy-prd.yaml`      | Push main        | Docker → `zkcoin/app:latest` → PRD server |
 | `auto-release-pr.yaml` | Push develop     | Creates Release PR (develop → main)       |
 
-## Signup Flow (Planned)
+## Signup Flow
 
 Two methods, one wallet:
 
