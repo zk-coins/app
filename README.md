@@ -4,22 +4,22 @@ Web application for [zkcoins.app](https://zkcoins.app) — private Bitcoin trans
 
 ## Live
 
-| Environment | URL | Image |
-|---|---|---|
-| **PRD** | [zkcoins.app](https://zkcoins.app) | `zkcoin/app:latest` |
-| **DEV** | [dev.zkcoins.app](https://dev.zkcoins.app) | `zkcoin/app:beta` |
-| **Status** | [status.zkcoins.app](https://status.zkcoins.app) | — |
+| Environment | URL                                              | Image               |
+| ----------- | ------------------------------------------------ | ------------------- |
+| **PRD**     | [zkcoins.app](https://zkcoins.app)               | `zkcoin/app:latest` |
+| **DEV**     | [dev.zkcoins.app](https://dev.zkcoins.app)       | `zkcoin/app:beta`   |
+| **Status**  | [status.zkcoins.app](https://status.zkcoins.app) | —                   |
 
 ## Stack
 
-| Layer | Technology | Why |
-|---|---|---|
-| Framework | Next.js 14 (App Router) | SSR, standalone Docker output, largest React ecosystem |
-| Language | TypeScript (strict) | Type safety |
-| Styling | Tailwind CSS | Dark theme (#0a0a0a), Bitcoin orange (#f7931a) |
-| State | Zustand | Minimal boilerplate, localStorage persistence |
-| Crypto | Rust → WASM | secp256k1 + BIP32 from bitcoin crate (same as Bitcoin Core) |
-| PWA | Service Worker + Manifest | Installable, offline-capable, standalone mode |
+| Layer     | Technology                | Why                                                         |
+| --------- | ------------------------- | ----------------------------------------------------------- |
+| Framework | Next.js 14 (App Router)   | SSR, standalone Docker output, largest React ecosystem      |
+| Language  | TypeScript (strict)       | Type safety                                                 |
+| Styling   | Tailwind CSS              | Dark theme (#0a0a0a), Bitcoin orange (#f7931a)              |
+| State     | Zustand                   | Minimal boilerplate, localStorage persistence               |
+| Crypto    | Rust → WASM               | secp256k1 + BIP32 from bitcoin crate (same as Bitcoin Core) |
+| PWA       | Service Worker + Manifest | Installable, offline-capable, standalone mode               |
 
 Full rationale: [docs.zkcoins.app/tech-decisions](https://docs.zkcoins.app/tech-decisions)
 
@@ -32,12 +32,12 @@ npm run dev    # http://localhost:3090
 
 ## Commands
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Start dev server (port 3090) |
-| `npm run build` | Production build |
-| `npm run lint` | ESLint + Prettier check |
-| `npm run lint:fix` | Auto-fix lint issues |
+| Command            | Description                  |
+| ------------------ | ---------------------------- |
+| `npm run dev`      | Start dev server (port 3090) |
+| `npm run build`    | Production build             |
+| `npm run lint`     | ESLint + Prettier check      |
+| `npm run lint:fix` | Auto-fix lint issues         |
 
 ## Project Structure
 
@@ -87,12 +87,12 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 
 ## CI/CD
 
-| Workflow | Trigger | Action |
-|---|---|---|
-| `ci.yaml` | Push develop, PR | Lint + Build |
-| `deploy-dev.yaml` | Push develop | Docker → `zkcoin/app:beta` → DEV server |
-| `deploy-prd.yaml` | Push main | Docker → `zkcoin/app:latest` → PRD server |
-| `auto-release-pr.yaml` | Push develop | Creates Release PR (develop → main) |
+| Workflow               | Trigger          | Action                                    |
+| ---------------------- | ---------------- | ----------------------------------------- |
+| `ci.yaml`              | Push develop, PR | Lint + Build                              |
+| `deploy-dev.yaml`      | Push develop     | Docker → `zkcoin/app:beta` → DEV server   |
+| `deploy-prd.yaml`      | Push main        | Docker → `zkcoin/app:latest` → PRD server |
+| `auto-release-pr.yaml` | Push develop     | Creates Release PR (develop → main)       |
 
 ## Signup Flow (Planned)
 
@@ -115,11 +115,11 @@ Details: [docs.zkcoins.app/architecture/signup-flow](https://docs.zkcoins.app/ar
 
 ## Related
 
-| Repo | Purpose |
-|---|---|
-| [zk-coins/server](https://github.com/zk-coins/server) | Rust backend (API, ZK proofs, Bitcoin scanner) |
-| [zk-coins/docs](https://github.com/zk-coins/docs) | Documentation ([docs.zkcoins.app](https://docs.zkcoins.app)) |
-| [zk-coins/research](https://github.com/zk-coins/research) | Protocol research, upstream repos, paper PDF |
+| Repo                                                      | Purpose                                                      |
+| --------------------------------------------------------- | ------------------------------------------------------------ |
+| [zk-coins/server](https://github.com/zk-coins/server)     | Rust backend (API, ZK proofs, Bitcoin scanner)               |
+| [zk-coins/docs](https://github.com/zk-coins/docs)         | Documentation ([docs.zkcoins.app](https://docs.zkcoins.app)) |
+| [zk-coins/research](https://github.com/zk-coins/research) | Protocol research, upstream repos, paper PDF                 |
 
 ## Protocol
 

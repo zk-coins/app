@@ -11,14 +11,14 @@ If you discover a security vulnerability in zkCoins, please report it responsibl
 
 ## Scope
 
-| Component | In Scope |
-|---|---|
-| Wallet key derivation | Yes |
-| WASM crypto module | Yes |
-| Backend API | Yes |
-| ZK proof circuit | Yes |
-| Bitcoin inscription logic | Yes |
-| Documentation site | No |
+| Component                 | In Scope |
+| ------------------------- | -------- |
+| Wallet key derivation     | Yes      |
+| WASM crypto module        | Yes      |
+| Backend API               | Yes      |
+| ZK proof circuit          | Yes      |
+| Bitcoin inscription logic | Yes      |
+| Documentation site        | No       |
 
 ## Supported Versions
 
@@ -27,6 +27,7 @@ Only the latest version on `main` is supported with security updates.
 ## Responsible Disclosure
 
 We follow a 90-day disclosure policy. After reporting, we will:
+
 1. Confirm the vulnerability within 48 hours
 2. Develop and test a fix
 3. Release the fix
