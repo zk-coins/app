@@ -99,6 +99,17 @@ pub fn generate_account_keys_from_mnemonic(mnemonic_phrase: &str, passphrase: &s
         .map_err(|e| JsValue::from_str(&format!("Failed to serialize: {}", e)))
 }
 
+/// Convert hex-encoded entropy (16 bytes = 128 bits) to a BIP-39 mnemonic.
+/// Used for deterministic mnemonic derivation from HKDF output (passkey flow).
+#[wasm_bindgen]
+pub fn mnemonic_from_entropy(entropy_hex: &str) -> Result<String, JsValue> {
+    let entropy = hex::decode(entropy_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid hex entropy: {}", e)))?;
+    let mnemonic = bip39::Mnemonic::from_entropy(&entropy)
+        .map_err(|e| JsValue::from_str(&format!("Invalid entropy for BIP-39: {}", e)))?;
+    Ok(mnemonic.to_string())
+}
+
 /// Sign a 32-byte hash with a Schnorr signature.
 /// Both inputs are hex-encoded 32-byte strings.
 /// Returns hex-encoded Schnorr signature.
