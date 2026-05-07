@@ -82,6 +82,12 @@ jobs:
         env:
           E2E_BASE_URL: https://dev.zkcoins.app
 
+      - name: Generate visual regression baselines (Linux/Chromium)
+        run: npx playwright test e2e/visual.spec.ts --project=chromium --update-snapshots
+        env:
+          E2E_BASE_URL: https://dev.zkcoins.app
+        continue-on-error: true
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
@@ -97,3 +103,11 @@ jobs:
           name: test-screenshots
           path: test-results/
           retention-days: 7
+
+      - name: Upload visual baselines (Linux)
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: visual-baselines-linux
+          path: e2e/visual.spec.ts-snapshots/*-chromium-linux.png
+          retention-days: 30
