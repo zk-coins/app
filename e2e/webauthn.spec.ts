@@ -125,7 +125,7 @@ test.describe('WebAuthn Passkey', () => {
     await page.getByText('CREATE WALLET').click();
     await expect(page.getByText('Use a passkey')).toBeVisible();
 
-    await page.getByText('Back').click();
+    await page.getByRole('button', { name: /back/i }).first().click();
 
     // Should be back on welcome
     await expect(page.getByText('Welcome to zkCoins')).toBeVisible();
