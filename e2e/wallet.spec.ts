@@ -16,33 +16,38 @@ test.describe('Wallet', () => {
   });
 
   test('loads landing page with wallet creation options', async ({ page }) => {
-    await expect(page.getByText('Create Wallet')).toBeVisible();
-    await expect(page.getByText('Create with Seed Phrase')).toBeVisible();
-    await expect(page.getByText('Restore from Seed Phrase')).toBeVisible();
+    await expect(page.getByText('Welcome to zkCoins')).toBeVisible();
+    await expect(page.getByText('CREATE WALLET')).toBeVisible();
+    await expect(page.getByText('Restore existing wallet')).toBeVisible();
   });
 
   test('navigates to seed phrase creation', async ({ page }) => {
-    await page.getByText('Create with Seed Phrase').click();
-    await expect(page.getByText('Seed Phrase')).toBeVisible();
-    await expect(page.getByRole('button', { name: /generate/i })).toBeVisible();
+    // Welcome -> Create Wallet -> Passkey screen -> OTHER LOGIN OPTIONS -> Seed
+    await page.getByText('CREATE WALLET').click();
+    await expect(page.getByText('Use a passkey')).toBeVisible();
+    await page.getByText('OTHER LOGIN OPTIONS').click();
+    await expect(page.getByText('Your seed phrase')).toBeVisible();
   });
 
   test('navigates to seed phrase import', async ({ page }) => {
-    await page.getByText('Restore from Seed Phrase').click();
-    await expect(page.getByText('Import Wallet')).toBeVisible();
+    await page.getByText('Restore existing wallet').click();
+    await expect(page.getByText('Restore wallet')).toBeVisible();
+    await expect(page.getByPlaceholder('Enter your 12 words')).toBeVisible();
   });
 
   test('generates 12-word mnemonic', async ({ page }) => {
-    await page.getByText('Create with Seed Phrase').click();
-    await page.getByRole('button', { name: /generate/i }).click();
-    await expect(page.getByText('Your Recovery Phrase')).toBeVisible({ timeout: 15_000 });
+    await page.getByText('CREATE WALLET').click();
+    await page.getByText('OTHER LOGIN OPTIONS').click();
+    await expect(page.getByText('Your seed phrase')).toBeVisible({ timeout: 15_000 });
+    // Tap to reveal the words
+    await page.getByText('Tap to reveal').click();
     const words = await page.locator('.grid > div').count();
     expect(words).toBe(12);
   });
 
   test('header shows branding', async ({ page }) => {
     await expect(page.getByText('zkCoins')).toBeVisible();
-    await expect(page.getByText('Shielded CSV Wallet')).toBeVisible();
+    await expect(page.getByText('Shielded CSV')).toBeVisible();
   });
 
   test('footer has navigation links', async ({ page }) => {

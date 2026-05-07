@@ -39,7 +39,7 @@ test.describe('Visual Regression', () => {
       await page.setViewportSize({ width: vp.width, height: vp.height });
       await page.goto('/');
       await page.waitForLoadState('networkidle');
-      await expect(page.getByText('Create Wallet')).toBeVisible();
+      await expect(page.getByText('Welcome to zkCoins')).toBeVisible();
 
       await expect(page).toHaveScreenshot(`landing-${vp.name}.png`, {
         maxDiffPixelRatio: 0.01,
@@ -50,17 +50,10 @@ test.describe('Visual Regression', () => {
   test('seed phrase setup — generate view', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
-    // Use specific button text to avoid strict mode violation
-    const createSeedButton = page.getByRole('button', { name: 'Create with Seed Phrase' });
-    const newWalletButton = page.getByRole('button', { name: /new wallet/i });
-
-    if (await createSeedButton.isVisible()) {
-      await createSeedButton.click();
-    } else {
-      await newWalletButton.click();
-    }
-
-    await expect(page.getByText('Seed Phrase')).toBeVisible();
+    // Navigate: Welcome -> CREATE WALLET -> passkey -> OTHER LOGIN OPTIONS -> seed
+    await page.getByText('CREATE WALLET').click();
+    await page.getByText('OTHER LOGIN OPTIONS').click();
+    await expect(page.getByText('Your seed phrase')).toBeVisible({ timeout: 15_000 });
 
     await expect(page).toHaveScreenshot('seed-setup-generate.png', {
       maxDiffPixelRatio: 0.01,
@@ -70,17 +63,13 @@ test.describe('Visual Regression', () => {
   test('seed phrase setup — mnemonic display', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
-    const createSeedButton = page.getByRole('button', { name: 'Create with Seed Phrase' });
-    const newWalletButton = page.getByRole('button', { name: /new wallet/i });
+    await page.getByText('CREATE WALLET').click();
+    await page.getByText('OTHER LOGIN OPTIONS').click();
+    await expect(page.getByText('Your seed phrase')).toBeVisible({ timeout: 15_000 });
 
-    if (await createSeedButton.isVisible()) {
-      await createSeedButton.click();
-    } else {
-      await newWalletButton.click();
-    }
-
-    await page.getByRole('button', { name: /generate/i }).click();
-    await expect(page.getByText('Your Recovery Phrase')).toBeVisible({ timeout: 10_000 });
+    // Reveal the words
+    await page.getByText('Tap to reveal').click();
+    await expect(page.locator('.grid > div').first()).toBeVisible();
 
     await expect(page).toHaveScreenshot('seed-mnemonic-display.png', {
       maxDiffPixelRatio: 0.01,
@@ -92,8 +81,8 @@ test.describe('Visual Regression', () => {
   test('seed phrase import view', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 });
 
-    await page.getByRole('button', { name: 'Restore from Seed Phrase' }).click();
-    await expect(page.getByText('Import Wallet')).toBeVisible();
+    await page.getByText('Restore existing wallet').click();
+    await expect(page.getByText('Restore wallet')).toBeVisible();
 
     await expect(page).toHaveScreenshot('seed-import.png', {
       maxDiffPixelRatio: 0.01,
