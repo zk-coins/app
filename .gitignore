@@ -13,3 +13,6 @@ packages/zkcoins-wasm/src/pkg/README.md
 test-results/
 playwright-report/
 coverage/
+
+# local design iteration artifacts (screenshots, helper scripts, references)
+.design/
