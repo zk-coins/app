@@ -39,6 +39,12 @@ export function formatUsd(sats: number, price = MOCK_BTC_USD): string {
   });
 }
 
+export function toZkAddress(hexAddress: string): string {
+  if (!hexAddress) return '@zkcoins.app';
+  const stripped = hexAddress.replace(/^0x/, '');
+  return `${stripped.slice(0, 8)}@zkcoins.app`;
+}
+
 export function truncateAddress(addr: string, head = 10, tail = 8): string {
   if (!addr) return '';
   if (addr.length <= head + tail + 3) return addr;
