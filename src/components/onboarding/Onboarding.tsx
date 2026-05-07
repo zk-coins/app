@@ -1,16 +1,24 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { Lock, Zap, Key, type LucideIcon } from 'lucide-react';
 import { PixelIcon } from '../PixelIcon';
 import { PixelLogo } from '../icons/PixelLogo';
 import { Logo } from '../icons/Logo';
 import { FooterLinks } from '../FooterLinks';
 import { useWalletStore } from '@/stores/wallet';
+import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
+import {
+  createPasskey,
+  isPasskeySupported,
+  PasskeyPrfUnsupportedError,
+} from '@/lib/crypto/passkey';
+import { deriveMnemonicFromPrf, DERIVATION_VERSION } from '@/lib/crypto/key-derivation';
+import { saveCredential } from '@/lib/crypto/storage';
 
-/** Small consistent header for onboarding sub-steps (Choose / Seed / Passkey). */
+/** Small consistent header for onboarding sub-steps. */
 function StepHeader({ onBack }: { onBack?: () => void }) {
   return (
     <div className="space-y-4">
@@ -71,7 +79,7 @@ export function Onboarding() {
 function Welcome({ onNext }: { onNext: () => void }) {
   return (
     <div className="relative -mx-6 -my-12 min-h-screen overflow-hidden lg:-mx-8 lg:-my-14">
-      {/* Hero glow — fades in at the top AND out at the bottom */}
+      {/* Hero glow */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[600px]"
@@ -84,7 +92,6 @@ function Welcome({ onNext }: { onNext: () => void }) {
             'linear-gradient(to bottom, transparent 0%, black 12%, black 55%, transparent 100%)',
         }}
       />
-      {/* Pixel grid overlay — fades in at top AND out at bottom */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-0 h-[520px] opacity-40 pixel-grid"
@@ -95,7 +102,6 @@ function Welcome({ onNext }: { onNext: () => void }) {
             'linear-gradient(to bottom, transparent 0%, black 15%, black 55%, transparent 100%)',
         }}
       />
-      {/* Soft blur "veil" at the bottom transition zone */}
       <div
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-[300px] h-[220px]"
@@ -110,7 +116,6 @@ function Welcome({ onNext }: { onNext: () => void }) {
             'linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)',
         }}
       />
-      {/* Hero pixel logo, top-center */}
       <div className="pointer-events-none absolute left-1/2 top-[110px] -translate-x-1/2 opacity-90">
         <PixelLogo size={88} />
       </div>
@@ -179,101 +184,54 @@ function Benefit({
   );
 }
 
-function ChooseMethod({
-  onSeed,
-  onPasskey,
-  onBack,
-}: {
-  onSeed: () => void;
-  onPasskey: () => void;
-  onBack: () => void;
-}) {
-  return (
-    <div className="space-y-7 py-2">
-      <StepHeader onBack={onBack} />
-
-      <div>
-        <h1 className="text-[24px] font-bold tracking-tight text-ink">How to secure it</h1>
-        <p className="mt-2 text-[13px] leading-relaxed text-ink2">
-          Pick how you want to protect your wallet. You can always change this later.
-        </p>
-      </div>
-
-      <div className="space-y-3">
-        <MethodCard
-          icon="shield"
-          title="Seed Phrase"
-          description="12-word recovery phrase. You write it down, you own it."
-          tag="Classic"
-          onClick={onSeed}
-        />
-        <MethodCard
-          icon="key"
-          title="Passkey"
-          description="Use Face ID / Touch ID / Yubikey via WebAuthn. No phrase to write down."
-          tag="Modern"
-          onClick={onPasskey}
-        />
-      </div>
-
-      <p className="text-[11px] leading-relaxed text-ink4">
-        Both methods are non-custodial — keys stay on your device. zkCoins servers never see them.
-      </p>
-    </div>
-  );
-}
-
-function MethodCard({
-  icon,
-  title,
-  description,
-  tag,
-  onClick,
-}: {
-  icon: 'shield' | 'key';
-  title: string;
-  description: string;
-  tag: string;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      onClick={onClick}
-      className="group relative flex w-full items-start gap-4 rounded-md border border-line2 bg-surface p-4 text-left transition-colors hover:border-bitcoin"
-    >
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md border border-line2 bg-bg">
-        <PixelIcon name={icon} size={20} color="#f7931a" />
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between">
-          <p className="text-[14px] font-semibold text-ink group-hover:text-bitcoin">{title}</p>
-          <span className="rounded-sm bg-line px-1.5 py-0.5 text-[9px] tracking-wider text-ink3 uppercase">
-            {tag}
-          </span>
-        </div>
-        <p className="mt-1 text-[12px] leading-relaxed text-ink3">{description}</p>
-      </div>
-    </button>
-  );
-}
+/* ---------- Seed Flow ---------- */
 
 function SeedFlow({ onBack }: { onBack: () => void }) {
-  const { setAccount, setBalance } = useWalletStore();
-  const [stage, setStage] = useState<'reveal' | 'confirm' | 'creating'>('reveal');
+  const { setAccount, setBalance, saveWithPassword } = useWalletStore();
+  const { setAuth } = useAuthStore();
+  const [stage, setStage] = useState<'generating' | 'reveal' | 'confirm' | 'password' | 'creating'>('generating');
   const [error, setError] = useState<string | null>(null);
-
-  // Demo mnemonic — in a production build this comes from the wasm package's
-  // BIP39 generator. For now we generate a stable 12-word demo phrase per
-  // mount so the flow is visible.
-  const [mnemonic] = useState<string[]>(() => generateDemoMnemonic());
+  const [mnemonic, setMnemonic] = useState<string[]>([]);
   const [revealed, setRevealed] = useState(false);
+  const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
+
+  // Generate real mnemonic on mount.
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const wasm = await initWasm();
+        const phrase = wasm.generateMnemonic();
+        if (!cancelled) {
+          setMnemonic(phrase.split(' '));
+          setStage('reveal');
+        }
+      } catch (err) {
+        if (!cancelled) {
+          setError(err instanceof Error ? err.message : 'Failed to generate seed phrase');
+        }
+      }
+    })();
+    return () => { cancelled = true; };
+  }, []);
 
   const create = useCallback(async () => {
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setError('Passwords do not match');
+      return;
+    }
+
     setStage('creating');
     setError(null);
     try {
       const wasm = await initWasm();
-      const ad = await wasm.createAccount();
+      const phrase = mnemonic.join(' ');
+      const ad = await wasm.createAccountFromMnemonic(phrase);
       setAccount({
         address: ad.address,
         balance: 0,
@@ -281,18 +239,22 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
         xpriv: ad.xpriv,
       });
 
-      // Best-effort balance fetch — non-fatal if API isn't reachable.
+      // Encrypt and persist to IndexedDB.
+      await saveWithPassword(password);
+      setAuth('seed');
+
+      // Best-effort balance fetch.
       try {
         const { balance } = await api.balance(ad.address);
         setBalance(balance);
-      } catch (balErr) {
-        console.warn('[zkcoins] initial balance fetch failed (non-fatal):', balErr);
+      } catch {
+        // Non-fatal — wallet is created with 0 balance.
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create');
-      setStage('confirm');
+      setError(err instanceof Error ? err.message : 'Failed to create wallet');
+      setStage('password');
     }
-  }, [setAccount, setBalance]);
+  }, [mnemonic, password, passwordConfirm, setAccount, setBalance, saveWithPassword, setAuth]);
 
   return (
     <div className="space-y-6 py-2">
@@ -301,70 +263,108 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       <div>
         <h1 className="text-[24px] font-bold tracking-tight text-ink">Your seed phrase</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-ink2">
-          Write down these 12 words in order. You'll need them to restore the wallet.
+          Write down these 12 words in order. You&apos;ll need them to restore the wallet.
           Anyone with this phrase can spend your funds.
         </p>
       </div>
 
-      {/* Word grid — boxes always visible, only the word text is masked when not revealed */}
-      <div className="relative">
-        <div className="grid grid-cols-3 gap-2 rounded-md border border-line2 bg-surface p-3">
-          {mnemonic.map((word, i) => (
-            <div
-              key={i}
-              className="flex items-center gap-2 rounded-sm bg-bg px-2.5 py-2"
-            >
-              <span className="mono w-4 text-right text-[10px] text-ink4 tabular-nums">
-                {i + 1}
-              </span>
-              <span className={`mono text-[13px] ${revealed ? 'text-ink' : 'text-ink select-none'}`}
-                style={revealed ? undefined : { filter: 'blur(5px)' }}
-              >
-                {revealed ? word : '••••••'}
-              </span>
-            </div>
-          ))}
-        </div>
-        {!revealed && (
-          <button
-            onClick={() => setRevealed(true)}
-            className="absolute inset-0 flex items-center justify-center rounded-md bg-bg/40 backdrop-blur-[2px] transition-colors hover:bg-bg/30"
-          >
-            <span className="flex items-center gap-2 rounded-md border border-line2 bg-bg px-4 py-2 text-[12px] font-semibold tracking-wide text-ink shadow-lg">
-              <PixelIcon name="eye" size={14} />
-              Tap to reveal
-            </span>
-          </button>
-        )}
-      </div>
+      {stage === 'generating' && (
+        <p className="text-[13px] text-ink2">Generating seed phrase…</p>
+      )}
 
-      {revealed && (
-        <div className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3">
-          <p className="text-[12px] leading-relaxed text-ink2">
-            <span className="font-semibold text-bitcoin">Important.</span> Once you continue,
-            this phrase is gone from the screen. Make sure you've written it down somewhere
-            safe and offline.
-          </p>
+      {/* Word grid */}
+      {mnemonic.length > 0 && stage !== 'password' && stage !== 'creating' && (
+        <div className="relative">
+          <div className="grid grid-cols-3 gap-2 rounded-md border border-line2 bg-surface p-3">
+            {mnemonic.map((word, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-2 rounded-sm bg-bg px-2.5 py-2"
+              >
+                <span className="mono w-4 text-right text-[10px] text-ink4 tabular-nums">
+                  {i + 1}
+                </span>
+                <span
+                  className={`mono text-[13px] ${revealed ? 'text-ink' : 'text-ink select-none'}`}
+                  style={revealed ? undefined : { filter: 'blur(5px)' }}
+                >
+                  {revealed ? word : '\u2022\u2022\u2022\u2022\u2022\u2022'}
+                </span>
+              </div>
+            ))}
+          </div>
+          {!revealed && (
+            <button
+              onClick={() => setRevealed(true)}
+              className="absolute inset-0 flex items-center justify-center rounded-md bg-bg/40 backdrop-blur-[2px] transition-colors hover:bg-bg/30"
+            >
+              <span className="flex items-center gap-2 rounded-md border border-line2 bg-bg px-4 py-2 text-[12px] font-semibold tracking-wide text-ink shadow-lg">
+                <PixelIcon name="eye" size={14} />
+                Tap to reveal
+              </span>
+            </button>
+          )}
         </div>
       )}
 
-      {stage === 'reveal' && (
-        <button
-          onClick={() => setStage('confirm')}
-          disabled={!revealed}
-          className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
-        >
-          I've written it down
-        </button>
+      {revealed && stage === 'reveal' && (
+        <>
+          <div className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3">
+            <p className="text-[12px] leading-relaxed text-ink2">
+              <span className="font-semibold text-bitcoin">Important.</span> Once you continue,
+              this phrase is gone from the screen. Make sure you&apos;ve written it down somewhere
+              safe and offline.
+            </p>
+          </div>
+          <button
+            onClick={() => setStage('confirm')}
+            className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover"
+          >
+            I&apos;ve written it down
+          </button>
+        </>
       )}
 
       {stage === 'confirm' && (
         <button
-          onClick={create}
+          onClick={() => setStage('password')}
           className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover"
         >
-          Create wallet
+          Continue
         </button>
+      )}
+
+      {stage === 'password' && (
+        <div className="space-y-4">
+          <div>
+            <p className="text-[13px] font-semibold text-ink">Set an encryption password</p>
+            <p className="mt-1 text-[12px] text-ink2">
+              Your wallet is encrypted locally with AES-256-GCM. You&apos;ll need this password to
+              unlock it on this device.
+            </p>
+          </div>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password (min 8 characters)"
+            className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
+          />
+          <input
+            type="password"
+            value={passwordConfirm}
+            onChange={(e) => setPasswordConfirm(e.target.value)}
+            placeholder="Confirm password"
+            className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
+          />
+          <button
+            onClick={create}
+            disabled={!password || !passwordConfirm}
+            className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
+          >
+            Create wallet
+          </button>
+        </div>
       )}
 
       {stage === 'creating' && (
@@ -377,13 +377,15 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       )}
 
       {error && (
-        <p className="text-[12px] text-bitcoin">
+        <p className="text-[12px] text-bad">
           <span className="text-ink3">err:</span> {error}
         </p>
       )}
     </div>
   );
 }
+
+/* ---------- Passkey Flow ---------- */
 
 function PasskeyFlow({
   onBack,
@@ -392,71 +394,31 @@ function PasskeyFlow({
   onBack: () => void;
   onUseSeed: () => void;
 }) {
-  const { setAccount, setBalance } = useWalletStore();
+  const { setAccount, setBalance, saveWithPrf } = useWalletStore();
+  const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'intro' | 'registering' | 'creating'>('intro');
   const [error, setError] = useState<string | null>(null);
 
   const register = useCallback(async () => {
     setError(null);
 
-    // Platform must support WebAuthn for this path.
-    if (typeof window === 'undefined' || !('PublicKeyCredential' in window)) {
+    if (!isPasskeySupported()) {
       setError('Passkeys are not supported on this device. Use a seed phrase instead.');
       return;
     }
 
     setStage('registering');
 
-    // Phase 1 — passkey registration. If the user cancels OR the platform
-    // refuses, abort the whole flow. No wallet is created without a passkey.
-    let credential: Credential | null = null;
     try {
-      credential = await navigator.credentials.create({
-        publicKey: {
-          challenge: crypto.getRandomValues(new Uint8Array(32)),
-          rp: { name: 'zkCoins', id: window.location.hostname },
-          user: {
-            id: crypto.getRandomValues(new Uint8Array(16)),
-            name: 'zkcoins-user',
-            displayName: 'zkCoins User',
-          },
-          pubKeyCredParams: [
-            { alg: -7, type: 'public-key' },
-            { alg: -257, type: 'public-key' },
-          ],
-          authenticatorSelection: {
-            authenticatorAttachment: 'platform',
-            userVerification: 'required',
-          },
-          timeout: 60_000,
-        },
-      });
-    } catch (err) {
-      const cancelled =
-        err instanceof Error &&
-        (err.name === 'NotAllowedError' || err.name === 'AbortError');
-      setError(
-        cancelled
-          ? 'Passkey registration cancelled.'
-          : err instanceof Error
-            ? err.message
-            : 'Passkey registration failed.',
-      );
-      setStage('intro');
-      return;
-    }
+      // Phase 1 — register passkey with PRF extension.
+      const result = await createPasskey();
 
-    if (!credential) {
-      setError('Passkey registration cancelled.');
-      setStage('intro');
-      return;
-    }
-
-    // Phase 2 — passkey is real, now create the wallet.
-    setStage('creating');
-    try {
+      // Phase 2 — derive mnemonic from PRF output and create wallet deterministically.
+      setStage('creating');
+      const mnemonic = await deriveMnemonicFromPrf(result.prfOutput);
       const wasm = await initWasm();
-      const ad = await wasm.createAccount();
+      const ad = await wasm.createAccountFromMnemonic(mnemonic);
+
       setAccount({
         address: ad.address,
         balance: 0,
@@ -464,17 +426,44 @@ function PasskeyFlow({
         xpriv: ad.xpriv,
       });
 
+      // Persist passkey credential metadata to IndexedDB.
+      await saveCredential({
+        credentialId: result.credentialId,
+        derivationVersion: DERIVATION_VERSION,
+        createdAt: Date.now(),
+      });
+
+      // Encrypt wallet with PRF output and save to IndexedDB.
+      await saveWithPrf(result.prfOutput);
+      setAuth('passkey', result.credentialId);
+
+      // Best-effort balance fetch.
       try {
         const { balance } = await api.balance(ad.address);
         setBalance(balance);
-      } catch (balErr) {
-        console.warn('[zkcoins] initial balance fetch failed (non-fatal):', balErr);
+      } catch {
+        // Non-fatal — wallet is created with 0 balance.
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to create wallet');
+      if (err instanceof PasskeyPrfUnsupportedError) {
+        setError(
+          'Your device does not support the PRF extension needed for passkey wallets. Please use a seed phrase instead.',
+        );
+      } else {
+        const cancelled =
+          err instanceof Error &&
+          (err.name === 'NotAllowedError' || err.name === 'AbortError');
+        setError(
+          cancelled
+            ? 'Passkey registration cancelled.'
+            : err instanceof Error
+              ? err.message
+              : 'Passkey registration failed.',
+        );
+      }
       setStage('intro');
     }
-  }, [setAccount, setBalance]);
+  }, [setAccount, setBalance, saveWithPrf, setAuth]);
 
   return (
     <div className="space-y-6 py-2">
@@ -483,7 +472,7 @@ function PasskeyFlow({
       <div>
         <h1 className="text-[24px] font-bold tracking-tight text-ink">Use a passkey</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-ink2">
-          We'll register a passkey on this device. Sign-in is via Face ID, Touch ID, Windows
+          We&apos;ll register a passkey on this device. Sign-in is via Face ID, Touch ID, Windows
           Hello, or a hardware key — no seed phrase to write down.
         </p>
       </div>
@@ -538,21 +527,10 @@ function PasskeyFlow({
       </div>
 
       {error && (
-        <p className="text-[12px] text-bitcoin">
+        <p className="text-[12px] text-bad">
           <span className="text-ink3">err:</span> {error}
         </p>
       )}
     </div>
   );
-}
-
-// 24 sample words for visualization. The real seed comes from a BIP39 generator
-// in the wasm package once that lands.
-const DEMO_WORDS = [
-  'ocean',  'circuit', 'quartz',  'ledger',
-  'trust',  'cipher', 'orange',   'forest',
-  'pixel',  'shield', 'private',  'satoshi',
-];
-function generateDemoMnemonic(): string[] {
-  return DEMO_WORDS;
 }

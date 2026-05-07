@@ -80,7 +80,7 @@ export default function AppsPage() {
       </div>
 
       <p className="mt-8 text-[12px] leading-relaxed text-ink3">
-        Apps are external services. Keys never leave your browser — zkCoins doesn't share
+        Apps are external services. Keys never leave your browser — zkCoins doesn&apos;t share
         your private state with these integrations unless you explicitly approve a connection.
       </p>
     </AppShell>

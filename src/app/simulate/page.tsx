@@ -17,7 +17,7 @@ import { populateDemoHistory } from '@/lib/simulate';
  */
 export default function SimulatePage() {
   const router = useRouter();
-  const { setAccount, setBalance, addTransaction, loadFromStorage } = useWalletStore();
+  const { account, setAccount, setBalance, addTransaction } = useWalletStore();
   const ran = useRef(false);
 
   useEffect(() => {
@@ -25,12 +25,7 @@ export default function SimulatePage() {
     ran.current = true;
 
     (async () => {
-      // Hydrate first.
-      loadFromStorage();
-      // Wait one tick for store hydration.
-      await new Promise((r) => setTimeout(r, 50));
-
-      let acc = useWalletStore.getState().account;
+      let acc = account;
       if (!acc) {
         try {
           const wasm = await initWasm();
@@ -43,25 +38,19 @@ export default function SimulatePage() {
           };
           setAccount(acc);
         } catch {
-          // WASM unavailable — create a stub address so the demo still works.
-          acc = {
-            address: 'zs1sim' + Math.random().toString(16).slice(2, 18) + 'demo',
-            balance: 0,
-            numPubkeys: 1,
-            xpriv: 'sim-demo-xpriv',
-          };
-          setAccount(acc);
+          // WASM unavailable — cannot create demo wallet without it.
+          router.replace('/');
+          return;
         }
       }
 
       const { transactions, balance } = populateDemoHistory();
-      // Add transactions oldest-first so the wallet store ends up with newest at the front.
       [...transactions].reverse().forEach(addTransaction);
       setBalance(balance);
 
       router.replace('/');
     })();
-  }, [setAccount, setBalance, addTransaction, loadFromStorage, router]);
+  }, [account, setAccount, setBalance, addTransaction, router]);
 
   return (
     <AppShell showNav={false}>

@@ -12,15 +12,11 @@ import { SATS_PER_BTC, formatBtc, formatBtcCompact } from '@/lib/format';
 
 export default function SendPage() {
   const router = useRouter();
-  const { account, setBalance, incrementPubkeys, addTransaction, loadFromStorage } = useWalletStore();
+  const { account, setBalance, incrementPubkeys, addTransaction } = useWalletStore();
 
-  // Hydrate from storage on direct navigation, then redirect to onboarding if still empty.
-  useEffect(() => {
-    loadFromStorage();
-  }, [loadFromStorage]);
+  // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {
     if (!account && typeof window !== 'undefined') {
-      // Wait one tick for store to hydrate before redirecting.
       const t = setTimeout(() => {
         if (!useWalletStore.getState().account) router.replace('/');
       }, 100);

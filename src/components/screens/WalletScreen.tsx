@@ -43,10 +43,13 @@ export function WalletScreen() {
 
   const copyAddress = useCallback(() => {
     if (!account) return;
-    navigator.clipboard.writeText(account.address).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    navigator.clipboard.writeText(account.address).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => { /* clipboard not available */ },
+    );
   }, [account]);
 
   const sats = account?.balance ?? 0;

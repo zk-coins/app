@@ -19,6 +19,7 @@ const config: Config = {
           hover: '#ff9f2a',
           dim: '#c9761a',
         },
+        bad: '#ef4444',
       },
       fontFamily: {
         sans: ['var(--font-sans)', 'Inter', 'system-ui', 'sans-serif'],

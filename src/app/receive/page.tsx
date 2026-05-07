@@ -10,12 +10,9 @@ import { useWalletStore } from '@/stores/wallet';
 
 export default function ReceivePage() {
   const router = useRouter();
-  const { account, loadFromStorage } = useWalletStore();
+  const { account } = useWalletStore();
   const [copied, setCopied] = useState(false);
 
-  useEffect(() => {
-    loadFromStorage();
-  }, [loadFromStorage]);
   useEffect(() => {
     if (!account && typeof window !== 'undefined') {
       const t = setTimeout(() => {
@@ -27,10 +24,13 @@ export default function ReceivePage() {
 
   const copy = useCallback(() => {
     if (!account) return;
-    navigator.clipboard.writeText(account.address).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1500);
-    });
+    navigator.clipboard.writeText(account.address).then(
+      () => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      },
+      () => { /* clipboard not available */ },
+    );
   }, [account]);
 
   if (!account) {

@@ -1,19 +1,11 @@
 'use client';
 
 import { useState } from 'react';
-import { Eye, EyeOff } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { FooterLinks } from '@/components/FooterLinks';
-import { useNetworkStore, type NetworkId } from '@/stores/network';
+import { useNetworkStore } from '@/stores/network';
 import { useWalletStore } from '@/stores/wallet';
-
-// Same demo BIP-39 phrase the onboarding flow uses — until the wasm package
-// exposes a real mnemonic generator and we wire encrypted-storage retrieval.
-const DEMO_SEED = [
-  'ocean', 'circuit', 'quartz', 'ledger',
-  'trust', 'cipher', 'orange', 'forest',
-  'pixel', 'shield', 'private', 'satoshi',
-];
+import { useAuthStore } from '@/stores/auth';
 
 function Toggle({
   label,
@@ -80,16 +72,17 @@ function Section({
 }
 
 export default function SettingsPage() {
-  const { activeNetwork, setActiveNetwork } = useNetworkStore();
-  const { account, setAccount } = useWalletStore();
-  const [seedRevealed, setSeedRevealed] = useState(false);
+  const { networkName } = useNetworkStore();
+  const { account, deleteWallet } = useWalletStore();
+  const { authMethod, reset: resetAuth } = useAuthStore();
 
-  const onDisconnect = () => {
+  const onDisconnect = async () => {
     if (
       typeof window !== 'undefined' &&
       window.confirm('Disconnect this wallet? Make sure you have your seed phrase saved.')
     ) {
-      setAccount(null);
+      await deleteWallet();
+      resetAuth();
     }
   };
 
@@ -100,70 +93,53 @@ export default function SettingsPage() {
           <h1 className="text-[28px] font-bold tracking-tight text-ink">Settings</h1>
           <p className="text-[14px] text-ink2">Wallet, network, and privacy preferences</p>
         </div>
-        <span
-          className={`mt-2 inline-flex shrink-0 items-center gap-1.5 rounded-full border px-2.5 py-1 mono text-[10px] font-semibold tracking-[0.2em] uppercase ${
-            activeNetwork === 'mainnet'
-              ? 'border-bitcoin/40 bg-bitcoin/10 text-bitcoin'
-              : 'border-line2 bg-line/40 text-ink2'
-          }`}
-        >
-          <span
-            className={`h-1.5 w-1.5 rounded-full ${
-              activeNetwork === 'mainnet' ? 'bg-bitcoin' : 'bg-ink2'
-            }`}
-          />
-          {activeNetwork}
-        </span>
+        {networkName && (
+          <span className="mt-2 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line2 bg-line/40 px-2.5 py-1 mono text-[10px] font-semibold tracking-[0.2em] text-ink2 uppercase">
+            <span className="h-1.5 w-1.5 rounded-full bg-ink2" />
+            {networkName}
+          </span>
+        )}
       </header>
 
       <div className="mt-8 space-y-6">
-        <Section title="Network">
+        <Section title="Security">
           <div className="flex items-start justify-between gap-6 py-4">
             <div className="min-w-0">
-              <p className="text-[13px] font-medium text-ink">Network</p>
+              <p className="text-[13px] font-medium text-ink">Storage</p>
               <p className="mt-0.5 text-[12px] text-ink3">
-                Switch between Bitcoin mainnet and testnet
+                Keys encrypted with AES-256-GCM in IndexedDB. Never sent to any server.
               </p>
             </div>
-            <div className="flex items-center gap-1 rounded-md border border-line2 bg-bg p-0.5 text-[11px]">
-              {(['mainnet', 'testnet'] as NetworkId[]).map((n) => (
-                <button
-                  key={n}
-                  onClick={() => setActiveNetwork(n)}
-                  className={`rounded-sm px-3 py-1 tracking-wide transition-colors ${
-                    activeNetwork === n ? 'bg-line2 text-ink' : 'text-ink3 hover:text-ink'
-                  }`}
-                >
-                  {n === 'mainnet' ? 'Mainnet' : 'Testnet'}
-                </button>
-              ))}
-            </div>
-          </div>
-        </Section>
-
-        <Section title="Display">
-          <div className="flex items-start justify-between gap-6 py-4">
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium text-ink">Display Currency</p>
-              <p className="mt-0.5 text-[12px] text-ink3">Fiat reference shown next to BTC</p>
-            </div>
-            <select className="rounded-md border border-line2 bg-bg px-3 py-1.5 text-[12px] text-ink outline-none focus:border-bitcoin">
-              <option>USD</option>
-              <option>EUR</option>
-              <option>CHF</option>
-              <option>None</option>
-            </select>
           </div>
           <div className="flex items-start justify-between gap-6 py-4">
             <div className="min-w-0">
-              <p className="text-[13px] font-medium text-ink">Units</p>
-              <p className="mt-0.5 text-[12px] text-ink3">BTC or sats for amounts</p>
+              <p className="text-[13px] font-medium text-ink">Auth method</p>
+              <p className="mt-0.5 text-[12px] text-ink3">
+                {authMethod === 'passkey'
+                  ? 'Passkey — wallet derived from WebAuthn PRF output'
+                  : authMethod === 'seed'
+                    ? 'Seed phrase — wallet encrypted with your password'
+                    : 'Not configured'}
+              </p>
             </div>
-            <select className="rounded-md border border-line2 bg-bg px-3 py-1.5 text-[12px] text-ink outline-none focus:border-bitcoin">
-              <option>BTC</option>
-              <option>sats</option>
-            </select>
           </div>
+          <div className="py-4">
+            <div className="min-w-0">
+              <p className="text-[13px] font-medium text-ink">Recovery</p>
+              <p className="mt-0.5 text-[12px] text-ink3">
+                {authMethod === 'passkey'
+                  ? 'Your wallet is derived from your passkey. As long as your passkey is synced via iCloud Keychain or Google Password Manager, you can restore it on any device.'
+                  : 'Your 12-word seed phrase was shown once during wallet creation. Use it to restore your wallet on any device. If you lost it, transfer your funds to a new wallet and create a fresh backup.'}
+              </p>
+            </div>
+          </div>
+          <Toggle
+            label="Auto-lock"
+            description="Lock wallet after 5 minutes inactivity"
+            defaultOn
+            badge="Planned"
+            disabled
+          />
         </Section>
 
         <Section title="Privacy">
@@ -181,62 +157,6 @@ export default function SettingsPage() {
           />
         </Section>
 
-        <Section title="Security">
-          <div className="flex items-start justify-between gap-6 py-4">
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium text-ink">Storage</p>
-              <p className="mt-0.5 text-[12px] text-ink3">
-                Keys encrypted with AES-256-GCM in IndexedDB. Never sent to any server.
-              </p>
-            </div>
-          </div>
-          <Toggle
-            label="Auto-lock"
-            description="Lock wallet after 5 minutes inactivity"
-            defaultOn
-          />
-          <div className="py-4">
-            <div className="flex items-start justify-between gap-6">
-              <div className="min-w-0">
-                <p className="text-[13px] font-medium text-ink">Reveal seed phrase</p>
-                <p className="mt-0.5 text-[12px] text-ink3">
-                  {seedRevealed
-                    ? 'Write these 12 words down somewhere safe and offline'
-                    : 'Show your 12 BIP-39 words again'}
-                </p>
-              </div>
-              <button
-                onClick={() => setSeedRevealed((v) => !v)}
-                className="inline-flex shrink-0 items-center gap-1.5 rounded-md border border-line2 px-3 py-1.5 text-[12px] tracking-wide text-ink transition-colors hover:border-bitcoin hover:text-bitcoin"
-              >
-                {seedRevealed ? <EyeOff size={12} strokeWidth={2} /> : <Eye size={12} strokeWidth={2} />}
-                {seedRevealed ? 'Hide' : 'Reveal'}
-              </button>
-            </div>
-            {seedRevealed && (
-              <div className="mt-4 grid grid-cols-3 gap-2">
-                {DEMO_SEED.map((word, i) => (
-                  <div
-                    key={i}
-                    className="flex items-center gap-2 rounded-md border border-line2 bg-bg px-2.5 py-2"
-                  >
-                    <span className="mono text-[10px] tabular-nums text-ink4">
-                      {String(i + 1).padStart(2, '0')}
-                    </span>
-                    <span className="mono text-[12px] text-ink">{word}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-            {seedRevealed && (
-              <p className="mt-3 text-[11px] leading-relaxed text-ink3">
-                Anyone with these words can spend your coins. Never share them, never type them
-                into a website, and prefer paper or steel storage over screenshots.
-              </p>
-            )}
-          </div>
-        </Section>
-
         <Section title="Resources">
           <div className="py-4">
             <FooterLinks variant="grid" />
@@ -248,10 +168,12 @@ export default function SettingsPage() {
             <p className="text-[13px] font-medium text-ink">Version</p>
             <p className="mono text-[12px] text-ink2">v0.9.0</p>
           </div>
-          <div className="flex items-start justify-between gap-6 py-4">
-            <p className="text-[13px] font-medium text-ink">Network</p>
-            <p className="mono text-[12px] text-ink2 lowercase">{activeNetwork}</p>
-          </div>
+          {networkName && (
+            <div className="flex items-start justify-between gap-6 py-4">
+              <p className="text-[13px] font-medium text-ink">Network</p>
+              <p className="mono text-[12px] text-ink2 lowercase">{networkName}</p>
+            </div>
+          )}
           {account && (
             <div className="py-4">
               <p className="text-[13px] font-medium text-ink">Address</p>

@@ -112,7 +112,7 @@ export function PwaPrompt() {
         <p className="text-[12px] font-semibold text-ink">Add zkCoins to your home screen</p>
         <p className="mt-0.5 text-[11px] leading-relaxed text-ink3">
           Tap the <span className="inline-flex items-center align-text-bottom"><Share size={11} strokeWidth={2} className="mx-0.5" /></span>
-          share icon in Safari's toolbar, then "Add to Home Screen".
+          share icon in Safari&apos;s toolbar, then &ldquo;Add to Home Screen&rdquo;.
         </p>
       </Card>
     );
