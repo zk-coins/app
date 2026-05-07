@@ -54,12 +54,12 @@ export function NetworkActivity({ samples, className }: Props) {
       >
         <defs>
           <linearGradient id="netact-in" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#f7931a" stopOpacity="0.32" />
+            <stop offset="0%" stopColor="#f7931a" stopOpacity="0.55" />
             <stop offset="100%" stopColor="#f7931a" stopOpacity="0" />
           </linearGradient>
           <linearGradient id="netact-out" x1="0" y1="1" x2="0" y2="0">
-            <stop offset="0%" stopColor="#a1a1aa" stopOpacity="0.22" />
-            <stop offset="100%" stopColor="#a1a1aa" stopOpacity="0" />
+            <stop offset="0%" stopColor="#d4d4d8" stopOpacity="0.40" />
+            <stop offset="100%" stopColor="#d4d4d8" stopOpacity="0" />
           </linearGradient>
         </defs>
 
@@ -85,11 +85,11 @@ export function NetworkActivity({ samples, className }: Props) {
 
         {/* OUT — mirrored below midline, drawn first so IN sits on top visually */}
         <path d={outArea} fill="url(#netact-out)" />
-        <path d={outPath} fill="none" stroke="#d4d4d8" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={outPath} fill="none" stroke="#e4e4e7" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
 
         {/* IN — above midline */}
         <path d={inArea} fill="url(#netact-in)" />
-        <path d={inPath} fill="none" stroke="#f7931a" strokeWidth="1.75" strokeLinejoin="round" strokeLinecap="round" />
+        <path d={inPath} fill="none" stroke="#f7931a" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" />
       </svg>
 
       {/* Live readouts */}
