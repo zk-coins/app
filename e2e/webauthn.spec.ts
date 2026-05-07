@@ -108,9 +108,7 @@ test.describe('WebAuthn Passkey', () => {
     await page.getByText('Restore existing wallet').click();
     await page.getByText('RESTORE WITH PASSKEY').click();
     await expect(page.getByText('Restore with passkey')).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: /authenticate with passkey/i }),
-    ).toBeVisible();
+    await expect(page.getByRole('button', { name: /authenticate with passkey/i })).toBeVisible();
 
     // Click Authenticate
     await page.getByRole('button', { name: /authenticate with passkey/i }).click();
