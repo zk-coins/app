@@ -1,10 +1,11 @@
 /**
- * Mock network-activity feed used until the real zkCoins explorer API exists.
+ * Mock network-activity feed for the explorer-preview chart.
  *
- * Both channels rest near zero (i.e. at the chart's midline) and produce
- * sharp gaussian-shaped spikes outward — IN renders upward, OUT renders
- * mirrored downward. The result reads as a waveform of bursts of traffic
- * over an otherwise quiet network, not as a steady mid-amplitude line.
+ * Generates broad rolling waves (not point-accurate event data) — both
+ * channels rest at the chart's midline and rise outward in big organic
+ * swells. The point is visual feel, not data fidelity, so we stack a few
+ * oscillators with amplitude modulation rather than simulating individual
+ * proof submissions.
  */
 
 export interface NetworkSample {
@@ -16,17 +17,18 @@ export interface NetworkSample {
 const IN_MAX = 24;
 const OUT_MAX = 12;
 
-interface Spike {
-  at: number; // 0..1, position along the window
-  width: number; // gaussian σ
-  amp: number;
+interface WaveLayer {
+  freq: number; // radians per sample-step
+  phase: number;
+  amp: number; // peak height contributed by this layer
+  ampMod: { freq: number; phase: number; depth: number } | null; // slow amplitude modulation, makes wave heights vary
 }
 
 interface Channel {
   ceil: number;
-  /** small idle-noise baseline so the line breathes a touch */
   idle: number;
-  spikes: Spike[];
+  layers: WaveLayer[];
+  jitter: number;
 }
 
 /** Deterministic RNG so SSR + first client paint match. */
@@ -41,30 +43,58 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function makeChannel(rng: () => number, opts: { ceil: number; idle: number; spikeCount: number; spikeAmpRange: [number, number]; widthRange: [number, number] }): Channel {
-  const spikes: Spike[] = [];
-  for (let i = 0; i < opts.spikeCount; i++) {
-    spikes.push({
-      at: rng(),
-      width: opts.widthRange[0] + rng() * (opts.widthRange[1] - opts.widthRange[0]),
-      amp: opts.spikeAmpRange[0] + rng() * (opts.spikeAmpRange[1] - opts.spikeAmpRange[0]),
-    });
-  }
-  return { ceil: opts.ceil, idle: opts.idle, spikes };
+function makeChannel(
+  rng: () => number,
+  opts: { ceil: number; idle: number; mainAmp: number; jitter: number },
+): Channel {
+  return {
+    ceil: opts.ceil,
+    idle: opts.idle,
+    jitter: opts.jitter,
+    layers: [
+      // Big slow swell — main visual wave
+      {
+        freq: 0.045 + rng() * 0.02,
+        phase: rng() * Math.PI * 2,
+        amp: opts.mainAmp,
+        ampMod: { freq: 0.018 + rng() * 0.012, phase: rng() * Math.PI * 2, depth: 0.65 },
+      },
+      // Mid layer for variation between swells
+      {
+        freq: 0.13 + rng() * 0.05,
+        phase: rng() * Math.PI * 2,
+        amp: opts.mainAmp * 0.35,
+        ampMod: { freq: 0.04 + rng() * 0.02, phase: rng() * Math.PI * 2, depth: 0.5 },
+      },
+      // Fast micro layer for surface texture
+      {
+        freq: 0.42 + rng() * 0.18,
+        phase: rng() * Math.PI * 2,
+        amp: opts.mainAmp * 0.12,
+        ampMod: null,
+      },
+    ],
+  };
 }
 
-function sampleChannel(ch: Channel, frac: number, noise: number): number {
-  let v = ch.idle + noise * ch.idle * 1.4; // micro-wobble around idle floor
-  for (const s of ch.spikes) {
-    const d = (frac - s.at) / s.width;
-    if (Math.abs(d) < 3) v += s.amp * Math.exp(-d * d);
+function sampleChannel(ch: Channel, i: number, noise: number): number {
+  let v = ch.idle;
+  for (const layer of ch.layers) {
+    let amp = layer.amp;
+    if (layer.ampMod) {
+      const m = Math.sin(i * layer.ampMod.freq + layer.ampMod.phase);
+      amp *= 1 - layer.ampMod.depth * (0.5 - m * 0.5); // 1 .. (1 - depth)
+    }
+    // Half-wave rectified: |sin| → wave only adds upward, never below idle.
+    v += Math.abs(Math.sin(i * layer.freq + layer.phase)) * amp;
   }
+  v += noise * ch.jitter;
   return Math.max(0, Math.min(ch.ceil, v));
 }
 
 export function buildHistory({
   count = 220,
-  spanMs = 60 * 60 * 1000,
+  spanMs = 6 * 60 * 60 * 1000,
   endTs = Date.now(),
   seed = 1337,
 }: {
@@ -74,50 +104,61 @@ export function buildHistory({
   seed?: number;
 } = {}): NetworkSample[] {
   const rng = mulberry32(seed);
-  const inCh = makeChannel(rng, {
-    ceil: IN_MAX,
-    idle: 1.2,
-    spikeCount: 14,
-    spikeAmpRange: [12, 22],
-    widthRange: [0.006, 0.02],
-  });
-  const outCh = makeChannel(rng, {
-    ceil: OUT_MAX,
-    idle: 0.6,
-    spikeCount: 16,
-    spikeAmpRange: [6, 11],
-    widthRange: [0.005, 0.018],
-  });
+  const inCh = makeChannel(rng, { ceil: IN_MAX, idle: 0.6, mainAmp: 18, jitter: 1.2 });
+  const outCh = makeChannel(rng, { ceil: OUT_MAX, idle: 0.4, mainAmp: 9, jitter: 0.7 });
   const dt = spanMs / count;
 
   const samples: NetworkSample[] = [];
   for (let i = 0; i < count; i++) {
-    const ts = endTs - spanMs + i * dt;
-    const frac = i / (count - 1);
     samples.push({
-      ts,
-      inKbps: sampleChannel(inCh, frac, rng() * 2 - 1),
-      outKbps: sampleChannel(outCh, frac, rng() * 2 - 1),
+      ts: endTs - spanMs + i * dt,
+      inKbps: sampleChannel(inCh, i, rng() * 2 - 1),
+      outKbps: sampleChannel(outCh, i, rng() * 2 - 1),
     });
   }
   return samples;
 }
 
 /**
- * Append a single live sample. New events are pure spikes on top of the
- * idle floor — no drift toward a non-zero average — so the line keeps
- * returning to the midline between bursts.
+ * Append a single live sample by extending the wave one step further.
+ * We don't have the original phase state on hand, so we approximate by
+ * sampling fresh wave layers seeded from the wall clock — visually
+ * indistinguishable from the seeded history, and avoids needing to
+ * thread state through the page.
  */
-export function nextSample(_history: NetworkSample[], rng: () => number = Math.random): NetworkSample {
-  const idleIn = 1.2 + (rng() - 0.5) * 0.6;
-  const idleOut = 0.6 + (rng() - 0.5) * 0.4;
-  const burstIn = rng() < 0.18 ? 8 + rng() * 14 : 0;
-  const burstOut = rng() < 0.22 ? 4 + rng() * 7 : 0;
+export function nextSample(history: NetworkSample[], rng: () => number = Math.random): NetworkSample {
+  const i = history.length;
+  const ts = Date.now();
+  const tSec = ts / 1000;
+
+  // Live layers — same shape as makeChannel() but driven by wall-clock
+  // time so the wave keeps flowing as time passes.
+  const inV = wave(tSec, [
+    { freq: 0.18, amp: 18, modFreq: 0.07 },
+    { freq: 0.55, amp: 6, modFreq: 0.16 },
+    { freq: 1.7, amp: 2.2, modFreq: 0 },
+  ]) + 0.6 + (rng() * 2 - 1) * 1.2;
+  const outV = wave(tSec, [
+    { freq: 0.21, amp: 9, modFreq: 0.08 },
+    { freq: 0.6, amp: 3, modFreq: 0.18 },
+    { freq: 1.8, amp: 1.1, modFreq: 0 },
+  ]) + 0.4 + (rng() * 2 - 1) * 0.7;
+
   return {
-    ts: Date.now(),
-    inKbps: clamp(idleIn + burstIn, 0, IN_MAX),
-    outKbps: clamp(idleOut + burstOut, 0, OUT_MAX),
+    ts,
+    inKbps: clamp(inV, 0, IN_MAX),
+    outKbps: clamp(outV, 0, OUT_MAX),
   };
+}
+
+function wave(t: number, layers: { freq: number; amp: number; modFreq: number }[]): number {
+  let v = 0;
+  for (const l of layers) {
+    let amp = l.amp;
+    if (l.modFreq > 0) amp *= 0.5 + Math.abs(Math.sin(t * l.modFreq * 0.5)) * 0.5;
+    v += Math.abs(Math.sin(t * l.freq)) * amp;
+  }
+  return v;
 }
 
 function clamp(v: number, lo: number, hi: number): number {
