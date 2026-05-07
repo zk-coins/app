@@ -1,11 +1,10 @@
 /**
  * Mock network-activity feed for the explorer-preview chart.
  *
- * Generates broad rolling waves (not point-accurate event data) — both
- * channels rest at the chart's midline and rise outward in big organic
- * swells. The point is visual feel, not data fidelity, so we stack a few
- * oscillators with amplitude modulation rather than simulating individual
- * proof submissions.
+ * Both channels share a single underlying waveform — when activity peaks
+ * IN spikes up and OUT spikes down at the *same* moment, producing the
+ * symmetric mirror look from the reference design. Visual feel matters
+ * here, not data fidelity.
  */
 
 export interface NetworkSample {
@@ -16,19 +15,16 @@ export interface NetworkSample {
 
 const IN_MAX = 24;
 const OUT_MAX = 12;
+const IN_AMP = 18;
+const OUT_AMP = 9;
+const IN_IDLE = 0.6;
+const OUT_IDLE = 0.4;
 
 interface WaveLayer {
-  freq: number; // radians per sample-step
+  freq: number; // radians per step
   phase: number;
-  amp: number; // peak height contributed by this layer
-  ampMod: { freq: number; phase: number; depth: number } | null; // slow amplitude modulation, makes wave heights vary
-}
-
-interface Channel {
-  ceil: number;
-  idle: number;
-  layers: WaveLayer[];
-  jitter: number;
+  weight: number; // contribution 0..1
+  ampMod: { freq: number; phase: number; depth: number } | null;
 }
 
 /** Deterministic RNG so SSR + first client paint match. */
@@ -43,53 +39,48 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function makeChannel(
-  rng: () => number,
-  opts: { ceil: number; idle: number; mainAmp: number; jitter: number },
-): Channel {
-  return {
-    ceil: opts.ceil,
-    idle: opts.idle,
-    jitter: opts.jitter,
-    layers: [
-      // Big slow swell — main visual wave
-      {
-        freq: 0.045 + rng() * 0.02,
-        phase: rng() * Math.PI * 2,
-        amp: opts.mainAmp,
-        ampMod: { freq: 0.018 + rng() * 0.012, phase: rng() * Math.PI * 2, depth: 0.65 },
-      },
-      // Mid layer for variation between swells
-      {
-        freq: 0.13 + rng() * 0.05,
-        phase: rng() * Math.PI * 2,
-        amp: opts.mainAmp * 0.35,
-        ampMod: { freq: 0.04 + rng() * 0.02, phase: rng() * Math.PI * 2, depth: 0.5 },
-      },
-      // Fast micro layer for surface texture
-      {
-        freq: 0.42 + rng() * 0.18,
-        phase: rng() * Math.PI * 2,
-        amp: opts.mainAmp * 0.12,
-        ampMod: null,
-      },
-    ],
-  };
+function makeLayers(rng: () => number): WaveLayer[] {
+  return [
+    // Big slow swell — main visual wave
+    {
+      freq: 0.045 + rng() * 0.02,
+      phase: rng() * Math.PI * 2,
+      weight: 0.7,
+      ampMod: { freq: 0.018 + rng() * 0.012, phase: rng() * Math.PI * 2, depth: 0.6 },
+    },
+    // Mid layer adds variation between swells
+    {
+      freq: 0.13 + rng() * 0.05,
+      phase: rng() * Math.PI * 2,
+      weight: 0.22,
+      ampMod: { freq: 0.04 + rng() * 0.02, phase: rng() * Math.PI * 2, depth: 0.5 },
+    },
+    // Fast micro layer for surface texture
+    {
+      freq: 0.42 + rng() * 0.18,
+      phase: rng() * Math.PI * 2,
+      weight: 0.08,
+      ampMod: null,
+    },
+  ];
 }
 
-function sampleChannel(ch: Channel, i: number, noise: number): number {
-  let v = ch.idle;
-  for (const layer of ch.layers) {
-    let amp = layer.amp;
-    if (layer.ampMod) {
-      const m = Math.sin(i * layer.ampMod.freq + layer.ampMod.phase);
-      amp *= 1 - layer.ampMod.depth * (0.5 - m * 0.5); // 1 .. (1 - depth)
+/**
+ * Compute the shared waveform value at step i. Returns a non-negative
+ * activity intensity that both channels share — IN scales it up, OUT
+ * scales it down (and the chart mirrors OUT below the midline).
+ */
+function sampleWaveform(layers: WaveLayer[], i: number): number {
+  let v = 0;
+  for (const l of layers) {
+    let w = l.weight;
+    if (l.ampMod) {
+      const m = Math.sin(i * l.ampMod.freq + l.ampMod.phase);
+      w *= 1 - l.ampMod.depth * (0.5 - m * 0.5);
     }
-    // Half-wave rectified: |sin| → wave only adds upward, never below idle.
-    v += Math.abs(Math.sin(i * layer.freq + layer.phase)) * amp;
+    v += Math.abs(Math.sin(i * l.freq + l.phase)) * w;
   }
-  v += noise * ch.jitter;
-  return Math.max(0, Math.min(ch.ceil, v));
+  return v; // approximately 0..1
 }
 
 export function buildHistory({
@@ -104,61 +95,42 @@ export function buildHistory({
   seed?: number;
 } = {}): NetworkSample[] {
   const rng = mulberry32(seed);
-  const inCh = makeChannel(rng, { ceil: IN_MAX, idle: 0.6, mainAmp: 18, jitter: 1.2 });
-  const outCh = makeChannel(rng, { ceil: OUT_MAX, idle: 0.4, mainAmp: 9, jitter: 0.7 });
+  const layers = makeLayers(rng);
   const dt = spanMs / count;
 
   const samples: NetworkSample[] = [];
   for (let i = 0; i < count; i++) {
+    const w = sampleWaveform(layers, i);
+    const inJitter = (rng() * 2 - 1) * 1.0;
+    const outJitter = (rng() * 2 - 1) * 0.5;
     samples.push({
       ts: endTs - spanMs + i * dt,
-      inKbps: sampleChannel(inCh, i, rng() * 2 - 1),
-      outKbps: sampleChannel(outCh, i, rng() * 2 - 1),
+      inKbps: clamp(IN_IDLE + w * IN_AMP + inJitter, 0, IN_MAX),
+      outKbps: clamp(OUT_IDLE + w * OUT_AMP + outJitter, 0, OUT_MAX),
     });
   }
   return samples;
 }
 
 /**
- * Append a single live sample by extending the wave one step further.
- * We don't have the original phase state on hand, so we approximate by
- * sampling fresh wave layers seeded from the wall clock — visually
- * indistinguishable from the seeded history, and avoids needing to
- * thread state through the page.
+ * Append a single live sample. Driven by wall-clock time so the wave
+ * keeps flowing forward; IN and OUT share the same waveform, just
+ * scaled differently.
  */
-export function nextSample(history: NetworkSample[], rng: () => number = Math.random): NetworkSample {
-  const i = history.length;
+export function nextSample(_history: NetworkSample[], rng: () => number = Math.random): NetworkSample {
   const ts = Date.now();
-  const tSec = ts / 1000;
-
-  // Live layers — same shape as makeChannel() but driven by wall-clock
-  // time so the wave keeps flowing as time passes.
-  const inV = wave(tSec, [
-    { freq: 0.18, amp: 18, modFreq: 0.07 },
-    { freq: 0.55, amp: 6, modFreq: 0.16 },
-    { freq: 1.7, amp: 2.2, modFreq: 0 },
-  ]) + 0.6 + (rng() * 2 - 1) * 1.2;
-  const outV = wave(tSec, [
-    { freq: 0.21, amp: 9, modFreq: 0.08 },
-    { freq: 0.6, amp: 3, modFreq: 0.18 },
-    { freq: 1.8, amp: 1.1, modFreq: 0 },
-  ]) + 0.4 + (rng() * 2 - 1) * 0.7;
-
+  const t = ts / 1000;
+  const w =
+    Math.abs(Math.sin(t * 0.05)) * 0.7 +
+    Math.abs(Math.sin(t * 0.18 + 1.3)) * 0.22 +
+    Math.abs(Math.sin(t * 0.55 + 0.4)) * 0.08;
+  const inJitter = (rng() * 2 - 1) * 1.0;
+  const outJitter = (rng() * 2 - 1) * 0.5;
   return {
     ts,
-    inKbps: clamp(inV, 0, IN_MAX),
-    outKbps: clamp(outV, 0, OUT_MAX),
+    inKbps: clamp(IN_IDLE + w * IN_AMP + inJitter, 0, IN_MAX),
+    outKbps: clamp(OUT_IDLE + w * OUT_AMP + outJitter, 0, OUT_MAX),
   };
-}
-
-function wave(t: number, layers: { freq: number; amp: number; modFreq: number }[]): number {
-  let v = 0;
-  for (const l of layers) {
-    let amp = l.amp;
-    if (l.modFreq > 0) amp *= 0.5 + Math.abs(Math.sin(t * l.modFreq * 0.5)) * 0.5;
-    v += Math.abs(Math.sin(t * l.freq)) * amp;
-  }
-  return v;
 }
 
 function clamp(v: number, lo: number, hi: number): number {
