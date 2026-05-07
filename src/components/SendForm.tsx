@@ -1,13 +1,51 @@
 'use client';
 
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { useWalletStore } from '@/stores/wallet';
-import { api } from '@/lib/api/client';
+import { api, type CommitRequest } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
+
+const INFLIGHT_KEY = 'zkcoins_inflight_commit';
+
+function saveInflightCommit(payload: CommitRequest): void {
+  localStorage.setItem(INFLIGHT_KEY, JSON.stringify(payload));
+}
+
+function clearInflightCommit(): void {
+  localStorage.removeItem(INFLIGHT_KEY);
+}
+
+function getInflightCommit(): CommitRequest | null {
+  const raw = localStorage.getItem(INFLIGHT_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 export function SendForm() {
   const { account, setBalance, incrementPubkeys, addTransaction } = useWalletStore();
+  const [recovering, setRecovering] = useState(false);
   const [recipient, setRecipient] = useState('');
+
+  // Recover incomplete commits from previous session
+  useEffect(() => {
+    const inflight = getInflightCommit();
+    if (!inflight) return;
+    setRecovering(true);
+    api
+      .commit(inflight)
+      .then(() => {
+        clearInflightCommit();
+        if (account) api.balance(account.address).then(({ balance }) => setBalance(balance));
+      })
+      .catch(() => {
+        // Keep in localStorage for next retry
+      })
+      .finally(() => setRecovering(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
   const [confirming, setConfirming] = useState(false);
@@ -74,12 +112,34 @@ export function SendForm() {
             res.account_state_hash,
             res.output_coins_root,
           );
-          await api.commit({
+          const commitPayload = {
             proof_id: res.proof_id,
             public_key: commitment.publicKey,
             signature: commitment.signature,
             message: commitment.message,
-          });
+          };
+
+          // Persist in-flight commit before attempting (crash recovery)
+          saveInflightCommit(commitPayload);
+
+          let committed = false;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              await api.commit(commitPayload);
+              committed = true;
+              clearInflightCommit();
+              break;
+            } catch {
+              if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+            }
+          }
+
+          if (!committed) {
+            throw new Error(
+              'Transaction sent but delivery to recipient failed. ' +
+                'The app will retry automatically on next load.',
+            );
+          }
         }
 
         incrementPubkeys();
