@@ -45,9 +45,6 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
       className={`${inter.variable} ${mono.variable} ${pixel.variable}`}
       suppressHydrationWarning
     >
-      <head>
-        <link rel="apple-touch-icon" href="/icons/icon-192.png" />
-      </head>
       <body className="min-h-screen bg-bg font-sans text-ink antialiased" suppressHydrationWarning>
         {children}
         <script
