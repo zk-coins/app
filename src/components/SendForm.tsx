@@ -194,7 +194,8 @@ export function SendForm() {
         {confirming ? (
           <div className="space-y-3 rounded-lg border border-bitcoin/30 bg-bitcoin/5 p-4">
             <p className="text-sm text-white">
-              Send <span className="font-bold">{parseInt(amount, 10).toLocaleString()} sats</span> to:
+              Send <span className="font-bold">{parseInt(amount, 10).toLocaleString()} sats</span>{' '}
+              to:
             </p>
             <p className="break-all text-xs text-white/70">{recipient}</p>
             <p className="text-xs text-zkcoins-muted">This cannot be undone.</p>

@@ -106,19 +106,38 @@ export async function initWasm(): Promise<ZkCoinsWasm> {
   return wasmModule;
 }
 
-const WASM_REQUIRED = 'Cryptography module failed to load — please reload the page or use a modern browser.';
+const WASM_REQUIRED =
+  'Cryptography module failed to load — please reload the page or use a modern browser.';
 
 function createJsFallback(): ZkCoinsWasm {
   return {
     isWasm: false,
-    createAccount: async () => { throw new Error(WASM_REQUIRED); },
-    createAccountFromMnemonic: async () => { throw new Error(WASM_REQUIRED); },
-    generateMnemonic: () => { throw new Error(WASM_REQUIRED); },
-    validateMnemonic: () => { throw new Error(WASM_REQUIRED); },
-    mnemonicFromEntropy: () => { throw new Error(WASM_REQUIRED); },
-    deriveSigningKey: () => { throw new Error(WASM_REQUIRED); },
-    signSchnorr: () => { throw new Error(WASM_REQUIRED); },
-    derivePublicKeys: () => { throw new Error(WASM_REQUIRED); },
-    createCommitment: () => { throw new Error(WASM_REQUIRED); },
+    createAccount: async () => {
+      throw new Error(WASM_REQUIRED);
+    },
+    createAccountFromMnemonic: async () => {
+      throw new Error(WASM_REQUIRED);
+    },
+    generateMnemonic: () => {
+      throw new Error(WASM_REQUIRED);
+    },
+    validateMnemonic: () => {
+      throw new Error(WASM_REQUIRED);
+    },
+    mnemonicFromEntropy: () => {
+      throw new Error(WASM_REQUIRED);
+    },
+    deriveSigningKey: () => {
+      throw new Error(WASM_REQUIRED);
+    },
+    signSchnorr: () => {
+      throw new Error(WASM_REQUIRED);
+    },
+    derivePublicKeys: () => {
+      throw new Error(WASM_REQUIRED);
+    },
+    createCommitment: () => {
+      throw new Error(WASM_REQUIRED);
+    },
   };
 }
