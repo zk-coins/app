@@ -18,7 +18,7 @@ import { PwaPrompt } from '../PwaPrompt';
 import { useWalletStore, type Transaction } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
 import { api } from '@/lib/api/client';
-import { formatBtc, formatBtcCompact, formatUsd, truncateAddress } from '@/lib/format';
+import { formatBtc, formatBtcCompact, formatUsd, toZkAddress } from '@/lib/format';
 
 const HIDDEN = '••••';
 
@@ -59,9 +59,11 @@ export function WalletScreen() {
     return () => clearInterval(interval);
   }, [account, setBalance, setUsername]);
 
+  const zkAddress = account ? toZkAddress(account.address) : '';
+
   const copyAddress = useCallback(() => {
     if (!account) return;
-    navigator.clipboard.writeText(account.address).then(
+    navigator.clipboard.writeText(zkAddress).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
@@ -70,7 +72,7 @@ export function WalletScreen() {
         /* clipboard not available */
       },
     );
-  }, [account]);
+  }, [account, zkAddress]);
 
   const sats = account?.balance ?? 0;
   const btc = formatBtc(sats);
@@ -106,9 +108,7 @@ export function WalletScreen() {
         {account && (
           <div className="mt-2 space-y-1.5">
             <p className="mono text-[12px] text-ink2">
-              {account.username
-                ? `${account.username}@zkcoins.app`
-                : `${account.address.replace(/^0x/, '').slice(0, 8)}@zkcoins.app`}
+              {account.username ? `${account.username}@zkcoins.app` : zkAddress}
             </p>
             {!account.username && (
               <div className="flex items-center gap-2">
@@ -159,7 +159,7 @@ export function WalletScreen() {
               ) : (
                 <Copy size={11} strokeWidth={2} />
               )}
-              <span>{truncateAddress(account.address, 6, 6)}</span>
+              <span>{zkAddress}</span>
               {copied && <span className="text-bitcoin">copied</span>}
             </button>
           </div>

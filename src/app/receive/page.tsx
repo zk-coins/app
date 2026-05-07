@@ -7,6 +7,7 @@ import { QRCodeSVG } from 'qrcode.react';
 import { ArrowLeft, Copy, Check, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
+import { toZkAddress } from '@/lib/format';
 
 export default function ReceivePage() {
   const router = useRouter();
@@ -22,9 +23,11 @@ export default function ReceivePage() {
     }
   }, [account, router]);
 
+  const zkAddress = account ? toZkAddress(account.address) : '';
+
   const copy = useCallback(() => {
     if (!account) return;
-    navigator.clipboard.writeText(account.address).then(
+    navigator.clipboard.writeText(zkAddress).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
@@ -33,7 +36,7 @@ export default function ReceivePage() {
         /* clipboard not available */
       },
     );
-  }, [account]);
+  }, [account, zkAddress]);
 
   if (!account) {
     return (
@@ -70,21 +73,15 @@ export default function ReceivePage() {
         {/* QR Code */}
         <div className="flex justify-center">
           <div className="rounded-md border border-line2 bg-white p-4">
-            <QRCodeSVG
-              value={account.address}
-              size={208}
-              bgColor="#ffffff"
-              fgColor="#000000"
-              level="M"
-            />
+            <QRCodeSVG value={zkAddress} size={208} bgColor="#ffffff" fgColor="#000000" level="M" />
           </div>
         </div>
 
         {/* Address */}
         <div>
           <label className="mb-1.5 block text-[12px] font-medium text-ink2">Your address</label>
-          <div className="rounded-md border border-line2 bg-surface px-4 py-3 mono text-[12px] break-all text-ink">
-            {account.address}
+          <div className="rounded-md border border-line2 bg-surface px-4 py-3 mono text-[14px] text-ink">
+            {zkAddress}
           </div>
           <button
             onClick={copy}
