@@ -1,28 +1,27 @@
 'use client';
 
-import { Header } from '@/components/Header';
-import { Footer } from '@/components/Footer';
-import { WalletCard } from '@/components/WalletCard';
-import { SendForm } from '@/components/SendForm';
-import { TransactionLog } from '@/components/TransactionLog';
+import { useEffect } from 'react';
+import { AppShell } from '@/components/AppShell';
+import { Onboarding } from '@/components/onboarding/Onboarding';
+import { WalletScreen } from '@/components/screens/WalletScreen';
 import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 
 export default function Home() {
-  const { account, isLoading } = useWalletStore();
+  const { account, loadFromStorage } = useWalletStore();
+  const activeNetwork = useNetworkStore((s) => s.activeNetwork);
+
+  useEffect(() => {
+    loadFromStorage();
+  }, [activeNetwork, loadFromStorage]);
+
+  if (!account) {
+    return <Onboarding />;
+  }
 
   return (
-    <main className="mx-auto max-w-2xl px-4 py-8">
-      <Header />
-      <div className="mt-8 space-y-6">
-        <WalletCard />
-        {account && !isLoading && (
-          <>
-            <SendForm />
-            <TransactionLog />
-          </>
-        )}
-      </div>
-      <Footer />
-    </main>
+    <AppShell>
+      <WalletScreen />
+    </AppShell>
   );
 }

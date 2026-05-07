@@ -1,20 +1,35 @@
 import type { Metadata, Viewport } from 'next';
-import { JetBrains_Mono } from 'next/font/google';
+import { Inter, JetBrains_Mono, VT323 } from 'next/font/google';
 import './globals.css';
 
-const jetbrains = JetBrains_Mono({ subsets: ['latin'], variable: '--font-mono' });
+const inter = Inter({
+  subsets: ['latin'],
+  variable: '--font-sans',
+  display: 'swap',
+});
+
+const mono = JetBrains_Mono({
+  subsets: ['latin'],
+  variable: '--font-mono',
+  display: 'swap',
+});
+
+const pixel = VT323({
+  subsets: ['latin'],
+  weight: '400',
+  variable: '--font-pixel',
+  display: 'swap',
+});
 
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  maximumScale: 1,
-  userScalable: false,
-  themeColor: '#f7931a',
+  themeColor: '#000000',
 };
 
 export const metadata: Metadata = {
   title: 'zkCoins — Private Bitcoin Wallet',
-  description: 'Shielded CSV wallet for private Bitcoin transactions',
+  description: 'Send Bitcoin privately. Shielded CSV wallet.',
   manifest: '/manifest.json',
   appleWebApp: {
     capable: true,
@@ -25,11 +40,15 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="en" className={jetbrains.variable}>
+    <html
+      lang="en"
+      className={`${inter.variable} ${mono.variable} ${pixel.variable}`}
+      suppressHydrationWarning
+    >
       <head>
         <link rel="apple-touch-icon" href="/icons/icon-192.png" />
       </head>
-      <body className="min-h-screen font-mono antialiased">
+      <body className="min-h-screen bg-bg font-sans text-ink antialiased" suppressHydrationWarning>
         {children}
         <script
           dangerouslySetInnerHTML={{
