@@ -57,6 +57,31 @@ jobs:
       - name: Run unit tests with coverage
         run: npm run test:coverage
 
+  rust-tests:
+    name: Rust Crypto Tests
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target
+          key: ${{ runner.os }}-cargo-rust-${{ hashFiles('rust/Cargo.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-cargo-rust-
+
+      - name: Run shared crate tests
+        working-directory: rust
+        run: cargo test -p shared
+
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
