@@ -77,15 +77,19 @@ public/                  # PWA manifest, service worker, icons
 
 ## WASM Crypto Module
 
-Currently using JS fallback. To build real WASM (requires Rust + LLVM with wasm32):
+Real WASM integration with BIP-32 HD wallet, BIP-39 mnemonics, Schnorr signing, public key derivation, and commitment creation. Falls back to JS crypto if WASM fails to load.
+
+To rebuild WASM (requires Rust + Homebrew LLVM for secp256k1 cross-compilation):
 
 ```bash
 cd rust/client
-CC="/opt/homebrew/opt/llvm/bin/clang" AR="/opt/homebrew/opt/llvm/bin/llvm-ar" \
-  cargo build --target wasm32-unknown-unknown --release
-wasm-bindgen --out-dir ../../packages/zkcoins-wasm/src/pkg --target web \
-  ../target/wasm32-unknown-unknown/release/client.wasm
+CC_wasm32_unknown_unknown="/opt/homebrew/opt/llvm/bin/clang" \
+AR_wasm32_unknown_unknown="/opt/homebrew/opt/llvm/bin/llvm-ar" \
+  wasm-pack build --target web --out-dir ../../packages/zkcoins-wasm/src/pkg
+rm packages/zkcoins-wasm/src/pkg/.gitignore  # wasm-pack generates this, must be removed
 ```
+
+The `pkg/` directory is committed to git (not gitignored) for Docker builds.
 
 ## Docker
 
@@ -119,7 +123,9 @@ Details: [docs.zkcoins.app/architecture/signup-flow](https://docs.zkcoins.app/ar
 
 ## Open Tasks
 
-- [ ] WASM real integration (currently JS fallback for Schnorr + BIP32)
+- [x] WASM real integration (BIP-32, BIP-39, Schnorr, commitment creation)
+- [x] Two-phase send flow (send → commit)
+- [x] E2E tests (Playwright) + unit tests (Vitest)
 - [ ] Account backup/restore
 - [ ] Explorer app (explorer.zkcoins.app)
 
