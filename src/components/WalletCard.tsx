@@ -353,47 +353,49 @@ export function WalletCard() {
       </div>
       <div className="rounded-lg bg-zkcoins-bg p-3">
         <span className="text-xs text-zkcoins-muted">Address</span>
-        {account.username ? (
-          <p className="mt-1 text-sm font-medium text-white">{account.username}@zkcoins.app</p>
-        ) : (
-          <div className="mt-1">
-            <p className="mb-2 break-all text-xs text-white/70">{account.address}</p>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                value={claimInput}
-                onChange={(e) => {
-                  setClaimInput(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''));
-                  setClaimError(null);
-                }}
-                placeholder="Choose a username"
-                className="flex-1 rounded-md border border-zkcoins-border bg-zkcoins-card px-2 py-1 text-xs text-white placeholder-zkcoins-muted outline-none focus:border-bitcoin"
-              />
-              <button
-                onClick={async () => {
-                  if (!claimInput || !account.xpriv) return;
-                  setClaiming(true);
-                  setClaimError(null);
-                  try {
-                    const res = await api.claimUsername({
-                      username: claimInput,
-                      address: account.address,
-                      xpriv: account.xpriv,
-                    });
-                    setUsername(res.username);
-                    setClaimInput('');
-                  } catch (err) {
-                    setClaimError(err instanceof Error ? err.message : 'Claim failed');
-                  } finally {
-                    setClaiming(false);
-                  }
-                }}
-                disabled={claiming || !claimInput}
-                className="rounded-md bg-bitcoin px-3 py-1 text-xs font-semibold text-black transition-colors hover:bg-bitcoin-dark disabled:opacity-50"
-              >
-                {claiming ? '...' : 'Claim'}
-              </button>
-            </div>
+        <p className="mt-1 text-sm font-medium text-white">
+          {account.username || account.address.replace(/^0x/, '').slice(0, 8)}@zkcoins.app
+        </p>
+        {!account.username && (
+          <div className="mt-2">
+            {claimInput !== null && claiming !== undefined ? (
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={claimInput}
+                  onChange={(e) => {
+                    setClaimInput(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''));
+                    setClaimError(null);
+                  }}
+                  placeholder="Custom name"
+                  className="flex-1 rounded-md border border-zkcoins-border bg-zkcoins-card px-2 py-1 text-xs text-white placeholder-zkcoins-muted outline-none focus:border-bitcoin"
+                />
+                <button
+                  onClick={async () => {
+                    if (!claimInput || !account.xpriv) return;
+                    setClaiming(true);
+                    setClaimError(null);
+                    try {
+                      const res = await api.claimUsername({
+                        username: claimInput,
+                        address: account.address,
+                        xpriv: account.xpriv,
+                      });
+                      setUsername(res.username);
+                      setClaimInput('');
+                    } catch (err) {
+                      setClaimError(err instanceof Error ? err.message : 'Claim failed');
+                    } finally {
+                      setClaiming(false);
+                    }
+                  }}
+                  disabled={claiming || !claimInput}
+                  className="rounded-md bg-bitcoin px-3 py-1 text-xs font-semibold text-black transition-colors hover:bg-bitcoin-dark disabled:opacity-50"
+                >
+                  {claiming ? '...' : 'Claim'}
+                </button>
+              </div>
+            ) : null}
             {claimError && <p className="mt-1 text-xs text-red-400">{claimError}</p>}
           </div>
         )}

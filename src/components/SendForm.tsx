@@ -83,7 +83,10 @@ export function SendForm() {
       // Resolve username to address if needed
       let resolvedRecipient = recipient.trim();
 
-      // Strip @zkcoins.app suffix if present
+      // Strip UMA format: $alice@zkcoins.app → alice
+      if (resolvedRecipient.startsWith('$')) {
+        resolvedRecipient = resolvedRecipient.slice(1);
+      }
       if (resolvedRecipient.endsWith('@zkcoins.app')) {
         resolvedRecipient = resolvedRecipient.replace('@zkcoins.app', '');
       }
@@ -191,7 +194,7 @@ export function SendForm() {
             type="text"
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
-            placeholder="alice@zkcoins.app or 0x..."
+            placeholder="$alice@zkcoins.app or 0x..."
             className="w-full rounded-lg border border-zkcoins-border bg-zkcoins-bg px-3 py-2 text-sm text-white placeholder-zkcoins-muted outline-none focus:border-bitcoin"
           />
         </div>
