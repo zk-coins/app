@@ -8,7 +8,8 @@ import { NetworkActivity } from '@/components/NetworkActivity';
 import { getNetworkActivity } from '@/lib/api/explorer';
 import { nextSample, type NetworkSample } from '@/lib/simulate-network';
 
-const POLL_MS = 2000;
+const POLL_MS = 8000; // refresh cadence — slow enough to feel calm
+const WINDOW_MS = 6 * 60 * 60 * 1000; // chart spans the last 6 hours
 
 export default function NetworkPage() {
   const [samples, setSamples] = useState<NetworkSample[]>([]);
@@ -19,7 +20,7 @@ export default function NetworkPage() {
   // Initial fetch
   useEffect(() => {
     const ac = new AbortController();
-    getNetworkActivity({ signal: ac.signal })
+    getNetworkActivity({ windowMs: WINDOW_MS, signal: ac.signal })
       .then((res) => {
         setSamples(res.samples);
         setSource(res.source);
@@ -36,7 +37,7 @@ export default function NetworkPage() {
 
     intervalRef.current = setInterval(() => {
       if (source === 'explorer') {
-        getNetworkActivity().then((res) => {
+        getNetworkActivity({ windowMs: WINDOW_MS }).then((res) => {
           if (res.samples.length > 0) setSamples(res.samples);
           setSource(res.source);
         });
@@ -91,7 +92,9 @@ export default function NetworkPage() {
               }`}
             />
             <span className="mono tracking-wider uppercase">
-              {source === 'explorer' ? `Live · refresh ${POLL_MS / 1000}s` : 'Preview · simulated'}
+              {source === 'explorer'
+                ? `Live · 6h window · ${POLL_MS / 1000}s refresh`
+                : 'Preview · simulated · 6h window'}
             </span>
           </div>
           <a
@@ -112,7 +115,7 @@ export default function NetworkPage() {
             and will switch to real data automatically once{' '}
             <span className="mono text-ink2">NEXT_PUBLIC_EXPLORER_URL</span> is set
             and the endpoint responds. Until then the chart shows a deterministic
-            simulation that breathes every {POLL_MS / 1000}s.
+            6-hour simulation that ticks every {POLL_MS / 1000}s.
           </p>
         )}
       </div>

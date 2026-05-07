@@ -9,17 +9,19 @@ interface Props {
 }
 
 const W = 800;
-const H = 340;
-const PAD = { top: 18, right: 24, bottom: 24, left: 72 };
+const H = 360;
+const PAD = { top: 18, right: 24, bottom: 44, left: 72 };
 const CHART_W = W - PAD.left - PAD.right;
 const CHART_H = H - PAD.top - PAD.bottom;
 const Y_MID = PAD.top + CHART_H / 2;
+const X_TICKS = 7;
 
 const IN_MAX = 24; // upper-half scale (0 → 24 KB/s)
 const OUT_MAX = 12; // lower-half scale, mirrored downward
 
 export function NetworkActivity({ samples, className }: Props) {
   const { inPath, outPath, inArea, outArea } = useMemo(() => buildPaths(samples), [samples]);
+  const xLabels = useMemo(() => buildXLabels(samples), [samples]);
   const last = samples[samples.length - 1];
   const currentIn = last?.inKbps ?? 0;
   const currentOut = last?.outKbps ?? 0;
@@ -90,6 +92,20 @@ export function NetworkActivity({ samples, className }: Props) {
         {/* IN — above midline */}
         <path d={inArea} fill="url(#netact-in)" />
         <path d={inPath} fill="none" stroke="#f7931a" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" />
+
+        {/* X-axis time labels (local time) */}
+        <g className="mono" fill="#a1a1aa" fontSize="11" letterSpacing="1">
+          {xLabels.map((l, i) => (
+            <text
+              key={i}
+              x={l.x}
+              y={PAD.top + CHART_H + 22}
+              textAnchor={i === 0 ? 'start' : i === xLabels.length - 1 ? 'end' : 'middle'}
+            >
+              {l.label}
+            </text>
+          ))}
+        </g>
       </svg>
 
       {/* Live readouts */}
@@ -120,8 +136,26 @@ function gridYs(): number[] {
 
 function gridXs(): number[] {
   const out: number[] = [];
-  for (let i = 0; i <= 6; i++) out.push(PAD.left + (CHART_W / 6) * i);
+  for (let i = 0; i <= X_TICKS - 1; i++) out.push(PAD.left + (CHART_W / (X_TICKS - 1)) * i);
   return out;
+}
+
+function buildXLabels(samples: NetworkSample[]): { x: number; label: string }[] {
+  if (samples.length < 2) return [];
+  const first = samples[0].ts;
+  const last = samples[samples.length - 1].ts;
+  const labels: { x: number; label: string }[] = [];
+  for (let i = 0; i < X_TICKS; i++) {
+    const frac = i / (X_TICKS - 1);
+    const ts = first + (last - first) * frac;
+    const x = PAD.left + frac * CHART_W;
+    labels.push({ x, label: formatLocalTime(ts) });
+  }
+  return labels;
+}
+
+function formatLocalTime(ts: number): string {
+  return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
 function buildPaths(samples: NetworkSample[]): {
