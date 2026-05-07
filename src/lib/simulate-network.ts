@@ -1,9 +1,10 @@
 /**
  * Mock network-activity feed used until the real zkCoins explorer API exists.
  *
- * Produces a stream of { ts, inKbps, outKbps } samples styled as a
- * "waveform" — multiple oscillators mixed with noise and burst events,
- * so the chart reads as live network throughput rather than a calm walk.
+ * Both channels rest near zero (i.e. at the chart's midline) and produce
+ * sharp gaussian-shaped spikes outward — IN renders upward, OUT renders
+ * mirrored downward. The result reads as a waveform of bursts of traffic
+ * over an otherwise quiet network, not as a steady mid-amplitude line.
  */
 
 export interface NetworkSample {
@@ -15,12 +16,17 @@ export interface NetworkSample {
 const IN_MAX = 24;
 const OUT_MAX = 12;
 
+interface Spike {
+  at: number; // 0..1, position along the window
+  width: number; // gaussian σ
+  amp: number;
+}
+
 interface Channel {
-  baseline: number;
-  amplitude: number;
   ceil: number;
-  oscillators: { freq: number; amp: number; phase: number }[];
-  spikes: { at: number; width: number; amp: number }[];
+  /** small idle-noise baseline so the line breathes a touch */
+  idle: number;
+  spikes: Spike[];
 }
 
 /** Deterministic RNG so SSR + first client paint match. */
@@ -35,32 +41,24 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-function makeChannel(rng: () => number, opts: { baseline: number; amplitude: number; ceil: number; spikeCount: number }): Channel {
-  const oscillators = [
-    { freq: 0.03 + rng() * 0.02, amp: opts.amplitude * 0.45, phase: rng() * Math.PI * 2 }, // slow swell
-    { freq: 0.12 + rng() * 0.05, amp: opts.amplitude * 0.30, phase: rng() * Math.PI * 2 }, // mid breathing
-    { freq: 0.32 + rng() * 0.12, amp: opts.amplitude * 0.18, phase: rng() * Math.PI * 2 }, // fast wiggle
-    { freq: 0.7 + rng() * 0.4, amp: opts.amplitude * 0.10, phase: rng() * Math.PI * 2 }, // micro
-  ];
-  const spikes: { at: number; width: number; amp: number }[] = [];
+function makeChannel(rng: () => number, opts: { ceil: number; idle: number; spikeCount: number; spikeAmpRange: [number, number]; widthRange: [number, number] }): Channel {
+  const spikes: Spike[] = [];
   for (let i = 0; i < opts.spikeCount; i++) {
     spikes.push({
-      at: rng(), // 0..1, fraction along the window
-      width: 0.005 + rng() * 0.02,
-      amp: opts.amplitude * (0.6 + rng() * 0.6),
+      at: rng(),
+      width: opts.widthRange[0] + rng() * (opts.widthRange[1] - opts.widthRange[0]),
+      amp: opts.spikeAmpRange[0] + rng() * (opts.spikeAmpRange[1] - opts.spikeAmpRange[0]),
     });
   }
-  return { ...opts, oscillators, spikes };
+  return { ceil: opts.ceil, idle: opts.idle, spikes };
 }
 
-function sampleChannel(ch: Channel, frac: number, t: number, noise: number): number {
-  let v = ch.baseline;
-  for (const o of ch.oscillators) v += Math.sin(t * o.freq + o.phase) * o.amp;
+function sampleChannel(ch: Channel, frac: number, noise: number): number {
+  let v = ch.idle + noise * ch.idle * 1.4; // micro-wobble around idle floor
   for (const s of ch.spikes) {
     const d = (frac - s.at) / s.width;
-    if (Math.abs(d) < 3) v += s.amp * Math.exp(-d * d); // gaussian bump
+    if (Math.abs(d) < 3) v += s.amp * Math.exp(-d * d);
   }
-  v += noise * ch.amplitude * 0.18;
   return Math.max(0, Math.min(ch.ceil, v));
 }
 
@@ -76,41 +74,49 @@ export function buildHistory({
   seed?: number;
 } = {}): NetworkSample[] {
   const rng = mulberry32(seed);
-  const inCh = makeChannel(rng, { baseline: 14, amplitude: 10, ceil: IN_MAX, spikeCount: 8 });
-  const outCh = makeChannel(rng, { baseline: 5.5, amplitude: 5.5, ceil: OUT_MAX, spikeCount: 10 });
+  const inCh = makeChannel(rng, {
+    ceil: IN_MAX,
+    idle: 1.2,
+    spikeCount: 14,
+    spikeAmpRange: [12, 22],
+    widthRange: [0.006, 0.02],
+  });
+  const outCh = makeChannel(rng, {
+    ceil: OUT_MAX,
+    idle: 0.6,
+    spikeCount: 16,
+    spikeAmpRange: [6, 11],
+    widthRange: [0.005, 0.018],
+  });
   const dt = spanMs / count;
 
   const samples: NetworkSample[] = [];
   for (let i = 0; i < count; i++) {
     const ts = endTs - spanMs + i * dt;
     const frac = i / (count - 1);
-    const inKbps = sampleChannel(inCh, frac, i, rng() * 2 - 1);
-    const outKbps = sampleChannel(outCh, frac, i, rng() * 2 - 1);
-    samples.push({ ts, inKbps, outKbps });
+    samples.push({
+      ts,
+      inKbps: sampleChannel(inCh, frac, rng() * 2 - 1),
+      outKbps: sampleChannel(outCh, frac, rng() * 2 - 1),
+    });
   }
   return samples;
 }
 
 /**
- * Append a single live sample on top of an existing history. The new sample
- * is anchored to the trailing average so the chart breathes naturally rather
- * than jumping.
+ * Append a single live sample. New events are pure spikes on top of the
+ * idle floor — no drift toward a non-zero average — so the line keeps
+ * returning to the midline between bursts.
  */
-export function nextSample(history: NetworkSample[], rng: () => number = Math.random): NetworkSample {
-  const tail = history.slice(-6);
-  const avgIn = tail.reduce((a, s) => a + s.inKbps, 0) / Math.max(1, tail.length);
-  const avgOut = tail.reduce((a, s) => a + s.outKbps, 0) / Math.max(1, tail.length);
-
-  // Local oscillation around the average + occasional burst.
-  const inWobble = (rng() - 0.5) * 4 + Math.sin(Date.now() / 800) * 1.5;
-  const outWobble = (rng() - 0.5) * 3 + Math.sin(Date.now() / 600 + 1) * 1.2;
-  const burstIn = rng() < 0.1 ? 4 + rng() * 5 : 0;
-  const burstOut = rng() < 0.12 ? 3 + rng() * 4 : 0;
-
+export function nextSample(_history: NetworkSample[], rng: () => number = Math.random): NetworkSample {
+  const idleIn = 1.2 + (rng() - 0.5) * 0.6;
+  const idleOut = 0.6 + (rng() - 0.5) * 0.4;
+  const burstIn = rng() < 0.18 ? 8 + rng() * 14 : 0;
+  const burstOut = rng() < 0.22 ? 4 + rng() * 7 : 0;
   return {
     ts: Date.now(),
-    inKbps: clamp(avgIn + inWobble + burstIn, 2, IN_MAX),
-    outKbps: clamp(avgOut + outWobble + burstOut, 0, OUT_MAX),
+    inKbps: clamp(idleIn + burstIn, 0, IN_MAX),
+    outKbps: clamp(idleOut + burstOut, 0, OUT_MAX),
   };
 }
 
