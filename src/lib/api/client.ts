@@ -5,16 +5,26 @@ function getApiUrl(): string {
   return useNetworkStore.getState().apiUrl;
 }
 
+const REQUEST_TIMEOUT_MS = 120_000; // 2 minutes (proof generation can be slow)
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-  const res = await fetch(`${getApiUrl()}${path}`, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
-  if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API error ${res.status}: ${text}`);
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+
+  try {
+    const res = await fetch(`${getApiUrl()}${path}`, {
+      headers: { 'Content-Type': 'application/json' },
+      signal: controller.signal,
+      ...options,
+    });
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error(`API error ${res.status}: ${text}`);
+    }
+    return res.json();
+  } finally {
+    clearTimeout(timeoutId);
   }
-  return res.json();
 }
 
 export interface SendRequest {

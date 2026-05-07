@@ -214,7 +214,10 @@ export function WalletCard() {
         <PasskeySetup
           mode="create"
           onComplete={createFromPasskey}
-          onBack={() => setAuthView('choose')}
+          onBack={() => {
+            setAuthView('choose');
+            setPendingMnemonic(null);
+          }}
         />
       );
     }
@@ -224,7 +227,10 @@ export function WalletCard() {
         <PasskeySetup
           mode="restore"
           onComplete={restoreFromPasskey}
-          onBack={() => setAuthView('choose')}
+          onBack={() => {
+            setAuthView('choose');
+            setPendingMnemonic(null);
+          }}
         />
       );
     }
@@ -233,7 +239,10 @@ export function WalletCard() {
       return (
         <SeedPhraseSetup
           onComplete={(m) => onMnemonicReady(m, true)}
-          onBack={() => setAuthView('choose')}
+          onBack={() => {
+            setAuthView('choose');
+            setPendingMnemonic(null);
+          }}
         />
       );
     }
@@ -242,7 +251,10 @@ export function WalletCard() {
       return (
         <SeedPhraseImport
           onComplete={(m) => onMnemonicReady(m, false)}
-          onBack={() => setAuthView('choose')}
+          onBack={() => {
+            setAuthView('choose');
+            setPendingMnemonic(null);
+          }}
         />
       );
     }
