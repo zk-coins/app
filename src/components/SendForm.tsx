@@ -194,7 +194,7 @@ export function SendForm() {
             type="text"
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
-            placeholder="$alice@zkcoins.app or 0x..."
+            placeholder="alice@zkcoins.app"
             className="w-full rounded-lg border border-zkcoins-border bg-zkcoins-bg px-3 py-2 text-sm text-white placeholder-zkcoins-muted outline-none focus:border-bitcoin"
           />
         </div>
