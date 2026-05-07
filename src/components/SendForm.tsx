@@ -39,6 +39,7 @@ export function SendForm() {
       .commit(inflight)
       .then(() => {
         clearInflightCommit();
+        incrementPubkeys();
         if (account) api.balance(account.address).then(({ balance }) => setBalance(balance));
       })
       .catch(() => {
