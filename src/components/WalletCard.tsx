@@ -29,6 +29,7 @@ export function WalletCard() {
     error,
     setAccount,
     setBalance,
+    setUsername,
     setLoading,
     setError,
     saveWithPassword,
@@ -41,6 +42,9 @@ export function WalletCard() {
   const [passkeyAvailable, setPasskeyAvailable] = useState(false);
   const [pendingMnemonic, setPendingMnemonic] = useState<string | null>(null);
   const [pendingIsNew, setPendingIsNew] = useState(false);
+  const [claimInput, setClaimInput] = useState('');
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   useEffect(() => {
     checkForStoredWallet();
@@ -52,14 +56,17 @@ export function WalletCard() {
     if (!account) return;
     const interval = setInterval(async () => {
       try {
-        const { balance } = await api.balance(account.address);
-        setBalance(balance);
+        const res = await api.balance(account.address);
+        setBalance(res.balance);
+        if (res.username && !account.username) {
+          setUsername(res.username);
+        }
       } catch {
         // silently ignore polling errors
       }
     }, 5000);
     return () => clearInterval(interval);
-  }, [account, setBalance]);
+  }, [account, setBalance, setUsername]);
 
   // Seed phrase flow: store mnemonic, go to password screen FIRST
   const onMnemonicReady = useCallback((mnemonic: string, isNew: boolean) => {
@@ -346,7 +353,50 @@ export function WalletCard() {
       </div>
       <div className="rounded-lg bg-zkcoins-bg p-3">
         <span className="text-xs text-zkcoins-muted">Address</span>
-        <p className="mt-1 break-all text-xs text-white/70">{account.address}</p>
+        {account.username ? (
+          <p className="mt-1 text-sm font-medium text-white">{account.username}@zkcoins.app</p>
+        ) : (
+          <div className="mt-1">
+            <p className="mb-2 break-all text-xs text-white/70">{account.address}</p>
+            <div className="flex gap-2">
+              <input
+                type="text"
+                value={claimInput}
+                onChange={(e) => {
+                  setClaimInput(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''));
+                  setClaimError(null);
+                }}
+                placeholder="Choose a username"
+                className="flex-1 rounded-md border border-zkcoins-border bg-zkcoins-card px-2 py-1 text-xs text-white placeholder-zkcoins-muted outline-none focus:border-bitcoin"
+              />
+              <button
+                onClick={async () => {
+                  if (!claimInput || !account.xpriv) return;
+                  setClaiming(true);
+                  setClaimError(null);
+                  try {
+                    const res = await api.claimUsername({
+                      username: claimInput,
+                      address: account.address,
+                      xpriv: account.xpriv,
+                    });
+                    setUsername(res.username);
+                    setClaimInput('');
+                  } catch (err) {
+                    setClaimError(err instanceof Error ? err.message : 'Claim failed');
+                  } finally {
+                    setClaiming(false);
+                  }
+                }}
+                disabled={claiming || !claimInput}
+                className="rounded-md bg-bitcoin px-3 py-1 text-xs font-semibold text-black transition-colors hover:bg-bitcoin-dark disabled:opacity-50"
+              >
+                {claiming ? '...' : 'Claim'}
+              </button>
+            </div>
+            {claimError && <p className="mt-1 text-xs text-red-400">{claimError}</p>}
+          </div>
+        )}
       </div>
     </div>
   );

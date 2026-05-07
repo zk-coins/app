@@ -80,6 +80,20 @@ export function SendForm() {
     setSuccess(null);
 
     try {
+      // Resolve username to address if needed
+      let resolvedRecipient = recipient.trim();
+
+      // Strip @zkcoins.app suffix if present
+      if (resolvedRecipient.endsWith('@zkcoins.app')) {
+        resolvedRecipient = resolvedRecipient.replace('@zkcoins.app', '');
+      }
+
+      // If it doesn't look like a hex address, treat it as a username
+      if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
+        const resolved = await api.resolveUsername(resolvedRecipient);
+        resolvedRecipient = resolved.address;
+      }
+
       const wasm = await initWasm();
       if (!account.xpriv) {
         throw new Error('No private key available — account was created without WASM');
@@ -94,7 +108,7 @@ export function SendForm() {
       const res = await api.sendSigned(
         {
           account_address: account.address,
-          recipient,
+          recipient: resolvedRecipient,
           amount: amountNum,
           public_key: keys.publicKey,
           next_public_key: keys.nextPublicKey,
@@ -172,12 +186,12 @@ export function SendForm() {
       <h3 className="mb-4 text-sm font-semibold text-white">Send</h3>
       <div className="space-y-3">
         <div>
-          <label className="mb-1 block text-xs text-zkcoins-muted">Recipient Address</label>
+          <label className="mb-1 block text-xs text-zkcoins-muted">Recipient</label>
           <input
             type="text"
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
-            placeholder="0x..."
+            placeholder="alice@zkcoins.app or 0x..."
             className="w-full rounded-lg border border-zkcoins-border bg-zkcoins-bg px-3 py-2 text-sm text-white placeholder-zkcoins-muted outline-none focus:border-bitcoin"
           />
         </div>

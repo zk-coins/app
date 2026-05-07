@@ -13,6 +13,7 @@ export interface Account {
   balance: number;
   numPubkeys: number;
   xpriv: string;
+  username?: string;
 }
 
 export interface Transaction {
@@ -36,6 +37,7 @@ interface WalletState {
 
   setAccount: (account: Account | null) => void;
   setBalance: (balance: number) => void;
+  setUsername: (username: string) => void;
   incrementPubkeys: () => void;
   addTransaction: (tx: Transaction) => void;
   setLoading: (loading: boolean) => void;
@@ -85,6 +87,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const { account } = get();
     if (account) {
       set({ account: { ...account, balance } });
+    }
+  },
+
+  setUsername: (username) => {
+    const { account } = get();
+    if (account) {
+      set({ account: { ...account, username } });
     }
   },
 

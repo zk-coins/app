@@ -43,6 +43,18 @@ export interface SignedSendRequest extends SendRequest {
 
 export interface BalanceResponse {
   balance: number;
+  username?: string;
+}
+
+export interface UsernameResponse {
+  username: string;
+  address: string;
+}
+
+export interface ClaimUsernameParams {
+  username: string;
+  address: string;
+  xpriv: string;
 }
 
 export interface SendResponse {
@@ -113,6 +125,48 @@ async function signSendRequest(
   };
 }
 
+/**
+ * Sign a username claim request with Schnorr using pubkey_0 (identity key).
+ * Message = SHA256("zkcoins:claim_username" || address_hex || username || timestamp_le)
+ */
+async function signClaimRequest(
+  params: ClaimUsernameParams,
+): Promise<{ public_key: string; signature: string; timestamp: number }> {
+  const timestamp = Math.floor(Date.now() / 1000);
+  const wasm = await initWasm();
+
+  const keys = wasm.derivePublicKeys(params.xpriv, 0);
+  const signingKey = wasm.deriveSigningKey(params.xpriv, 0);
+
+  const encoder = new TextEncoder();
+  const prefix = encoder.encode('zkcoins:claim_username');
+  const addressBytes = encoder.encode(params.address);
+  const usernameBytes = encoder.encode(params.username);
+  const timestampBytes = new Uint8Array(8);
+  new DataView(timestampBytes.buffer).setBigUint64(0, BigInt(timestamp), true);
+
+  const combined = new Uint8Array(
+    prefix.length + addressBytes.length + usernameBytes.length + timestampBytes.length,
+  );
+  let offset = 0;
+  combined.set(prefix, offset);
+  offset += prefix.length;
+  combined.set(addressBytes, offset);
+  offset += addressBytes.length;
+  combined.set(usernameBytes, offset);
+  offset += usernameBytes.length;
+  combined.set(timestampBytes, offset);
+
+  const hashBuffer = await crypto.subtle.digest('SHA-256', combined);
+  const hashHex = Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, '0'))
+    .join('');
+
+  const signature = wasm.signSchnorr(signingKey, hashHex);
+
+  return { public_key: keys.publicKey, signature, timestamp };
+}
+
 export const api = {
   mint: (address: string, amount: number = 10_000) =>
     request<SendResponse>('/api/mint', {
@@ -143,4 +197,21 @@ export const api = {
   balance: (address: string) => request<BalanceResponse>(`/api/balance?address=${address}`),
 
   info: () => request<InfoResponse>('/api/info'),
+
+  claimUsername: async (params: ClaimUsernameParams) => {
+    const signed = await signClaimRequest(params);
+    return request<UsernameResponse>('/api/username', {
+      method: 'POST',
+      body: JSON.stringify({
+        username: params.username,
+        address: params.address,
+        public_key: signed.public_key,
+        signature: signed.signature,
+        timestamp: signed.timestamp,
+      }),
+    });
+  },
+
+  resolveUsername: (username: string) =>
+    request<UsernameResponse>(`/api/username/${encodeURIComponent(username)}`),
 };
