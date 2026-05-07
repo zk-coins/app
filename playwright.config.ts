@@ -14,8 +14,6 @@ export default defineConfig({
     trace: 'on-first-retry',
   },
 
-  updateSnapshots: 'missing',
-
   expect: {
     toHaveScreenshot: {
       maxDiffPixelRatio: 0.01,
