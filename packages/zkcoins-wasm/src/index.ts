@@ -17,6 +17,12 @@ export interface PublicKeys {
   nextPublicKey: string;
 }
 
+export interface CommitmentData {
+  publicKey: string;
+  signature: string;
+  message: string;
+}
+
 export interface ZkCoinsWasm {
   createAccount(): Promise<AccountData>;
   createAccountFromMnemonic(mnemonic: string, passphrase?: string): Promise<AccountData>;
@@ -26,6 +32,12 @@ export interface ZkCoinsWasm {
   deriveSigningKey(xpriv: string, index: number): string;
   signSchnorr(privateKeyHex: string, hashHex: string): string;
   derivePublicKeys(xpriv: string, numPubkeys: number): PublicKeys;
+  createCommitment(
+    xpriv: string,
+    numPubkeys: number,
+    accountStateHash: string,
+    outputCoinsRoot: string,
+  ): CommitmentData;
   isWasm: boolean;
 }
 
@@ -72,6 +84,20 @@ export async function initWasm(): Promise<ZkCoinsWasm> {
           nextPublicKey: data.next_public_key,
         };
       },
+      createCommitment: (
+        xpriv: string,
+        numPubkeys: number,
+        accountStateHash: string,
+        outputCoinsRoot: string,
+      ) => {
+        const json = wasm.create_commitment(xpriv, numPubkeys, accountStateHash, outputCoinsRoot);
+        const data = JSON.parse(json);
+        return {
+          publicKey: data.public_key,
+          signature: data.signature,
+          message: data.message,
+        };
+      },
     };
   } catch {
     wasmModule = createJsFallback();
@@ -111,6 +137,9 @@ function createJsFallback(): ZkCoinsWasm {
     },
     derivePublicKeys: () => {
       throw new Error('Public key derivation requires WASM module');
+    },
+    createCommitment: () => {
+      throw new Error('Commitment creation requires WASM module');
     },
   };
 }

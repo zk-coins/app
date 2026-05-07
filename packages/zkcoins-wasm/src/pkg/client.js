@@ -18,35 +18,6 @@ function getStringFromWasm0(ptr, len) {
     return cachedTextDecoder.decode(getUint8ArrayMemory0().subarray(ptr, ptr + len));
 }
 
-function takeFromExternrefTable0(idx) {
-    const value = wasm.__wbindgen_export_0.get(idx);
-    wasm.__externref_table_dealloc(idx);
-    return value;
-}
-/**
- * Generate a new BIP-39 mnemonic (12 words).
- * Returns the mnemonic phrase as a string.
- * @returns {string}
- */
-export function generate_mnemonic() {
-    let deferred2_0;
-    let deferred2_1;
-    try {
-        const ret = wasm.generate_mnemonic();
-        var ptr1 = ret[0];
-        var len1 = ret[1];
-        if (ret[3]) {
-            ptr1 = 0; len1 = 0;
-            throw takeFromExternrefTable0(ret[2]);
-        }
-        deferred2_0 = ptr1;
-        deferred2_1 = len1;
-        return getStringFromWasm0(ptr1, len1);
-    } finally {
-        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
-    }
-}
-
 let WASM_VECTOR_LEN = 0;
 
 const cachedTextEncoder = (typeof TextEncoder !== 'undefined' ? new TextEncoder('utf-8') : { encode: () => { throw Error('TextEncoder not available') } } );
@@ -102,34 +73,60 @@ function passStringToWasm0(arg, malloc, realloc) {
     WASM_VECTOR_LEN = offset;
     return ptr;
 }
+
+function takeFromExternrefTable0(idx) {
+    const value = wasm.__wbindgen_export_0.get(idx);
+    wasm.__externref_table_dealloc(idx);
+    return value;
+}
 /**
- * Sign a 32-byte hash with a Schnorr signature.
- * Both inputs are hex-encoded 32-byte strings.
- * Returns hex-encoded Schnorr signature.
- * @param {string} private_key_hex
- * @param {string} hash_hex
+ * Convert hex-encoded entropy (16 bytes = 128 bits) to a BIP-39 mnemonic.
+ * Used for deterministic mnemonic derivation from HKDF output (passkey flow).
+ * @param {string} entropy_hex
  * @returns {string}
  */
-export function sign_schnorr(private_key_hex, hash_hex) {
-    let deferred4_0;
-    let deferred4_1;
+export function mnemonic_from_entropy(entropy_hex) {
+    let deferred3_0;
+    let deferred3_1;
     try {
-        const ptr0 = passStringToWasm0(private_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(entropy_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ptr1 = passStringToWasm0(hash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-        const len1 = WASM_VECTOR_LEN;
-        const ret = wasm.sign_schnorr(ptr0, len0, ptr1, len1);
-        var ptr3 = ret[0];
-        var len3 = ret[1];
+        const ret = wasm.mnemonic_from_entropy(ptr0, len0);
+        var ptr2 = ret[0];
+        var len2 = ret[1];
         if (ret[3]) {
-            ptr3 = 0; len3 = 0;
+            ptr2 = 0; len2 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred4_0 = ptr3;
-        deferred4_1 = len3;
-        return getStringFromWasm0(ptr3, len3);
+        deferred3_0 = ptr2;
+        deferred3_1 = len2;
+        return getStringFromWasm0(ptr2, len2);
     } finally {
-        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
+        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+    }
+}
+
+/**
+ * Generate a new BIP-39 mnemonic (12 words).
+ * Returns the mnemonic phrase as a string.
+ * @returns {string}
+ */
+export function generate_mnemonic() {
+    let deferred2_0;
+    let deferred2_1;
+    try {
+        const ret = wasm.generate_mnemonic();
+        var ptr1 = ret[0];
+        var len1 = ret[1];
+        if (ret[3]) {
+            ptr1 = 0; len1 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred2_0 = ptr1;
+        deferred2_1 = len1;
+        return getStringFromWasm0(ptr1, len1);
+    } finally {
+        wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
     }
 }
 
@@ -190,6 +187,19 @@ export function derive_signing_key(xpriv_str, index) {
 }
 
 /**
+ * Validate a BIP-39 mnemonic phrase.
+ * Returns true if the phrase is valid.
+ * @param {string} phrase
+ * @returns {boolean}
+ */
+export function validate_mnemonic(phrase) {
+    const ptr0 = passStringToWasm0(phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+    const len0 = WASM_VECTOR_LEN;
+    const ret = wasm.validate_mnemonic(ptr0, len0);
+    return ret !== 0;
+}
+
+/**
  * Generate a new HD wallet: master xpriv, derived address, initial pubkey count.
  * Returns JSON: { address_hex, num_pubkeys, xpriv_str }
  * @returns {string}
@@ -210,6 +220,37 @@ export function generate_account_keys() {
         return getStringFromWasm0(ptr1, len1);
     } finally {
         wasm.__wbindgen_free(deferred2_0, deferred2_1, 1);
+    }
+}
+
+/**
+ * Sign a 32-byte hash with a Schnorr signature.
+ * Both inputs are hex-encoded 32-byte strings.
+ * Returns hex-encoded Schnorr signature.
+ * @param {string} private_key_hex
+ * @param {string} hash_hex
+ * @returns {string}
+ */
+export function sign_schnorr(private_key_hex, hash_hex) {
+    let deferred4_0;
+    let deferred4_1;
+    try {
+        const ptr0 = passStringToWasm0(private_key_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len0 = WASM_VECTOR_LEN;
+        const ptr1 = passStringToWasm0(hash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ret = wasm.sign_schnorr(ptr0, len0, ptr1, len1);
+        var ptr3 = ret[0];
+        var len3 = ret[1];
+        if (ret[3]) {
+            ptr3 = 0; len3 = 0;
+            throw takeFromExternrefTable0(ret[2]);
+        }
+        deferred4_0 = ptr3;
+        deferred4_1 = len3;
+        return getStringFromWasm0(ptr3, len3);
+    } finally {
+        wasm.__wbindgen_free(deferred4_0, deferred4_1, 1);
     }
 }
 
@@ -244,42 +285,37 @@ export function generate_account_keys_from_mnemonic(mnemonic_phrase, passphrase)
 }
 
 /**
- * Validate a BIP-39 mnemonic phrase.
- * Returns true if the phrase is valid.
- * @param {string} phrase
- * @returns {boolean}
- */
-export function validate_mnemonic(phrase) {
-    const ptr0 = passStringToWasm0(phrase, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
-    const len0 = WASM_VECTOR_LEN;
-    const ret = wasm.validate_mnemonic(ptr0, len0);
-    return ret !== 0;
-}
-
-/**
- * Convert hex-encoded entropy (16 bytes = 128 bits) to a BIP-39 mnemonic.
- * Used for deterministic mnemonic derivation from HKDF output (passkey flow).
- * @param {string} entropy_hex
+ * Create a commitment for the two-phase send flow.
+ * Takes the proof data (account_state_hash + output_coins_root as hex) and the signing key index.
+ * Returns JSON: { public_key, signature, message } (all hex-encoded).
+ * @param {string} xpriv_str
+ * @param {number} num_pubkeys
+ * @param {string} account_state_hash_hex
+ * @param {string} output_coins_root_hex
  * @returns {string}
  */
-export function mnemonic_from_entropy(entropy_hex) {
-    let deferred3_0;
-    let deferred3_1;
+export function create_commitment(xpriv_str, num_pubkeys, account_state_hash_hex, output_coins_root_hex) {
+    let deferred5_0;
+    let deferred5_1;
     try {
-        const ptr0 = passStringToWasm0(entropy_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const ptr0 = passStringToWasm0(xpriv_str, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
         const len0 = WASM_VECTOR_LEN;
-        const ret = wasm.mnemonic_from_entropy(ptr0, len0);
-        var ptr2 = ret[0];
-        var len2 = ret[1];
+        const ptr1 = passStringToWasm0(account_state_hash_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len1 = WASM_VECTOR_LEN;
+        const ptr2 = passStringToWasm0(output_coins_root_hex, wasm.__wbindgen_malloc, wasm.__wbindgen_realloc);
+        const len2 = WASM_VECTOR_LEN;
+        const ret = wasm.create_commitment(ptr0, len0, num_pubkeys, ptr1, len1, ptr2, len2);
+        var ptr4 = ret[0];
+        var len4 = ret[1];
         if (ret[3]) {
-            ptr2 = 0; len2 = 0;
+            ptr4 = 0; len4 = 0;
             throw takeFromExternrefTable0(ret[2]);
         }
-        deferred3_0 = ptr2;
-        deferred3_1 = len2;
-        return getStringFromWasm0(ptr2, len2);
+        deferred5_0 = ptr4;
+        deferred5_1 = len4;
+        return getStringFromWasm0(ptr4, len4);
     } finally {
-        wasm.__wbindgen_free(deferred3_0, deferred3_1, 1);
+        wasm.__wbindgen_free(deferred5_0, deferred5_1, 1);
     }
 }
 

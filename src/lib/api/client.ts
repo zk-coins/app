@@ -47,7 +47,16 @@ export interface BalanceResponse {
 
 export interface SendResponse {
   success: boolean;
-  proof_id: number | null;
+  proof_id?: number | null;
+  account_state_hash?: string;
+  output_coins_root?: string;
+}
+
+export interface CommitRequest {
+  proof_id: number;
+  public_key: string;
+  signature: string;
+  message: string;
 }
 
 export interface InfoResponse {
@@ -124,6 +133,12 @@ export const api = {
       body: JSON.stringify(signed),
     });
   },
+
+  commit: (data: CommitRequest) =>
+    request<SendResponse>('/api/commit', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
 
   balance: (address: string) => request<BalanceResponse>(`/api/balance?address=${address}`),
 

@@ -56,6 +56,22 @@ export function SendForm() {
       );
 
       if (res.success) {
+        // Phase 2: Create and submit commitment so the recipient receives the coins
+        if (res.account_state_hash && res.output_coins_root && res.proof_id) {
+          const commitment = wasm.createCommitment(
+            account.xpriv,
+            account.numPubkeys,
+            res.account_state_hash,
+            res.output_coins_root,
+          );
+          await api.commit({
+            proof_id: res.proof_id,
+            public_key: commitment.publicKey,
+            signature: commitment.signature,
+            message: commitment.message,
+          });
+        }
+
         incrementPubkeys();
         addTransaction({
           id: res.proof_id?.toString() ?? `send-${Date.now()}`,
