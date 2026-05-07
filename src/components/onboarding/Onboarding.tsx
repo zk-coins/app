@@ -12,6 +12,7 @@ import { api } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
 import {
   createPasskey,
+  authenticatePasskey,
   isPasskeySupported,
   PasskeyPrfUnsupportedError,
 } from '@/lib/crypto/passkey';
@@ -39,7 +40,7 @@ function StepHeader({ onBack }: { onBack?: () => void }) {
   );
 }
 
-type Step = 'welcome' | 'seed' | 'passkey';
+type Step = 'welcome' | 'seed' | 'passkey' | 'seed-import' | 'passkey-restore';
 
 export function Onboarding() {
   const [step, setStep] = useState<Step>('welcome');
@@ -56,11 +57,20 @@ export function Onboarding() {
           px-6 py-12 overflow-hidden
           md:my-10 md:rounded-2xl md:border md:border-ink md:bg-surface md:px-8 md:py-14 md:shadow-[0_20px_80px_-20px_rgba(247,147,26,0.12)]"
       >
-        {step === 'welcome' && <Welcome onNext={() => setStep('passkey')} />}
+        {step === 'welcome' && (
+          <Welcome onNext={() => setStep('passkey')} onRestore={() => setStep('seed-import')} />
+        )}
         {step === 'passkey' && (
           <PasskeyFlow onBack={() => setStep('welcome')} onUseSeed={() => setStep('seed')} />
         )}
         {step === 'seed' && <SeedFlow onBack={() => setStep('passkey')} />}
+        {step === 'seed-import' && (
+          <SeedImportFlow
+            onBack={() => setStep('welcome')}
+            onPasskeyRestore={() => setStep('passkey-restore')}
+          />
+        )}
+        {step === 'passkey-restore' && <PasskeyRestoreFlow onBack={() => setStep('seed-import')} />}
       </div>
 
       {/* Resource links — outside the card on desktop */}
@@ -73,7 +83,7 @@ export function Onboarding() {
   );
 }
 
-function Welcome({ onNext }: { onNext: () => void }) {
+function Welcome({ onNext, onRestore }: { onNext: () => void; onRestore: () => void }) {
   return (
     <div className="relative -mx-6 -my-12 min-h-screen overflow-hidden lg:-mx-8 lg:-my-14">
       {/* Hero glow */}
@@ -149,7 +159,16 @@ function Welcome({ onNext }: { onNext: () => void }) {
           </button>
         </div>
 
-        <p className="mt-12 text-center mono text-[11px] tracking-[0.3em] text-ink2 uppercase">
+        <div className="mt-6 text-center">
+          <button
+            onClick={onRestore}
+            className="text-[12px] font-medium text-ink2 transition-colors hover:text-bitcoin"
+          >
+            Restore existing wallet
+          </button>
+        </div>
+
+        <p className="mt-8 text-center mono text-[11px] tracking-[0.3em] text-ink2 uppercase">
           Shielded CSV · v0.9.0
         </p>
       </div>
@@ -512,6 +531,276 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
           OTHER LOGIN OPTIONS
         </button>
       </div>
+
+      {error && (
+        <p className="text-[12px] text-bad">
+          <span className="text-ink3">err:</span> {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+/* ---------- Seed Import (Restore) Flow ---------- */
+
+function SeedImportFlow({
+  onBack,
+  onPasskeyRestore,
+}: {
+  onBack: () => void;
+  onPasskeyRestore: () => void;
+}) {
+  const { setAccount, setBalance, saveWithPassword } = useWalletStore();
+  const { setAuth } = useAuthStore();
+  const [stage, setStage] = useState<'input' | 'password' | 'restoring'>('input');
+  const [phrase, setPhrase] = useState('');
+  const [password, setPassword] = useState('');
+  const [passwordConfirm, setPasswordConfirm] = useState('');
+  const [error, setError] = useState<string | null>(null);
+
+  const handleValidate = useCallback(async () => {
+    setError(null);
+    const trimmed = phrase.trim().toLowerCase();
+    const words = trimmed.split(/\s+/);
+    if (words.length !== 12) {
+      setError('Enter exactly 12 words');
+      return;
+    }
+    try {
+      const wasm = await initWasm();
+      if (!wasm.validateMnemonic(trimmed)) {
+        setError('Invalid seed phrase — check your words and try again');
+        return;
+      }
+      setStage('password');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Validation failed');
+    }
+  }, [phrase]);
+
+  const restore = useCallback(async () => {
+    if (password.length < 8) {
+      setError('Password must be at least 8 characters');
+      return;
+    }
+    if (password !== passwordConfirm) {
+      setError('Passwords do not match');
+      return;
+    }
+
+    setStage('restoring');
+    setError(null);
+    try {
+      const wasm = await initWasm();
+      const trimmed = phrase.trim().toLowerCase();
+      const ad = await wasm.createAccountFromMnemonic(trimmed);
+      setAccount({
+        address: ad.address,
+        balance: 0,
+        numPubkeys: ad.numPubkeys,
+        xpriv: ad.xpriv,
+      });
+      await saveWithPassword(password);
+      setAuth('seed');
+
+      try {
+        const { balance } = await api.balance(ad.address);
+        setBalance(balance);
+      } catch {
+        // Non-fatal.
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to restore wallet');
+      setStage('password');
+    }
+  }, [phrase, password, passwordConfirm, setAccount, setBalance, saveWithPassword, setAuth]);
+
+  return (
+    <div className="space-y-6 py-2">
+      <StepHeader onBack={onBack} />
+
+      <div>
+        <h1 className="text-[24px] font-bold tracking-tight text-ink">Restore wallet</h1>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink2">
+          Enter your 12-word seed phrase to restore an existing wallet.
+        </p>
+      </div>
+
+      {stage === 'input' && (
+        <>
+          <textarea
+            value={phrase}
+            onChange={(e) => {
+              setPhrase(e.target.value);
+              setError(null);
+            }}
+            placeholder="Enter your 12 words separated by spaces"
+            rows={3}
+            spellCheck={false}
+            autoComplete="off"
+            className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[13px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
+          />
+          <button
+            onClick={handleValidate}
+            disabled={!phrase.trim()}
+            className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
+          >
+            Continue
+          </button>
+        </>
+      )}
+
+      {stage === 'password' && (
+        <div className="space-y-4">
+          <div>
+            <p className="text-[13px] font-semibold text-ink">Set an encryption password</p>
+            <p className="mt-1 text-[12px] text-ink2">
+              Your wallet is encrypted locally with AES-256-GCM. You&apos;ll need this password to
+              unlock it on this device.
+            </p>
+          </div>
+          <input
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            placeholder="Password (min 8 characters)"
+            className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
+          />
+          <input
+            type="password"
+            value={passwordConfirm}
+            onChange={(e) => setPasswordConfirm(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && restore()}
+            placeholder="Confirm password"
+            className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
+          />
+          <button
+            onClick={restore}
+            disabled={!password || !passwordConfirm}
+            className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
+          >
+            Restore wallet
+          </button>
+        </div>
+      )}
+
+      {stage === 'restoring' && (
+        <button
+          disabled
+          className="w-full rounded-md bg-line py-3.5 text-[14px] font-semibold tracking-tight text-ink"
+        >
+          Restoring…
+        </button>
+      )}
+
+      {error && (
+        <p className="text-[12px] text-bad">
+          <span className="text-ink3">err:</span> {error}
+        </p>
+      )}
+
+      <div className="text-center">
+        <button
+          onClick={onPasskeyRestore}
+          disabled={stage === 'restoring'}
+          className="py-2 text-[12px] font-medium tracking-wider text-ink2 transition-colors hover:text-bitcoin disabled:opacity-50"
+        >
+          RESTORE WITH PASSKEY
+        </button>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Passkey Restore Flow ---------- */
+
+function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
+  const { setAccount, setBalance, saveWithPrf } = useWalletStore();
+  const { setAuth } = useAuthStore();
+  const [stage, setStage] = useState<'intro' | 'authenticating' | 'restoring'>('intro');
+  const [error, setError] = useState<string | null>(null);
+
+  const restore = useCallback(async () => {
+    setError(null);
+
+    if (!isPasskeySupported()) {
+      setError('Passkeys are not supported on this device.');
+      return;
+    }
+
+    setStage('authenticating');
+
+    try {
+      const result = await authenticatePasskey();
+
+      setStage('restoring');
+      const mnemonic = await deriveMnemonicFromPrf(result.prfOutput);
+      const wasm = await initWasm();
+      const ad = await wasm.createAccountFromMnemonic(mnemonic);
+
+      setAccount({
+        address: ad.address,
+        balance: 0,
+        numPubkeys: ad.numPubkeys,
+        xpriv: ad.xpriv,
+      });
+
+      await saveCredential({
+        credentialId: result.credentialId,
+        derivationVersion: DERIVATION_VERSION,
+        createdAt: Date.now(),
+      });
+
+      await saveWithPrf(result.prfOutput);
+      setAuth('passkey', result.credentialId);
+
+      try {
+        const { balance } = await api.balance(ad.address);
+        setBalance(balance);
+      } catch {
+        // Non-fatal.
+      }
+    } catch (err) {
+      if (err instanceof PasskeyPrfUnsupportedError) {
+        setError(
+          'Your device does not support the PRF extension. Please restore with a seed phrase instead.',
+        );
+      } else {
+        const cancelled =
+          err instanceof Error && (err.name === 'NotAllowedError' || err.name === 'AbortError');
+        setError(
+          cancelled
+            ? 'Authentication cancelled.'
+            : err instanceof Error
+              ? err.message
+              : 'Passkey authentication failed.',
+        );
+      }
+      setStage('intro');
+    }
+  }, [setAccount, setBalance, saveWithPrf, setAuth]);
+
+  return (
+    <div className="space-y-6 py-2">
+      <StepHeader onBack={onBack} />
+
+      <div>
+        <h1 className="text-[24px] font-bold tracking-tight text-ink">Restore with passkey</h1>
+        <p className="mt-2 text-[13px] leading-relaxed text-ink2">
+          Authenticate with your existing passkey to restore your wallet. Your keys are
+          deterministically derived from the passkey&apos;s PRF output.
+        </p>
+      </div>
+
+      <button
+        onClick={restore}
+        disabled={stage !== 'intro'}
+        className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
+      >
+        {stage === 'intro' && 'Authenticate with passkey'}
+        {stage === 'authenticating' && 'Waiting for device…'}
+        {stage === 'restoring' && 'Restoring wallet…'}
+      </button>
 
       {error && (
         <p className="text-[12px] text-bad">
