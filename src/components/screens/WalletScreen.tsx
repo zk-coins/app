@@ -16,22 +16,37 @@ import {
 import { Logo } from '../icons/Logo';
 import { PwaPrompt } from '../PwaPrompt';
 import { useWalletStore, type Transaction } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 import { api } from '@/lib/api/client';
 import { formatBtc, formatBtcCompact, formatUsd, truncateAddress } from '@/lib/format';
 
 const HIDDEN = '••••';
 
 export function WalletScreen() {
-  const { account, transactions, setBalance } = useWalletStore();
+  const { account, transactions, setBalance, setUsername } = useWalletStore();
+  const { setNetworkName } = useNetworkStore();
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [minting, setMinting] = useState(false);
 
+  // Fetch network info once.
+  useEffect(() => {
+    api
+      .info()
+      .then((info) => setNetworkName(info.network))
+      .catch(() => {});
+  }, [setNetworkName]);
+
+  // Balance + username polling.
   useEffect(() => {
     if (!account) return;
     const tick = async () => {
       try {
-        const { balance } = await api.balance(account.address);
-        setBalance(balance);
+        const res = await api.balance(account.address);
+        setBalance(res.balance);
+        if (res.username && !account.username) {
+          setUsername(res.username);
+        }
       } catch {
         /* silent */
       }
@@ -39,7 +54,7 @@ export function WalletScreen() {
     tick();
     const interval = setInterval(tick, 5000);
     return () => clearInterval(interval);
-  }, [account, setBalance]);
+  }, [account, setBalance, setUsername]);
 
   const copyAddress = useCallback(() => {
     if (!account) return;
@@ -108,7 +123,7 @@ export function WalletScreen() {
         <PrimaryButton href="/receive" disabled={!account} icon="receive" label="Receive" />
       </div>
 
-      {/* No-balance helper */}
+      {/* No-balance helper + faucet */}
       {account && sats <= 0 && (
         <div className="flex items-start gap-3 rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-bitcoin/10 text-bitcoin">
@@ -117,16 +132,35 @@ export function WalletScreen() {
           <div className="min-w-0 flex-1">
             <p className="text-[12px] font-semibold text-ink">Wallet is empty</p>
             <p className="mt-0.5 text-[11px] leading-relaxed text-ink2">
-              Buy private BTC through{' '}
+              Get testnet sats from the faucet, buy private BTC through{' '}
               <Link href="/apps" className="text-bitcoin hover:underline">
                 DFX
-              </Link>{' '}
-              or share your address via{' '}
+              </Link>
+              , or share your address via{' '}
               <Link href="/receive" className="text-bitcoin hover:underline">
                 Receive
               </Link>
               .
             </p>
+            <button
+              onClick={async () => {
+                if (!account || minting) return;
+                setMinting(true);
+                try {
+                  await api.mint(account.address);
+                  const { balance } = await api.balance(account.address);
+                  setBalance(balance);
+                } catch {
+                  /* faucet may not be available */
+                } finally {
+                  setMinting(false);
+                }
+              }}
+              disabled={minting}
+              className="mt-2 rounded-md border border-bitcoin/40 px-3 py-1.5 text-[11px] font-semibold text-bitcoin transition-colors hover:bg-bitcoin/10 disabled:opacity-50"
+            >
+              {minting ? 'Minting…' : 'Faucet'}
+            </button>
           </div>
         </div>
       )}

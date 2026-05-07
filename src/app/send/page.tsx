@@ -6,9 +6,29 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Check, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
-import { api } from '@/lib/api/client';
+import { api, type CommitRequest } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
 import { SATS_PER_BTC, formatBtc, formatBtcCompact } from '@/lib/format';
+
+/* --- In-flight commit crash recovery --- */
+
+const INFLIGHT_KEY = 'zkcoins_inflight_commit';
+
+function saveInflightCommit(payload: CommitRequest): void {
+  localStorage.setItem(INFLIGHT_KEY, JSON.stringify(payload));
+}
+function clearInflightCommit(): void {
+  localStorage.removeItem(INFLIGHT_KEY);
+}
+function getInflightCommit(): CommitRequest | null {
+  const raw = localStorage.getItem(INFLIGHT_KEY);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
 
 export default function SendPage() {
   const router = useRouter();
@@ -23,34 +43,133 @@ export default function SendPage() {
       return () => clearTimeout(t);
     }
   }, [account, router]);
+
+  // Recover incomplete commits from previous session.
+  const [recovering, setRecovering] = useState(false);
+  useEffect(() => {
+    const inflight = getInflightCommit();
+    if (!inflight) return;
+    setRecovering(true);
+    api
+      .commit(inflight)
+      .then(() => {
+        clearInflightCommit();
+        incrementPubkeys();
+        if (account) api.balance(account.address).then(({ balance }) => setBalance(balance));
+      })
+      .catch(() => {
+        // Keep in localStorage for next retry.
+      })
+      .finally(() => setRecovering(false));
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ amount: number; proofId?: string } | null>(null);
 
+  const handleConfirm = useCallback(() => {
+    if (!account || !recipient || !amount) return;
+    const btcNum = parseFloat(amount);
+    if (!btcNum || btcNum <= 0) {
+      setError('Invalid amount');
+      return;
+    }
+    const sats = Math.round(btcNum * SATS_PER_BTC);
+    if (sats > account.balance) {
+      setError('Insufficient balance');
+      return;
+    }
+    setError(null);
+    setConfirming(true);
+  }, [account, recipient, amount]);
+
   const send = useCallback(async () => {
     if (!account) return;
-    if (!recipient.trim()) return setError('Recipient required');
+    setConfirming(false);
     const btcNum = parseFloat(amount);
-    if (!btcNum || btcNum <= 0) return setError('Invalid amount');
+    if (!btcNum || btcNum <= 0) return;
     const sats = Math.round(btcNum * SATS_PER_BTC);
-    if (sats > account.balance) return setError('Insufficient balance');
 
     setSending(true);
     setError(null);
     try {
+      // Resolve username to address if needed.
+      let resolvedRecipient = recipient.trim();
+      if (resolvedRecipient.startsWith('$')) {
+        resolvedRecipient = resolvedRecipient.slice(1);
+      }
+      if (resolvedRecipient.endsWith('@zkcoins.app')) {
+        resolvedRecipient = resolvedRecipient.replace('@zkcoins.app', '');
+      }
+      if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
+        const resolved = await api.resolveUsername(resolvedRecipient);
+        resolvedRecipient = resolved.address;
+      }
+
       const wasm = await initWasm();
       if (!account.xpriv) throw new Error('No private key');
+
       const keys = wasm.derivePublicKeys(account.xpriv, account.numPubkeys);
-      const res = await api.send({
-        account_address: account.address,
-        recipient: recipient.trim(),
-        amount: sats,
-        public_key: keys.publicKey,
-        next_public_key: keys.nextPublicKey,
-      });
+      const prevPk =
+        account.numPubkeys > 0
+          ? wasm.derivePublicKeys(account.xpriv, account.numPubkeys - 1).publicKey
+          : undefined;
+
+      const res = await api.sendSigned(
+        {
+          account_address: account.address,
+          recipient: resolvedRecipient,
+          amount: sats,
+          public_key: keys.publicKey,
+          next_public_key: keys.nextPublicKey,
+          prev_commitment_pubkey: prevPk,
+        },
+        account.xpriv,
+        account.numPubkeys,
+      );
+
       if (res.success) {
+        // Phase 2: Create and submit commitment so the recipient receives the coins.
+        if (res.account_state_hash && res.output_coins_root && res.proof_id) {
+          const commitment = wasm.createCommitment(
+            account.xpriv,
+            account.numPubkeys,
+            res.account_state_hash,
+            res.output_coins_root,
+          );
+          const commitPayload: CommitRequest = {
+            proof_id: res.proof_id,
+            public_key: commitment.publicKey,
+            signature: commitment.signature,
+            message: commitment.message,
+          };
+
+          // Persist in-flight commit before attempting (crash recovery).
+          saveInflightCommit(commitPayload);
+
+          let committed = false;
+          for (let attempt = 0; attempt < 3; attempt++) {
+            try {
+              await api.commit(commitPayload);
+              committed = true;
+              clearInflightCommit();
+              break;
+            } catch {
+              if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
+            }
+          }
+
+          if (!committed) {
+            throw new Error(
+              'Transaction sent but delivery to recipient failed. ' +
+                'The app will retry automatically on next load.',
+            );
+          }
+        }
+
         incrementPubkeys();
         addTransaction({
           id: res.proof_id?.toString() ?? `send-${Date.now()}`,
@@ -61,6 +180,7 @@ export default function SendPage() {
           proofId: res.proof_id?.toString(),
         });
       }
+
       const { balance } = await api.balance(account.address);
       setBalance(balance);
       setSuccess({ amount: sats, proofId: res.proof_id?.toString() });
@@ -128,6 +248,12 @@ export default function SendPage() {
           </p>
         </div>
 
+        {recovering && (
+          <div className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3 text-[12px] text-ink2">
+            Recovering a previous in-flight transaction…
+          </div>
+        )}
+
         {/* Available */}
         <div className="rounded-md border border-line bg-surface p-3 text-[12px]">
           <span className="text-ink3">Available </span>
@@ -137,8 +263,7 @@ export default function SendPage() {
         {/* No-balance banner */}
         {account.balance <= 0 && (
           <div className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3 text-[12px] leading-relaxed text-ink2">
-            <span className="font-semibold text-bitcoin">No funds to send.</span> Use the faucet on
-            the wallet screen, or get sats via{' '}
+            <span className="font-semibold text-bitcoin">No funds to send.</span> Get sats via{' '}
             <Link href="/receive" className="text-bitcoin hover:underline">
               Receive
             </Link>{' '}
@@ -159,7 +284,7 @@ export default function SendPage() {
             onChange={(e) => setRecipient(e.target.value)}
             spellCheck={false}
             autoComplete="off"
-            placeholder="zs1qq…"
+            placeholder="alice@zkcoins.app or 0x…"
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
         </div>
@@ -196,13 +321,42 @@ export default function SendPage() {
           </p>
         )}
 
-        <button
-          onClick={send}
-          disabled={sending || !recipient || !amount}
-          className="w-full rounded-md bg-bitcoin py-4 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
-        >
-          {sending ? 'Creating proof…' : 'Send privately'}
-        </button>
+        {confirming ? (
+          <div className="space-y-4 rounded-md border border-bitcoin/30 bg-bitcoin/5 p-4">
+            <p className="text-[13px] text-ink">
+              Send{' '}
+              <span className="mono font-semibold">
+                {formatBtcCompact(Math.round(parseFloat(amount) * SATS_PER_BTC))} BTC
+              </span>{' '}
+              to:
+            </p>
+            <p className="mono break-all text-[12px] text-ink2">{recipient}</p>
+            <p className="text-[11px] text-ink3">This cannot be undone.</p>
+            <div className="flex gap-3">
+              <button
+                onClick={() => setConfirming(false)}
+                className="flex-1 rounded-md border border-line2 py-3 text-[13px] text-ink2 transition-colors hover:border-ink2 hover:text-ink"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={send}
+                disabled={sending}
+                className="flex-1 rounded-md bg-bitcoin py-3 text-[13px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover disabled:bg-line disabled:text-ink4"
+              >
+                {sending ? 'Creating proof…' : 'Confirm Send'}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={handleConfirm}
+            disabled={sending || !recipient || !amount}
+            className="w-full rounded-md bg-bitcoin py-4 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
+          >
+            Send privately
+          </button>
+        )}
       </div>
     </AppShell>
   );

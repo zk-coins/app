@@ -6,6 +6,7 @@ import { FooterLinks } from '@/components/FooterLinks';
 import { useNetworkStore } from '@/stores/network';
 import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
+import { deleteCredential } from '@/lib/crypto/storage';
 
 function Toggle({
   label,
@@ -76,6 +77,7 @@ export default function SettingsPage() {
       window.confirm('Disconnect this wallet? Make sure you have your seed phrase saved.')
     ) {
       await deleteWallet();
+      await deleteCredential();
       resetAuth();
     }
   };
