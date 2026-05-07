@@ -28,6 +28,9 @@ export function WalletScreen() {
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [minting, setMinting] = useState(false);
+  const [claimInput, setClaimInput] = useState('');
+  const [claiming, setClaiming] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
 
   // Fetch network info once.
   useEffect(() => {
@@ -99,21 +102,67 @@ export function WalletScreen() {
           {hidden ? HIDDEN : `${btc} BTC`}
         </p>
 
-        {/* Address — clean copy button */}
+        {/* Username + address */}
         {account && (
-          <button
-            onClick={copyAddress}
-            className="mt-2 inline-flex items-center gap-1.5 mono text-[11px] text-ink3 transition-colors hover:text-ink"
-            title={account.address}
-          >
-            {copied ? (
-              <Check size={11} strokeWidth={2.5} className="text-bitcoin" />
-            ) : (
-              <Copy size={11} strokeWidth={2} />
+          <div className="mt-2 space-y-1.5">
+            <p className="mono text-[12px] text-ink2">
+              {account.username
+                ? `${account.username}@zkcoins.app`
+                : `${account.address.replace(/^0x/, '').slice(0, 8)}@zkcoins.app`}
+            </p>
+            {!account.username && (
+              <div className="flex items-center gap-2">
+                <input
+                  type="text"
+                  value={claimInput}
+                  onChange={(e) => {
+                    setClaimInput(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''));
+                    setClaimError(null);
+                  }}
+                  placeholder="Claim a username"
+                  className="flex-1 rounded-md border border-line2 bg-surface px-2.5 py-1.5 mono text-[11px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
+                />
+                <button
+                  onClick={async () => {
+                    if (!claimInput || !account.xpriv) return;
+                    setClaiming(true);
+                    setClaimError(null);
+                    try {
+                      const res = await api.claimUsername({
+                        username: claimInput,
+                        address: account.address,
+                        xpriv: account.xpriv,
+                      });
+                      setUsername(res.username);
+                      setClaimInput('');
+                    } catch (err) {
+                      setClaimError(err instanceof Error ? err.message : 'Claim failed');
+                    } finally {
+                      setClaiming(false);
+                    }
+                  }}
+                  disabled={claiming || !claimInput}
+                  className="rounded-md bg-bitcoin px-3 py-1.5 text-[11px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover disabled:opacity-50"
+                >
+                  {claiming ? '…' : 'Claim'}
+                </button>
+              </div>
             )}
-            <span>{truncateAddress(account.address, 6, 6)}</span>
-            {copied && <span className="text-bitcoin">copied</span>}
-          </button>
+            {claimError && <p className="text-[11px] text-bad">{claimError}</p>}
+            <button
+              onClick={copyAddress}
+              className="inline-flex items-center gap-1.5 mono text-[11px] text-ink3 transition-colors hover:text-ink"
+              title={account.address}
+            >
+              {copied ? (
+                <Check size={11} strokeWidth={2.5} className="text-bitcoin" />
+              ) : (
+                <Copy size={11} strokeWidth={2} />
+              )}
+              <span>{truncateAddress(account.address, 6, 6)}</span>
+              {copied && <span className="text-bitcoin">copied</span>}
+            </button>
+          </div>
         )}
       </div>
 
