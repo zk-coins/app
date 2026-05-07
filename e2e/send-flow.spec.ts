@@ -68,6 +68,16 @@ test.describe('Wallet Address Display', () => {
     await expect(page.getByRole('link', { name: 'Send' }).first()).toBeVisible();
     await expect(page.getByRole('link', { name: 'Receive' }).first()).toBeVisible();
   });
+
+  test('faucet button visible in empty wallet banner', async ({ page }) => {
+    // New wallet has zero balance, so the empty wallet banner with Faucet should show
+    await expect(page.getByText('Wallet is empty')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByRole('button', { name: 'Faucet' })).toBeVisible();
+  });
+
+  test('transaction list shows "No transactions yet" for new wallet', async ({ page }) => {
+    await expect(page.getByText('No transactions yet')).toBeVisible();
+  });
 });
 
 /* ------------------------------------------------------------------ */
