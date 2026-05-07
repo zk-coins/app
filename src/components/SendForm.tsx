@@ -10,12 +10,12 @@ export function SendForm() {
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
-  const handleSend = useCallback(async () => {
+  const handleConfirm = useCallback(() => {
     if (!account || !recipient || !amount) return;
-
     const amountNum = parseInt(amount, 10);
     if (isNaN(amountNum) || amountNum <= 0) {
       setError('Invalid amount');
@@ -25,6 +25,16 @@ export function SendForm() {
       setError('Insufficient balance');
       return;
     }
+    setError(null);
+    setConfirming(true);
+  }, [account, recipient, amount]);
+
+  const handleSend = useCallback(async () => {
+    if (!account || !recipient || !amount) return;
+    setConfirming(false);
+
+    const amountNum = parseInt(amount, 10);
+    if (isNaN(amountNum) || amountNum <= 0) return;
 
     setSending(true);
     setError(null);
@@ -121,13 +131,37 @@ export function SendForm() {
             className="w-full rounded-lg border border-zkcoins-border bg-zkcoins-bg px-3 py-2 text-sm text-white placeholder-zkcoins-muted outline-none focus:border-bitcoin"
           />
         </div>
-        <button
-          onClick={handleSend}
-          disabled={sending || !recipient || !amount}
-          className="w-full rounded-lg bg-bitcoin py-2.5 font-semibold text-black transition-colors hover:bg-bitcoin-dark disabled:opacity-50"
-        >
-          {sending ? 'Sending...' : 'Send Coins'}
-        </button>
+        {confirming ? (
+          <div className="space-y-3 rounded-lg border border-bitcoin/30 bg-bitcoin/5 p-4">
+            <p className="text-sm text-white">
+              Send <span className="font-bold">{parseInt(amount, 10).toLocaleString()} sats</span> to:
+            </p>
+            <p className="break-all text-xs text-white/70">{recipient}</p>
+            <p className="text-xs text-zkcoins-muted">This cannot be undone.</p>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setConfirming(false)}
+                className="flex-1 rounded-lg border border-zkcoins-border py-2 text-sm text-zkcoins-muted transition-colors hover:border-white/30 hover:text-white"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSend}
+                className="flex-1 rounded-lg bg-bitcoin py-2 text-sm font-semibold text-black transition-colors hover:bg-bitcoin-dark"
+              >
+                Confirm Send
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={handleConfirm}
+            disabled={sending || !recipient || !amount}
+            className="w-full rounded-lg bg-bitcoin py-2.5 font-semibold text-black transition-colors hover:bg-bitcoin-dark disabled:opacity-50"
+          >
+            {sending ? 'Sending...' : 'Send Coins'}
+          </button>
+        )}
         {error && <p className="text-sm text-red-400">{error}</p>}
         {success && <p className="text-sm text-green-400">{success}</p>}
       </div>

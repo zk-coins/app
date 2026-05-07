@@ -106,40 +106,19 @@ export async function initWasm(): Promise<ZkCoinsWasm> {
   return wasmModule;
 }
 
+const WASM_REQUIRED = 'Cryptography module failed to load — please reload the page or use a modern browser.';
+
 function createJsFallback(): ZkCoinsWasm {
   return {
     isWasm: false,
-    createAccount: async () => {
-      const randomBytes = new Uint8Array(32);
-      crypto.getRandomValues(randomBytes);
-      const address = Array.from(randomBytes)
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      return { address, xpriv: '', numPubkeys: 0 };
-    },
-    createAccountFromMnemonic: async () => {
-      throw new Error('Mnemonic account creation requires WASM module');
-    },
-    generateMnemonic: () => {
-      throw new Error('Mnemonic generation requires WASM module');
-    },
-    validateMnemonic: () => {
-      throw new Error('Mnemonic validation requires WASM module');
-    },
-    mnemonicFromEntropy: () => {
-      throw new Error('Mnemonic from entropy requires WASM module');
-    },
-    deriveSigningKey: () => {
-      throw new Error('Key derivation requires WASM module');
-    },
-    signSchnorr: () => {
-      throw new Error('Schnorr signing requires WASM module');
-    },
-    derivePublicKeys: () => {
-      throw new Error('Public key derivation requires WASM module');
-    },
-    createCommitment: () => {
-      throw new Error('Commitment creation requires WASM module');
-    },
+    createAccount: async () => { throw new Error(WASM_REQUIRED); },
+    createAccountFromMnemonic: async () => { throw new Error(WASM_REQUIRED); },
+    generateMnemonic: () => { throw new Error(WASM_REQUIRED); },
+    validateMnemonic: () => { throw new Error(WASM_REQUIRED); },
+    mnemonicFromEntropy: () => { throw new Error(WASM_REQUIRED); },
+    deriveSigningKey: () => { throw new Error(WASM_REQUIRED); },
+    signSchnorr: () => { throw new Error(WASM_REQUIRED); },
+    derivePublicKeys: () => { throw new Error(WASM_REQUIRED); },
+    createCommitment: () => { throw new Error(WASM_REQUIRED); },
   };
 }
