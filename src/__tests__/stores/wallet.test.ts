@@ -93,6 +93,27 @@ describe('wallet store — balance and pubkeys', () => {
     useWalletStore.getState().incrementPubkeys();
     expect(useWalletStore.getState().account).toBeNull();
   });
+
+  it('sets username on existing account', () => {
+    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setUsername('alice');
+    expect(useWalletStore.getState().account?.username).toBe('alice');
+  });
+
+  it('does nothing when setting username without account', () => {
+    useWalletStore.getState().setUsername('alice');
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
+  it('preserves other account fields when setting username', () => {
+    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setUsername('alice');
+    const account = useWalletStore.getState().account;
+    expect(account?.address).toBe(testAccount.address);
+    expect(account?.balance).toBe(testAccount.balance);
+    expect(account?.numPubkeys).toBe(testAccount.numPubkeys);
+    expect(account?.username).toBe('alice');
+  });
 });
 
 describe('wallet store — transactions', () => {
