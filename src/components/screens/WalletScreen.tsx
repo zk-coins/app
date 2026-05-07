@@ -48,7 +48,9 @@ export function WalletScreen() {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       },
-      () => { /* clipboard not available */ },
+      () => {
+        /* clipboard not available */
+      },
     );
   }, [account]);
 
@@ -89,7 +91,11 @@ export function WalletScreen() {
             className="mt-2 inline-flex items-center gap-1.5 mono text-[11px] text-ink3 transition-colors hover:text-ink"
             title={account.address}
           >
-            {copied ? <Check size={11} strokeWidth={2.5} className="text-bitcoin" /> : <Copy size={11} strokeWidth={2} />}
+            {copied ? (
+              <Check size={11} strokeWidth={2.5} className="text-bitcoin" />
+            ) : (
+              <Copy size={11} strokeWidth={2} />
+            )}
             <span>{truncateAddress(account.address, 6, 6)}</span>
             {copied && <span className="text-bitcoin">copied</span>}
           </button>
@@ -114,8 +120,8 @@ export function WalletScreen() {
               Buy private BTC through{' '}
               <Link href="/apps" className="text-bitcoin hover:underline">
                 DFX
-              </Link>
-              {' '}or share your address via{' '}
+              </Link>{' '}
+              or share your address via{' '}
               <Link href="/receive" className="text-bitcoin hover:underline">
                 Receive
               </Link>

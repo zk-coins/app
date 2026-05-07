@@ -29,7 +29,9 @@ export default function ReceivePage() {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
       },
-      () => { /* clipboard not available */ },
+      () => {
+        /* clipboard not available */
+      },
     );
   }, [account]);
 
@@ -95,8 +97,8 @@ export default function ReceivePage() {
 
         <div className="rounded-md border border-line bg-surface p-3">
           <p className="text-[12px] leading-relaxed text-ink3">
-            <span className="font-semibold text-ink2">Tip:</span> for stronger privacy, generate
-            a fresh address per sender. The wallet auto-rotates after each receive.
+            <span className="font-semibold text-ink2">Tip:</span> for stronger privacy, generate a
+            fresh address per sender. The wallet auto-rotates after each receive.
           </p>
         </div>
       </div>

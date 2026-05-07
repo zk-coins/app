@@ -111,7 +111,10 @@ export function PwaPrompt() {
       <Card onDismiss={dismiss}>
         <p className="text-[12px] font-semibold text-ink">Add zkCoins to your home screen</p>
         <p className="mt-0.5 text-[11px] leading-relaxed text-ink3">
-          Tap the <span className="inline-flex items-center align-text-bottom"><Share size={11} strokeWidth={2} className="mx-0.5" /></span>
+          Tap the{' '}
+          <span className="inline-flex items-center align-text-bottom">
+            <Share size={11} strokeWidth={2} className="mx-0.5" />
+          </span>
           share icon in Safari&apos;s toolbar, then &ldquo;Add to Home Screen&rdquo;.
         </p>
       </Card>
@@ -151,13 +154,7 @@ export function PwaPrompt() {
   );
 }
 
-function Card({
-  onDismiss,
-  children,
-}: {
-  onDismiss: () => void;
-  children: React.ReactNode;
-}) {
+function Card({ onDismiss, children }: { onDismiss: () => void; children: React.ReactNode }) {
   return (
     <div className="flex items-start gap-3 rounded-md border border-line bg-surface px-3 py-3">
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-bitcoin/10 text-bitcoin">

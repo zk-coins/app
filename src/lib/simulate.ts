@@ -16,9 +16,7 @@ function pick<T>(arr: T[]): T {
 }
 
 function hex(n: number): string {
-  return Array.from({ length: n }, () =>
-    Math.floor(Math.random() * 16).toString(16),
-  ).join('');
+  return Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16)).join('');
 }
 
 /** Generate one random transaction (timestamp = now). */
@@ -62,22 +60,64 @@ export function populateDemoHistory(): { transactions: Transaction[]; balance: n
 
   // Pre-rolled fixed history so the simulated wallet looks the same on each /simulate visit.
   const fixed: Transaction[] = [
-    { id: 'sim-1', type: 'mint',    amount: 10_000,  timestamp: now - offsets[7], proofId: '4a2b1c8d' },
-    { id: 'sim-2', type: 'receive', amount: 250_000, timestamp: now - offsets[6], proofId: '7d8e2a9f' },
-    { id: 'sim-3', type: 'send',    amount: 30_000,  timestamp: now - offsets[5], proofId: '9c4d3e1a', counterparty: SAMPLE_RECIPIENTS[0] },
-    { id: 'sim-4', type: 'receive', amount: 500_000, timestamp: now - offsets[4], proofId: '2e8a5c7b' },
-    { id: 'sim-5', type: 'send',    amount: 75_000,  timestamp: now - offsets[3], proofId: '6b1f9e3c', counterparty: SAMPLE_RECIPIENTS[1] },
-    { id: 'sim-6', type: 'receive', amount: 100_000, timestamp: now - offsets[2], proofId: '5d3a8f2e' },
-    { id: 'sim-7', type: 'send',    amount: 12_000,  timestamp: now - offsets[1], proofId: '8e7c4b1a', counterparty: SAMPLE_RECIPIENTS[2] },
-    { id: 'sim-8', type: 'receive', amount: 50_000,  timestamp: now - offsets[0], proofId: '3a9d6e8c' },
+    { id: 'sim-1', type: 'mint', amount: 10_000, timestamp: now - offsets[7], proofId: '4a2b1c8d' },
+    {
+      id: 'sim-2',
+      type: 'receive',
+      amount: 250_000,
+      timestamp: now - offsets[6],
+      proofId: '7d8e2a9f',
+    },
+    {
+      id: 'sim-3',
+      type: 'send',
+      amount: 30_000,
+      timestamp: now - offsets[5],
+      proofId: '9c4d3e1a',
+      counterparty: SAMPLE_RECIPIENTS[0],
+    },
+    {
+      id: 'sim-4',
+      type: 'receive',
+      amount: 500_000,
+      timestamp: now - offsets[4],
+      proofId: '2e8a5c7b',
+    },
+    {
+      id: 'sim-5',
+      type: 'send',
+      amount: 75_000,
+      timestamp: now - offsets[3],
+      proofId: '6b1f9e3c',
+      counterparty: SAMPLE_RECIPIENTS[1],
+    },
+    {
+      id: 'sim-6',
+      type: 'receive',
+      amount: 100_000,
+      timestamp: now - offsets[2],
+      proofId: '5d3a8f2e',
+    },
+    {
+      id: 'sim-7',
+      type: 'send',
+      amount: 12_000,
+      timestamp: now - offsets[1],
+      proofId: '8e7c4b1a',
+      counterparty: SAMPLE_RECIPIENTS[2],
+    },
+    {
+      id: 'sim-8',
+      type: 'receive',
+      amount: 50_000,
+      timestamp: now - offsets[0],
+      proofId: '3a9d6e8c',
+    },
   ];
 
   // Newest first in the store; current balance derived from the sum.
   const transactions = [...fixed].reverse();
-  const balance = fixed.reduce(
-    (acc, tx) => acc + (tx.type === 'send' ? -tx.amount : tx.amount),
-    0,
-  );
+  const balance = fixed.reduce((acc, tx) => acc + (tx.type === 'send' ? -tx.amount : tx.amount), 0);
 
   return { transactions, balance: Math.max(0, balance) };
 }

@@ -54,13 +54,7 @@ function Toggle({
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div>
       <p className="text-[10px] font-semibold tracking-[0.2em] text-ink3 uppercase">{title}</p>

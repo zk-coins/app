@@ -6,10 +6,7 @@ import { SVGProps } from 'react';
  *
  * Renders as a 12x12 pixel grid; each filled cell is a 1×1 SVG rect.
  */
-export function Logo({
-  size = 28,
-  ...props
-}: { size?: number } & SVGProps<SVGSVGElement>) {
+export function Logo({ size = 28, ...props }: { size?: number } & SVGProps<SVGSVGElement>) {
   // 12-cell-wide × 12-row map — '#' is filled, ' ' is empty.
   const map = [
     '            ',

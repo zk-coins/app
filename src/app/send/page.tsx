@@ -137,12 +137,12 @@ export default function SendPage() {
         {/* No-balance banner */}
         {account.balance <= 0 && (
           <div className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3 text-[12px] leading-relaxed text-ink2">
-            <span className="font-semibold text-bitcoin">No funds to send.</span>{' '}
-            Use the faucet on the wallet screen, or get sats via{' '}
+            <span className="font-semibold text-bitcoin">No funds to send.</span> Use the faucet on
+            the wallet screen, or get sats via{' '}
             <Link href="/receive" className="text-bitcoin hover:underline">
               Receive
-            </Link>
-            {' '}or{' '}
+            </Link>{' '}
+            or{' '}
             <Link href="/apps" className="text-bitcoin hover:underline">
               DFX
             </Link>
@@ -152,9 +152,7 @@ export default function SendPage() {
 
         {/* Recipient */}
         <div>
-          <label className="mb-1.5 block text-[12px] font-medium text-ink2">
-            Recipient
-          </label>
+          <label className="mb-1.5 block text-[12px] font-medium text-ink2">Recipient</label>
           <input
             type="text"
             value={recipient}

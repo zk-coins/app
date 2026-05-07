@@ -58,10 +58,7 @@ export function Onboarding() {
       >
         {step === 'welcome' && <Welcome onNext={() => setStep('passkey')} />}
         {step === 'passkey' && (
-          <PasskeyFlow
-            onBack={() => setStep('welcome')}
-            onUseSeed={() => setStep('seed')}
-          />
+          <PasskeyFlow onBack={() => setStep('welcome')} onUseSeed={() => setStep('seed')} />
         )}
         {step === 'seed' && <SeedFlow onBack={() => setStep('passkey')} />}
       </div>
@@ -106,12 +103,10 @@ function Welcome({ onNext }: { onNext: () => void }) {
         aria-hidden
         className="pointer-events-none absolute inset-x-0 top-[300px] h-[220px]"
         style={{
-          background:
-            'linear-gradient(to bottom, transparent, rgba(0,0,0,0.55) 50%, transparent)',
+          background: 'linear-gradient(to bottom, transparent, rgba(0,0,0,0.55) 50%, transparent)',
           backdropFilter: 'blur(14px)',
           WebkitBackdropFilter: 'blur(14px)',
-          maskImage:
-            'linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)',
+          maskImage: 'linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)',
           WebkitMaskImage:
             'linear-gradient(to bottom, transparent, black 30%, black 70%, transparent)',
         }}
@@ -189,7 +184,9 @@ function Benefit({
 function SeedFlow({ onBack }: { onBack: () => void }) {
   const { setAccount, setBalance, saveWithPassword } = useWalletStore();
   const { setAuth } = useAuthStore();
-  const [stage, setStage] = useState<'generating' | 'reveal' | 'confirm' | 'password' | 'creating'>('generating');
+  const [stage, setStage] = useState<'generating' | 'reveal' | 'confirm' | 'password' | 'creating'>(
+    'generating',
+  );
   const [error, setError] = useState<string | null>(null);
   const [mnemonic, setMnemonic] = useState<string[]>([]);
   const [revealed, setRevealed] = useState(false);
@@ -213,7 +210,9 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
         }
       }
     })();
-    return () => { cancelled = true; };
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const create = useCallback(async () => {
@@ -263,24 +262,19 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       <div>
         <h1 className="text-[24px] font-bold tracking-tight text-ink">Your seed phrase</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-ink2">
-          Write down these 12 words in order. You&apos;ll need them to restore the wallet.
-          Anyone with this phrase can spend your funds.
+          Write down these 12 words in order. You&apos;ll need them to restore the wallet. Anyone
+          with this phrase can spend your funds.
         </p>
       </div>
 
-      {stage === 'generating' && (
-        <p className="text-[13px] text-ink2">Generating seed phrase…</p>
-      )}
+      {stage === 'generating' && <p className="text-[13px] text-ink2">Generating seed phrase…</p>}
 
       {/* Word grid */}
       {mnemonic.length > 0 && stage !== 'password' && stage !== 'creating' && (
         <div className="relative">
           <div className="grid grid-cols-3 gap-2 rounded-md border border-line2 bg-surface p-3">
             {mnemonic.map((word, i) => (
-              <div
-                key={i}
-                className="flex items-center gap-2 rounded-sm bg-bg px-2.5 py-2"
-              >
+              <div key={i} className="flex items-center gap-2 rounded-sm bg-bg px-2.5 py-2">
                 <span className="mono w-4 text-right text-[10px] text-ink4 tabular-nums">
                   {i + 1}
                 </span>
@@ -311,9 +305,9 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
         <>
           <div className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3">
             <p className="text-[12px] leading-relaxed text-ink2">
-              <span className="font-semibold text-bitcoin">Important.</span> Once you continue,
-              this phrase is gone from the screen. Make sure you&apos;ve written it down somewhere
-              safe and offline.
+              <span className="font-semibold text-bitcoin">Important.</span> Once you continue, this
+              phrase is gone from the screen. Make sure you&apos;ve written it down somewhere safe
+              and offline.
             </p>
           </div>
           <button
@@ -387,13 +381,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
 
 /* ---------- Passkey Flow ---------- */
 
-function PasskeyFlow({
-  onBack,
-  onUseSeed,
-}: {
-  onBack: () => void;
-  onUseSeed: () => void;
-}) {
+function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () => void }) {
   const { setAccount, setBalance, saveWithPrf } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'intro' | 'registering' | 'creating'>('intro');
@@ -451,8 +439,7 @@ function PasskeyFlow({
         );
       } else {
         const cancelled =
-          err instanceof Error &&
-          (err.name === 'NotAllowedError' || err.name === 'AbortError');
+          err instanceof Error && (err.name === 'NotAllowedError' || err.name === 'AbortError');
         setError(
           cancelled
             ? 'Passkey registration cancelled.'

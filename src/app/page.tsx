@@ -11,7 +11,15 @@ import { useAuthStore } from '@/stores/auth';
 import { authenticatePasskey } from '@/lib/crypto/passkey';
 
 export default function Home() {
-  const { account, isLocked, hasStoredWallet, storedAuthMethod, checkForStoredWallet, unlockWithPassword, unlockWithPrf } = useWalletStore();
+  const {
+    account,
+    isLocked,
+    hasStoredWallet,
+    storedAuthMethod,
+    checkForStoredWallet,
+    unlockWithPassword,
+    unlockWithPrf,
+  } = useWalletStore();
   const { hydrate } = useAuthStore();
   const [hydrated, setHydrated] = useState(false);
 
@@ -81,8 +89,7 @@ function UnlockScreen({
       await onUnlockPrf(result.prfOutput);
     } catch (err) {
       const cancelled =
-        err instanceof Error &&
-        (err.name === 'NotAllowedError' || err.name === 'AbortError');
+        err instanceof Error && (err.name === 'NotAllowedError' || err.name === 'AbortError');
       setError(cancelled ? 'Authentication cancelled.' : 'Failed to unlock wallet');
     } finally {
       setUnlocking(false);
@@ -128,9 +135,7 @@ function UnlockScreen({
             </>
           )}
 
-          {error && (
-            <p className="text-center text-[12px] text-bad">{error}</p>
-          )}
+          {error && <p className="text-center text-[12px] text-bad">{error}</p>}
         </div>
       </div>
     </div>
