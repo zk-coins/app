@@ -10,8 +10,8 @@ import {
   ArrowUpRight,
   ArrowDownLeft,
   Plus,
-  Zap,
   Receipt,
+  CircleDollarSign,
 } from 'lucide-react';
 import { Logo } from '../icons/Logo';
 import { PwaPrompt } from '../PwaPrompt';
@@ -20,14 +20,11 @@ import { api } from '@/lib/api/client';
 import { formatBtc, formatBtcCompact, formatUsd, truncateAddress } from '@/lib/format';
 
 const HIDDEN = '••••';
-const FAUCET_AMOUNT = 10_000;
 
 export function WalletScreen() {
-  const { account, transactions, setBalance, addTransaction } = useWalletStore();
+  const { account, transactions, setBalance } = useWalletStore();
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [fauceting, setFauceting] = useState(false);
-  const [faucetError, setFaucetError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!account) return;
@@ -51,30 +48,6 @@ export function WalletScreen() {
       setTimeout(() => setCopied(false), 1500);
     });
   }, [account]);
-
-  const faucet = useCallback(async () => {
-    if (!account || fauceting) return;
-    setFauceting(true);
-    setFaucetError(null);
-    try {
-      const res = await api.mint(account.address);
-      const { balance } = await api.balance(account.address);
-      setBalance(balance);
-      addTransaction({
-        id: res.proof_id?.toString() ?? `mint-${Date.now()}`,
-        type: 'mint',
-        amount: FAUCET_AMOUNT,
-        timestamp: Date.now(),
-        proofId: res.proof_id?.toString(),
-      });
-    } catch (err) {
-      setFaucetError(
-        err instanceof Error ? err.message : 'Faucet unreachable. Try again later.',
-      );
-    } finally {
-      setFauceting(false);
-    }
-  }, [account, fauceting, setBalance, addTransaction]);
 
   const sats = account?.balance ?? 0;
   const btc = formatBtc(sats);
@@ -130,26 +103,22 @@ export function WalletScreen() {
       {account && sats <= 0 && (
         <div className="flex items-start gap-3 rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-bitcoin/10 text-bitcoin">
-            <Zap size={14} strokeWidth={2} />
+            <CircleDollarSign size={14} strokeWidth={2} />
           </div>
           <div className="min-w-0 flex-1">
             <p className="text-[12px] font-semibold text-ink">Wallet is empty</p>
             <p className="mt-0.5 text-[11px] leading-relaxed text-ink2">
-              Add sats via the testnet faucet (mock-prover phase) or buy private BTC through{' '}
+              Buy private BTC through{' '}
               <Link href="/apps" className="text-bitcoin hover:underline">
                 DFX
               </Link>
+              {' '}or share your address via{' '}
+              <Link href="/receive" className="text-bitcoin hover:underline">
+                Receive
+              </Link>
               .
             </p>
-            {faucetError && <p className="mt-1 text-[10px] text-bad">{faucetError}</p>}
           </div>
-          <button
-            onClick={faucet}
-            disabled={fauceting}
-            className="shrink-0 self-center rounded-md border border-bitcoin px-3 py-1.5 text-[11px] font-semibold tracking-wide text-bitcoin transition-colors hover:bg-bitcoin/10 disabled:opacity-50"
-          >
-            {fauceting ? '…' : '+ Faucet'}
-          </button>
         </div>
       )}
 

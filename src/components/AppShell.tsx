@@ -37,11 +37,11 @@ export function AppShell({
         }}
       />
 
-      {/* Card column — full bleed on mobile, framed on desktop */}
+      {/* Card column — full bleed on mobile, framed on desktop+ */}
       <div
         className={`relative mx-auto ${maxWidth}
           px-6 pt-12 pb-8
-          lg:my-10 lg:rounded-xl lg:border lg:border-line2 lg:bg-bg/80 lg:px-10 lg:pt-14 lg:pb-10 lg:shadow-[0_20px_80px_-20px_rgba(247,147,26,0.08)] lg:backdrop-blur-sm`}
+          md:my-10 md:rounded-2xl md:border md:border-ink md:bg-surface md:px-10 md:pt-14 md:pb-10 md:shadow-[0_20px_80px_-20px_rgba(247,147,26,0.12)] md:backdrop-blur-sm`}
       >
         {children}
       </div>
