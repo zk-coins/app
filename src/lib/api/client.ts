@@ -200,7 +200,7 @@ export const api = {
 
   claimUsername: async (params: ClaimUsernameParams) => {
     const signed = await signClaimRequest(params);
-    return request<UsernameResponse>('/api/username', {
+    return request<UsernameResponse>('/api/username/claim', {
       method: 'POST',
       body: JSON.stringify({
         username: params.username,
@@ -213,5 +213,5 @@ export const api = {
   },
 
   resolveUsername: (username: string) =>
-    request<UsernameResponse>(`/api/username/${encodeURIComponent(username)}`),
+    request<UsernameResponse>(`/api/username/resolve/${encodeURIComponent(username)}`),
 };
