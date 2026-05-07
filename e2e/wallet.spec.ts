@@ -47,7 +47,7 @@ test.describe('Wallet', () => {
 
   test('header shows branding', async ({ page }) => {
     await expect(page.getByText('Welcome to zkCoins')).toBeVisible();
-    await expect(page.getByText(/Shielded CSV/)).toBeVisible();
+    await expect(page.getByText(/Shielded CSV · v/)).toBeVisible();
   });
 
   test('footer has navigation links', async ({ page }) => {

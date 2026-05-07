@@ -66,7 +66,7 @@ test.describe('WebAuthn Passkey', () => {
     await expect(page.getByText('OTHER LOGIN OPTIONS')).toBeVisible();
 
     // Go back to welcome
-    await page.getByText('Back').click();
+    await page.getByRole('button', { name: /back/i }).first().click();
 
     // Restore path: Welcome -> Restore existing wallet -> seed import (with "RESTORE WITH PASSKEY")
     await page.getByText('Restore existing wallet').click();
