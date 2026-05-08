@@ -89,7 +89,7 @@ test.describe('WebAuthn Passkey', () => {
     // Wait for the passkey operation to complete.
     // Virtual authenticators may not support the PRF extension, so we check for
     // either a successful flow or an error message.
-    const success = page.locator('text=Balance');
+    const success = page.getByRole('link', { name: /send/i });
     const prfError = page.getByText(/prf extension/i);
     const genericError = page.locator('.text-bad');
 

@@ -10,6 +10,7 @@ import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
+import { APP_VERSION } from '@/lib/format';
 import {
   createPasskey,
   authenticatePasskey,
@@ -169,7 +170,7 @@ function Welcome({ onNext, onRestore }: { onNext: () => void; onRestore: () => v
         </div>
 
         <p className="mt-8 text-center mono text-[11px] tracking-[0.3em] text-ink2 uppercase">
-          Shielded CSV · v0.9.0
+          Shielded CSV · v{APP_VERSION}
         </p>
       </div>
     </div>

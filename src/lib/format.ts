@@ -1,3 +1,5 @@
+export const APP_VERSION = '0.9.0';
+
 export const SATS_PER_BTC = 100_000_000;
 
 export function satsToBtc(sats: number): number {

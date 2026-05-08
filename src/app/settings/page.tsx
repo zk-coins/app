@@ -1,9 +1,11 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/AppShell';
 import { FooterLinks } from '@/components/FooterLinks';
 import { useNetworkStore } from '@/stores/network';
+import { APP_VERSION } from '@/lib/format';
 import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
 import { deleteCredential } from '@/lib/crypto/storage';
@@ -67,9 +69,19 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 }
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { networkName } = useNetworkStore();
   const { account, deleteWallet } = useWalletStore();
   const { authMethod, reset: resetAuth } = useAuthStore();
+
+  useEffect(() => {
+    if (!account && typeof window !== 'undefined') {
+      const t = setTimeout(() => {
+        if (!useWalletStore.getState().account) router.replace('/');
+      }, 100);
+      return () => clearTimeout(t);
+    }
+  }, [account, router]);
 
   const onDisconnect = async () => {
     if (
@@ -162,7 +174,7 @@ export default function SettingsPage() {
         <Section title="About">
           <div className="flex items-start justify-between gap-6 py-4">
             <p className="text-[13px] font-medium text-ink">Version</p>
-            <p className="mono text-[12px] text-ink2">v0.9.0</p>
+            <p className="mono text-[12px] text-ink2">v{APP_VERSION}</p>
           </div>
           {networkName && (
             <div className="flex items-start justify-between gap-6 py-4">
