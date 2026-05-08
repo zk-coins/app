@@ -202,6 +202,26 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   checkForStoredWallet: async () => {
+    // If we already have an unlocked account in memory, this is a re-mount
+    // (e.g., navigating /apps -> /). Don't re-lock — just refresh the
+    // hasStoredWallet flag without touching isLocked.
+    const current = get();
+    if (current.account && !current.isLocked) {
+      try {
+        const stored = await loadEncryptedWallet();
+        if (stored) {
+          set({
+            hasStoredWallet: true,
+            storedAddress: stored.address,
+            storedAuthMethod: stored.authMethod,
+          });
+        }
+      } catch {
+        // IndexedDB not available
+      }
+      return;
+    }
+
     // Check IndexedDB for encrypted wallet
     try {
       const stored = await loadEncryptedWallet();
