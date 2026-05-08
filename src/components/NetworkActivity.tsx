@@ -68,13 +68,13 @@ export function NetworkActivity({ samples, className }: Props) {
         {/* Y-axis labels */}
         <g className="mono" fill="#a1a1aa" fontSize="12" letterSpacing="1">
           <text x={PAD.left - 12} y={PAD.top + 4} textAnchor="end">
-            24 MB/s
+            24 KB/s
           </text>
           <text x={PAD.left - 12} y={Y_MID + 4} textAnchor="end">
-            12 MB/s
+            0
           </text>
           <text x={PAD.left - 12} y={PAD.top + CHART_H + 4} textAnchor="end">
-            0 MB/s
+            12 KB/s
           </text>
         </g>
 
@@ -88,7 +88,7 @@ export function NetworkActivity({ samples, className }: Props) {
           ))}
         </g>
 
-        {/* Center baseline (12 MB/s) */}
+        {/* Center baseline (0 — idle) */}
         <line x1={PAD.left} x2={PAD.left + CHART_W} y1={Y_MID} y2={Y_MID} stroke="#3f3f46" />
 
         {/* OUT — mirrored below midline, drawn first so IN sits on top visually */}
