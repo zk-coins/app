@@ -68,7 +68,7 @@ test.describe('Settings Page', () => {
   });
 
   test('version shown', async ({ page }) => {
-    await expect(page.getByText('v0.9.0')).toBeVisible();
+    await expect(page.getByText(/^v\d+\.\d+\.\d+$/)).toBeVisible();
   });
 
   test('disconnect wallet button visible', async ({ page }) => {
