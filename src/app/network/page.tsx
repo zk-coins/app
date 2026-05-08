@@ -73,8 +73,8 @@ export default function NetworkPage() {
         <div>
           <h1 className="text-[26px] font-bold tracking-tight text-ink">Network activity</h1>
           <p className="mt-1 text-[13px] text-ink2">
-            Live throughput across the zkCoins network. IN is proof traffic
-            from clients; OUT is state broadcasts back to them.
+            Live throughput across the zkCoins network. IN is proof traffic from clients; OUT is
+            state broadcasts back to them.
           </p>
         </div>
 
@@ -110,12 +110,11 @@ export default function NetworkPage() {
 
         {source === 'simulated' && (
           <p className="rounded-md border border-line2 bg-bg p-3 text-[11px] leading-relaxed text-ink3">
-            The zkCoins explorer is not yet live. This panel is wired to the
-            real endpoint at <span className="mono text-ink2">/network/activity</span>{' '}
-            and will switch to real data automatically once{' '}
-            <span className="mono text-ink2">NEXT_PUBLIC_EXPLORER_URL</span> is set
-            and the endpoint responds. Until then the chart shows a deterministic
-            6-hour simulation that ticks every {POLL_MS / 1000}s.
+            The zkCoins explorer is not yet live. This panel is wired to the real endpoint at{' '}
+            <span className="mono text-ink2">/network/activity</span> and will switch to real data
+            automatically once <span className="mono text-ink2">NEXT_PUBLIC_EXPLORER_URL</span> is
+            set and the endpoint responds. Until then the chart shows a deterministic 6-hour
+            simulation that ticks every {POLL_MS / 1000}s.
           </p>
         )}
       </div>

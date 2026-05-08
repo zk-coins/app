@@ -67,9 +67,15 @@ export function NetworkActivity({ samples, className }: Props) {
 
         {/* Y-axis labels */}
         <g className="mono" fill="#a1a1aa" fontSize="12" letterSpacing="1">
-          <text x={PAD.left - 12} y={PAD.top + 4} textAnchor="end">24 MB/s</text>
-          <text x={PAD.left - 12} y={Y_MID + 4} textAnchor="end">12 MB/s</text>
-          <text x={PAD.left - 12} y={PAD.top + CHART_H + 4} textAnchor="end">0 MB/s</text>
+          <text x={PAD.left - 12} y={PAD.top + 4} textAnchor="end">
+            24 MB/s
+          </text>
+          <text x={PAD.left - 12} y={Y_MID + 4} textAnchor="end">
+            12 MB/s
+          </text>
+          <text x={PAD.left - 12} y={PAD.top + CHART_H + 4} textAnchor="end">
+            0 MB/s
+          </text>
         </g>
 
         {/* Dashed grid */}
@@ -87,11 +93,25 @@ export function NetworkActivity({ samples, className }: Props) {
 
         {/* OUT — mirrored below midline, drawn first so IN sits on top visually */}
         <path d={outArea} fill="url(#netact-out)" />
-        <path d={outPath} fill="none" stroke="#e4e4e7" strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
+        <path
+          d={outPath}
+          fill="none"
+          stroke="#e4e4e7"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
 
         {/* IN — above midline */}
         <path d={inArea} fill="url(#netact-in)" />
-        <path d={inPath} fill="none" stroke="#f7931a" strokeWidth="2.25" strokeLinejoin="round" strokeLinecap="round" />
+        <path
+          d={inPath}
+          fill="none"
+          stroke="#f7931a"
+          strokeWidth="2.25"
+          strokeLinejoin="round"
+          strokeLinecap="round"
+        />
 
         {/* X-axis time labels (local time) */}
         <g className="mono" fill="#a1a1aa" fontSize="11" letterSpacing="1">
@@ -121,9 +141,7 @@ function Readout({ color, value }: { color: string; value: number }) {
   return (
     <div className="flex items-center gap-3">
       <span className="h-3 w-3 rounded-sm" style={{ backgroundColor: color }} />
-      <span className="mono text-[14px] tabular-nums text-ink">
-        {value.toFixed(1)} KB/s
-      </span>
+      <span className="mono text-[14px] tabular-nums text-ink">{value.toFixed(1)} KB/s</span>
     </div>
   );
 }

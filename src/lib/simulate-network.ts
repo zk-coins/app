@@ -117,7 +117,10 @@ export function buildHistory({
  * keeps flowing forward; IN and OUT share the same waveform, just
  * scaled differently.
  */
-export function nextSample(_history: NetworkSample[], rng: () => number = Math.random): NetworkSample {
+export function nextSample(
+  _history: NetworkSample[],
+  rng: () => number = Math.random,
+): NetworkSample {
   const ts = Date.now();
   const t = ts / 1000;
   const w =
