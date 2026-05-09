@@ -17,7 +17,7 @@ Web application for [zkcoins.app](https://zkcoins.app) — private Bitcoin trans
 | Framework | Next.js 14 (App Router)   | SSR, standalone Docker output, largest React ecosystem      |
 | Language  | TypeScript (strict)       | Type safety                                                 |
 | Styling   | Tailwind CSS              | Dark theme (#0a0a0a), Bitcoin orange (#f7931a)              |
-| State     | Zustand                   | Minimal boilerplate, localStorage persistence               |
+| State     | Zustand                   | Minimal boilerplate, encrypted IndexedDB persistence        |
 | Crypto    | Rust → WASM               | secp256k1 + BIP32 from bitcoin crate (same as Bitcoin Core) |
 | PWA       | Service Worker + Manifest | Installable, offline-capable, standalone mode               |
 
@@ -45,16 +45,30 @@ npm run dev    # http://localhost:3090
 src/
 ├── app/                # Next.js App Router (layout, pages)
 ├── components/         # React components
-│   ├── Header.tsx      # Logo + testnet badge
+│   ├── Header.tsx      # Logo + network badge
 │   ├── WalletCard.tsx  # Balance display + account creation
 │   ├── SendForm.tsx    # Coin transfer form
-│   └── TransactionLog.tsx
+│   ├── TransactionLog.tsx
+│   ├── SeedPhraseSetup.tsx   # 12-word mnemonic generation
+│   ├── SeedPhraseImport.tsx  # Restore from seed phrase
+│   ├── SetPassword.tsx       # Password encryption setup
+│   ├── UnlockWallet.tsx      # Unlock encrypted wallet
+│   ├── PasskeySetup.tsx      # WebAuthn passkey registration
+│   └── Footer.tsx
 ├── hooks/
 │   └── useZkCoins.ts   # WASM integration hook
-├── lib/api/
-│   └── client.ts       # REST API client (backend communication)
+├── lib/
+│   ├── api/
+│   │   └── client.ts   # REST API client (backend communication)
+│   └── crypto/
+│       ├── encryption.ts     # AES-GCM encrypt/decrypt via Web Crypto
+│       ├── key-derivation.ts # PBKDF2 from password, HKDF from passkey PRF
+│       ├── passkey.ts        # WebAuthn credential create/get + PRF
+│       └── storage.ts        # IndexedDB encrypted wallet persistence
 └── stores/
-    └── wallet.ts        # Zustand store (account, transactions)
+    ├── auth.ts          # Zustand store (auth flow state)
+    ├── network.ts       # Zustand store (API URL, network name)
+    └── wallet.ts        # Zustand store (account, encrypted persistence)
 
 packages/zkcoins-wasm/   # TypeScript wrapper for Rust WASM module
 rust/client/             # Rust WASM crate (BIP32, Schnorr, secp256k1)
@@ -63,15 +77,19 @@ public/                  # PWA manifest, service worker, icons
 
 ## WASM Crypto Module
 
-Currently using JS fallback. To build real WASM (requires Rust + LLVM with wasm32):
+Real WASM integration with BIP-32 HD wallet, BIP-39 mnemonics, Schnorr signing, public key derivation, and commitment creation. Falls back to JS crypto if WASM fails to load.
+
+To rebuild WASM (requires Rust + Homebrew LLVM for secp256k1 cross-compilation):
 
 ```bash
 cd rust/client
-CC="/opt/homebrew/opt/llvm/bin/clang" AR="/opt/homebrew/opt/llvm/bin/llvm-ar" \
-  cargo build --target wasm32-unknown-unknown --release
-wasm-bindgen --out-dir ../../packages/zkcoins-wasm/src/pkg --target web \
-  ../target/wasm32-unknown-unknown/release/client.wasm
+CC_wasm32_unknown_unknown="/opt/homebrew/opt/llvm/bin/clang" \
+AR_wasm32_unknown_unknown="/opt/homebrew/opt/llvm/bin/llvm-ar" \
+  wasm-pack build --target web --out-dir ../../packages/zkcoins-wasm/src/pkg
+rm packages/zkcoins-wasm/src/pkg/.gitignore  # wasm-pack generates this, must be removed
 ```
+
+The `pkg/` directory is committed to git (not gitignored) for Docker builds.
 
 ## Docker
 
@@ -79,7 +97,7 @@ wasm-bindgen --out-dir ../../packages/zkcoins-wasm/src/pkg --target web \
 docker build -t zkcoin/app .
 docker run -p 3090:3090 \
   -e NEXT_PUBLIC_API_URL=https://api.zkcoins.app \
-  -e NEXT_PUBLIC_NETWORK=mainnet \
+  -e NEXT_PUBLIC_EXPLORER_URL=https://explorer.zkcoins.app \
   zkcoin/app
 ```
 
@@ -94,7 +112,7 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 | `deploy-prd.yaml`      | Push main        | Docker → `zkcoin/app:latest` → PRD server |
 | `auto-release-pr.yaml` | Push develop     | Creates Release PR (develop → main)       |
 
-## Signup Flow (Planned)
+## Signup Flow
 
 Two methods, one wallet:
 
@@ -105,11 +123,9 @@ Details: [docs.zkcoins.app/architecture/signup-flow](https://docs.zkcoins.app/ar
 
 ## Open Tasks
 
-- [ ] WASM real integration (currently JS fallback for Schnorr + BIP32)
-- [ ] Frontend ↔ API connection (CORS headers in server)
-- [ ] BIP-39 seed phrase signup UI (12 words)
-- [ ] Passkey signup (WebAuthn)
-- [ ] Encrypted key storage (IndexedDB + AES-GCM, replace localStorage)
+- [x] WASM real integration (BIP-32, BIP-39, Schnorr, commitment creation)
+- [x] Two-phase send flow (send → commit)
+- [x] E2E tests (Playwright) + unit tests (Vitest)
 - [ ] Account backup/restore
 - [ ] Explorer app (explorer.zkcoins.app)
 

@@ -110,6 +110,77 @@ pub fn mnemonic_from_entropy(entropy_hex: &str) -> Result<String, JsValue> {
     Ok(mnemonic.to_string())
 }
 
+/// Derive the raw 32-byte private key at a given BIP32 index.
+/// Returns hex-encoded private key bytes for use with sign_schnorr.
+#[wasm_bindgen]
+pub fn derive_signing_key(xpriv_str: &str, index: u32) -> Result<String, JsValue> {
+    let xpriv = Xpriv::from_str(xpriv_str)
+        .map_err(|e| JsValue::from_str(&format!("Invalid xpriv: {}", e)))?;
+    let child = xpriv
+        .derive_priv(&shared::SECP256K1, &[bitcoin::bip32::ChildNumber::Normal { index }])
+        .map_err(|e| JsValue::from_str(&format!("Failed to derive key: {}", e)))?;
+    Ok(hex::encode(child.private_key.secret_bytes()))
+}
+
+/// Create a commitment for the two-phase send flow.
+/// Takes the proof data (account_state_hash + output_coins_root as hex) and the signing key index.
+/// Returns JSON: { public_key, signature, message } (all hex-encoded).
+#[wasm_bindgen]
+pub fn create_commitment(
+    xpriv_str: &str,
+    num_pubkeys: u32,
+    account_state_hash_hex: &str,
+    output_coins_root_hex: &str,
+) -> Result<String, JsValue> {
+    use sha2::{Digest, Sha256};
+
+    let xpriv = Xpriv::from_str(xpriv_str)
+        .map_err(|e| JsValue::from_str(&format!("Invalid xpriv: {}", e)))?;
+
+    // Derive the signing key at num_pubkeys (the key used for this send)
+    let child = xpriv
+        .derive_priv(&shared::SECP256K1, &[bitcoin::bip32::ChildNumber::Normal { index: num_pubkeys }])
+        .map_err(|e| JsValue::from_str(&format!("Failed to derive key: {}", e)))?;
+    let secret_key = child.private_key;
+
+    // Build message = account_state_hash || output_coins_root (64 bytes)
+    let ash = hex::decode(account_state_hash_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid ash hex: {}", e)))?;
+    let ocr = hex::decode(output_coins_root_hex)
+        .map_err(|e| JsValue::from_str(&format!("Invalid ocr hex: {}", e)))?;
+
+    let mut message = Vec::with_capacity(ash.len() + ocr.len());
+    message.extend_from_slice(&ash);
+    message.extend_from_slice(&ocr);
+
+    // Hash the message for signing (matches server's Commitment::new behavior)
+    let msg_hash: [u8; 32] = Sha256::digest(&message).into();
+    let msg = Message::from_digest_slice(&msg_hash)
+        .map_err(|e| JsValue::from_str(&format!("Invalid message: {}", e)))?;
+
+    // Sign
+    let secp = Secp256k1::new();
+    let keypair = bitcoin::secp256k1::Keypair::from_secret_key(&secp, &secret_key);
+    let signature = secp.sign_schnorr_no_aux_rand(&msg, &keypair);
+    let public_key = keypair.public_key();
+
+    #[derive(Serialize)]
+    struct CommitmentData {
+        public_key: String,
+        signature: String,
+        message: String,
+    }
+
+    let result = CommitmentData {
+        public_key: hex::encode(public_key.serialize()),
+        signature: hex::encode(signature.as_ref()),
+        message: hex::encode(&message),
+    };
+
+    serde_json::to_string(&result)
+        .map_err(|e| JsValue::from_str(&format!("Failed to serialize: {}", e)))
+}
+
 /// Sign a 32-byte hash with a Schnorr signature.
 /// Both inputs are hex-encoded 32-byte strings.
 /// Returns hex-encoded Schnorr signature.

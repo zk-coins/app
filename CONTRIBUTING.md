@@ -30,13 +30,22 @@ app/
 │   │   ├── Header.tsx
 │   │   ├── WalletCard.tsx
 │   │   ├── SendForm.tsx
-│   │   └── TransactionLog.tsx
+│   │   ├── TransactionLog.tsx
+│   │   ├── SeedPhraseSetup.tsx
+│   │   ├── SeedPhraseImport.tsx
+│   │   ├── SetPassword.tsx
+│   │   ├── UnlockWallet.tsx
+│   │   ├── PasskeySetup.tsx
+│   │   └── Footer.tsx
 │   ├── hooks/             # React hooks
 │   │   └── useZkCoins.ts  # WASM integration
 │   ├── lib/
-│   │   └── api/           # REST API client (backend communication)
+│   │   ├── api/           # REST API client (backend communication)
+│   │   └── crypto/        # Encryption, key derivation, passkey, storage
 │   └── stores/            # Zustand state management
-│       └── wallet.ts
+│       ├── auth.ts        # Auth flow state
+│       ├── network.ts     # API URL, network name
+│       └── wallet.ts      # Account, encrypted persistence
 ├── packages/
 │   └── zkcoins-wasm/      # TypeScript wrapper for Rust WASM module
 │       └── src/
@@ -160,9 +169,9 @@ export function MyComponent() {
 ### State Management
 
 - **Zustand** for all application state
-- **localStorage persistence** via `saveToStorage()` / `loadFromStorage()`
+- **Encrypted IndexedDB persistence** via `saveEncryptedWallet()` / `loadEncryptedWallet()` (AES-GCM)
 - **No React Context** for state — Zustand stores are global singletons
-- Store slices: `account`, `transactions`, `isLoading`, `error`
+- Wallet state: `account`, `transactions`, `isLoading`, `isLocked`, `hasStoredWallet`, `storedAddress`, `storedAuthMethod`, `error`
 
 ### API Client
 
@@ -171,8 +180,8 @@ All backend communication goes through `src/lib/api/client.ts`:
 ```typescript
 import { api } from '@/lib/api/client';
 
-await api.mint({ address });
-await api.send({ sender, recipient, amount, ... });
+await api.mint(address);
+await api.send({ account_address, recipient, amount, public_key, next_public_key });
 const { balance } = await api.balance(address);
 ```
 
@@ -213,7 +222,7 @@ The app runs as a standalone Next.js container:
 docker build -t zkcoin/app .
 docker run -p 3090:3090 \
   -e NEXT_PUBLIC_API_URL=https://api.zkcoins.app \
-  -e NEXT_PUBLIC_NETWORK=mainnet \
+  -e NEXT_PUBLIC_EXPLORER_URL=https://explorer.zkcoins.app \
   zkcoin/app
 ```
 

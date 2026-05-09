@@ -3,94 +3,55 @@ import { test, expect } from '@playwright/test';
 test.describe('Wallet', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await page.evaluate(() => {
+    await page.evaluate(async () => {
       Object.keys(localStorage)
         .filter((k) => k.startsWith('zkcoins'))
         .forEach((k) => localStorage.removeItem(k));
+      const dbs = await indexedDB.databases();
+      for (const db of dbs) {
+        if (db.name) indexedDB.deleteDatabase(db.name);
+      }
     });
     await page.reload({ waitUntil: 'networkidle' });
   });
 
-  test('loads landing page with Create Account button', async ({ page }) => {
-    await expect(page.getByRole('button', { name: /create account/i })).toBeVisible();
-    await expect(page.getByText('Create Wallet')).toBeVisible();
+  test('loads landing page with wallet creation options', async ({ page }) => {
+    await expect(page.getByText('Welcome to zkCoins')).toBeVisible();
+    await expect(page.getByText('CREATE WALLET')).toBeVisible();
+    await expect(page.getByText('Restore existing wallet')).toBeVisible();
   });
 
-  test('creates account with real WASM crypto', async ({ page }) => {
-    // Track API requests
-    const apiCalls: { url: string; method: string; body?: string; status?: number }[] = [];
-    page.on('request', (req) => {
-      if (req.url().includes('/api/')) {
-        apiCalls.push({ url: req.url(), method: req.method(), body: req.postData() ?? undefined });
-      }
-    });
-    page.on('response', (res) => {
-      const call = apiCalls.find(
-        (c) => c.url === res.url() && c.method === res.request().method() && !c.status,
-      );
-      if (call) call.status = res.status();
-    });
-
-    await page.getByRole('button', { name: /create account/i }).click();
-
-    // Wait for account creation (WASM init + key generation + API call attempt)
-    await expect(page.getByText('Balance')).toBeVisible({ timeout: 15_000 });
-    await expect(page.getByText('Address', { exact: true })).toBeVisible();
-
-    // Verify xpriv was stored in localStorage (WASM generated real keys)
-    const walletData = await page.evaluate(() => {
-      const data = localStorage.getItem('zkcoins_wallet');
-      return data ? JSON.parse(data) : null;
-    });
-    expect(walletData).not.toBeNull();
-    expect(walletData.account.xpriv).toContain('xprv');
-    expect(walletData.account.address).toMatch(/^[0-9a-f]{64}$/);
-    expect(walletData.account.numPubkeys).toBe(0);
-
-    // Verify mint API was called with correct field names
-    const mintCall = apiCalls.find((c) => c.url.includes('/api/mint'));
-    expect(mintCall).toBeDefined();
-    expect(mintCall!.method).toBe('POST');
-    const mintBody = JSON.parse(mintCall!.body!);
-    expect(mintBody.account_address).toMatch(/^[0-9a-f]{64}$/);
-    expect(mintBody.amount).toBe(10_000);
+  test('navigates to seed phrase creation', async ({ page }) => {
+    // Welcome -> Create Wallet -> Passkey screen -> OTHER LOGIN OPTIONS -> Seed
+    await page.getByText('CREATE WALLET').click();
+    await expect(page.getByText('Use a passkey')).toBeVisible();
+    await page.getByText('OTHER LOGIN OPTIONS').click();
+    await expect(page.getByText('Your seed phrase')).toBeVisible();
   });
 
-  test('WASM module loads on account creation', async ({ page }) => {
-    await page.getByRole('button', { name: /create account/i }).click();
-    await expect(page.getByText('Balance')).toBeVisible({ timeout: 15_000 });
-
-    const wasmLoaded = await page.evaluate(() => {
-      const perf = performance.getEntriesByType('resource') as PerformanceResourceTiming[];
-      return perf.some((e) => e.name.includes('.wasm'));
-    });
-    expect(wasmLoaded).toBe(true);
+  test('navigates to seed phrase import', async ({ page }) => {
+    await page.getByText('Restore existing wallet').click();
+    await expect(page.getByText('Restore wallet')).toBeVisible();
+    await expect(page.getByPlaceholder('Enter your 12 words')).toBeVisible();
   });
 
-  test('faucet button calls mint API', async ({ page }) => {
-    // Create account first
-    const apiCalls: { url: string; method: string; body?: string }[] = [];
-    page.on('request', (req) => {
-      if (req.url().includes('/api/')) {
-        apiCalls.push({ url: req.url(), method: req.method(), body: req.postData() ?? undefined });
-      }
-    });
+  test('generates 12-word mnemonic', async ({ page }) => {
+    await page.getByText('CREATE WALLET').click();
+    await page.getByText('OTHER LOGIN OPTIONS').click();
+    await expect(page.getByText('Your seed phrase')).toBeVisible({ timeout: 15_000 });
+    // Tap to reveal the words
+    await page.getByText('Tap to reveal').click();
+    const words = await page.locator('.grid > div').count();
+    expect(words).toBe(12);
+  });
 
-    await page.getByRole('button', { name: /create account/i }).click();
-    await expect(page.getByText('Balance')).toBeVisible({ timeout: 15_000 });
-    await page.waitForTimeout(1000);
+  test('header shows branding', async ({ page }) => {
+    await expect(page.getByText('Welcome to zkCoins')).toBeVisible();
+    await expect(page.getByText(/Shielded CSV · v/)).toBeVisible();
+  });
 
-    // Reset tracking for faucet click
-    const callsBefore = apiCalls.length;
-    await page.getByRole('button', { name: /faucet/i }).click();
-    await page.waitForTimeout(3000);
-
-    // Verify faucet triggered another mint call
-    const faucetCalls = apiCalls.slice(callsBefore);
-    const faucetMint = faucetCalls.find((c) => c.url.includes('/api/mint'));
-    expect(faucetMint).toBeDefined();
-    expect(faucetMint!.method).toBe('POST');
-    const body = JSON.parse(faucetMint!.body!);
-    expect(body.account_address).toMatch(/^[0-9a-f]{64}$/);
+  test('footer has navigation links', async ({ page }) => {
+    await expect(page.getByRole('link', { name: 'Docs' })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'GitHub' })).toBeVisible();
   });
 });

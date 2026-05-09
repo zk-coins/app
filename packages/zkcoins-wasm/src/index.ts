@@ -17,14 +17,27 @@ export interface PublicKeys {
   nextPublicKey: string;
 }
 
+export interface CommitmentData {
+  publicKey: string;
+  signature: string;
+  message: string;
+}
+
 export interface ZkCoinsWasm {
   createAccount(): Promise<AccountData>;
   createAccountFromMnemonic(mnemonic: string, passphrase?: string): Promise<AccountData>;
   generateMnemonic(): string;
   validateMnemonic(phrase: string): boolean;
   mnemonicFromEntropy(entropyHex: string): string;
+  deriveSigningKey(xpriv: string, index: number): string;
   signSchnorr(privateKeyHex: string, hashHex: string): string;
   derivePublicKeys(xpriv: string, numPubkeys: number): PublicKeys;
+  createCommitment(
+    xpriv: string,
+    numPubkeys: number,
+    accountStateHash: string,
+    outputCoinsRoot: string,
+  ): CommitmentData;
   isWasm: boolean;
 }
 
@@ -60,6 +73,7 @@ export async function initWasm(): Promise<ZkCoinsWasm> {
       generateMnemonic: () => wasm.generate_mnemonic(),
       validateMnemonic: (phrase: string) => wasm.validate_mnemonic(phrase),
       mnemonicFromEntropy: (entropyHex: string) => wasm.mnemonic_from_entropy(entropyHex),
+      deriveSigningKey: (xpriv: string, index: number) => wasm.derive_signing_key(xpriv, index),
       signSchnorr: (privateKeyHex: string, hashHex: string) =>
         wasm.sign_schnorr(privateKeyHex, hashHex),
       derivePublicKeys: (xpriv: string, numPubkeys: number) => {
@@ -70,6 +84,20 @@ export async function initWasm(): Promise<ZkCoinsWasm> {
           nextPublicKey: data.next_public_key,
         };
       },
+      createCommitment: (
+        xpriv: string,
+        numPubkeys: number,
+        accountStateHash: string,
+        outputCoinsRoot: string,
+      ) => {
+        const json = wasm.create_commitment(xpriv, numPubkeys, accountStateHash, outputCoinsRoot);
+        const data = JSON.parse(json);
+        return {
+          publicKey: data.public_key,
+          signature: data.signature,
+          message: data.message,
+        };
+      },
     };
   } catch {
     wasmModule = createJsFallback();
@@ -78,34 +106,38 @@ export async function initWasm(): Promise<ZkCoinsWasm> {
   return wasmModule;
 }
 
+const WASM_REQUIRED =
+  'Cryptography module failed to load — please reload the page or use a modern browser.';
+
 function createJsFallback(): ZkCoinsWasm {
   return {
     isWasm: false,
     createAccount: async () => {
-      const randomBytes = new Uint8Array(32);
-      crypto.getRandomValues(randomBytes);
-      const address = Array.from(randomBytes)
-        .map((b) => b.toString(16).padStart(2, '0'))
-        .join('');
-      return { address, xpriv: '', numPubkeys: 0 };
+      throw new Error(WASM_REQUIRED);
     },
     createAccountFromMnemonic: async () => {
-      throw new Error('Mnemonic account creation requires WASM module');
+      throw new Error(WASM_REQUIRED);
     },
     generateMnemonic: () => {
-      throw new Error('Mnemonic generation requires WASM module');
+      throw new Error(WASM_REQUIRED);
     },
     validateMnemonic: () => {
-      throw new Error('Mnemonic validation requires WASM module');
+      throw new Error(WASM_REQUIRED);
     },
     mnemonicFromEntropy: () => {
-      throw new Error('Mnemonic from entropy requires WASM module');
+      throw new Error(WASM_REQUIRED);
+    },
+    deriveSigningKey: () => {
+      throw new Error(WASM_REQUIRED);
     },
     signSchnorr: () => {
-      throw new Error('Schnorr signing requires WASM module');
+      throw new Error(WASM_REQUIRED);
     },
     derivePublicKeys: () => {
-      throw new Error('Public key derivation requires WASM module');
+      throw new Error(WASM_REQUIRED);
+    },
+    createCommitment: () => {
+      throw new Error(WASM_REQUIRED);
     },
   };
 }

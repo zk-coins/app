@@ -1,62 +1,45 @@
 import { create } from 'zustand';
+import { loadCredential } from '@/lib/crypto/storage';
 
 export type AuthMethod = 'passkey' | 'seed' | null;
 
 interface AuthState {
   authMethod: AuthMethod;
   credentialId: string | null;
-  isLocked: boolean;
+  isHydrated: boolean;
 
   setAuth: (method: AuthMethod, credentialId?: string) => void;
-  lock: () => void;
-  unlock: () => void;
   reset: () => void;
-  loadFromStorage: () => void;
-  saveToStorage: () => void;
+  hydrate: () => Promise<void>;
 }
 
-const AUTH_STORAGE_KEY = 'zkcoins_auth';
-
-export const useAuthStore = create<AuthState>((set, get) => ({
+export const useAuthStore = create<AuthState>((set) => ({
   authMethod: null,
   credentialId: null,
-  isLocked: false,
+  isHydrated: false,
 
   setAuth: (method, credentialId) => {
-    set({ authMethod: method, credentialId: credentialId ?? null, isLocked: false });
-    get().saveToStorage();
+    set({ authMethod: method, credentialId: credentialId ?? null });
   },
-
-  lock: () => set({ isLocked: true }),
-  unlock: () => set({ isLocked: false }),
 
   reset: () => {
-    set({ authMethod: null, credentialId: null, isLocked: false });
-    if (typeof window !== 'undefined') {
-      localStorage.removeItem(AUTH_STORAGE_KEY);
-    }
+    set({ authMethod: null, credentialId: null });
   },
 
-  loadFromStorage: () => {
-    if (typeof window === 'undefined') return;
+  hydrate: async () => {
     try {
-      const stored = localStorage.getItem(AUTH_STORAGE_KEY);
-      if (stored) {
-        const data = JSON.parse(stored);
+      const credential = await loadCredential();
+      if (credential) {
         set({
-          authMethod: data.authMethod ?? null,
-          credentialId: data.credentialId ?? null,
-          isLocked: false,
+          authMethod: 'passkey',
+          credentialId: credential.credentialId,
+          isHydrated: true,
         });
+        return;
       }
     } catch {
-      // ignore
+      // IndexedDB not available
     }
-  },
-
-  saveToStorage: () => {
-    if (typeof window === 'undefined') return;
-    const { authMethod, credentialId } = get();
-    localStorage.setItem(AUTH_STORAGE_KEY, JSON.stringify({ authMethod, credentialId }));
+    set({ isHydrated: true });
   },
 }));
