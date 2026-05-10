@@ -6,8 +6,12 @@ const page = await browser.newPage();
 // Clear state
 await page.goto('https://dev.zkcoins.app');
 await page.evaluate(() => {
-  Object.keys(localStorage).forEach(k => localStorage.removeItem(k));
-  indexedDB.databases().then(dbs => dbs.forEach(db => { if (db.name) indexedDB.deleteDatabase(db.name); }));
+  Object.keys(localStorage).forEach((k) => localStorage.removeItem(k));
+  indexedDB.databases().then((dbs) =>
+    dbs.forEach((db) => {
+      if (db.name) indexedDB.deleteDatabase(db.name);
+    }),
+  );
 });
 await page.reload({ waitUntil: 'networkidle' });
 await page.screenshot({ path: '/tmp/zk-01-landing.png' });

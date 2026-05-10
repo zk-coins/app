@@ -10,7 +10,9 @@ html,
 body {
   background-color: #000000;
   color: #ffffff;
-  font-feature-settings: 'tnum' on, 'cv11' on;
+  font-feature-settings:
+    'tnum' on,
+    'cv11' on;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
