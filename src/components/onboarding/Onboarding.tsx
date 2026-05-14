@@ -19,6 +19,7 @@ import {
 } from '@/lib/crypto/passkey';
 import { deriveMnemonicFromPrf, DERIVATION_VERSION } from '@/lib/crypto/key-derivation';
 import { saveCredential } from '@/lib/crypto/storage';
+import { FEATURES } from '@/lib/features';
 
 /** Small consistent header for onboarding sub-steps. */
 function StepHeader({ onBack }: { onBack?: () => void }) {
@@ -59,19 +60,26 @@ export function Onboarding() {
           md:my-10 md:rounded-2xl md:border md:border-ink md:bg-surface md:px-8 md:py-14 md:shadow-[0_20px_80px_-20px_rgba(247,147,26,0.12)]"
       >
         {step === 'welcome' && (
-          <Welcome onNext={() => setStep('passkey')} onRestore={() => setStep('seed-import')} />
+          <Welcome
+            onNext={() => setStep(FEATURES.PASSKEY ? 'passkey' : 'seed')}
+            onRestore={() => setStep('seed-import')}
+          />
         )}
-        {step === 'passkey' && (
+        {FEATURES.PASSKEY && step === 'passkey' && (
           <PasskeyFlow onBack={() => setStep('welcome')} onUseSeed={() => setStep('seed')} />
         )}
-        {step === 'seed' && <SeedFlow onBack={() => setStep('passkey')} />}
+        {step === 'seed' && (
+          <SeedFlow onBack={() => setStep(FEATURES.PASSKEY ? 'passkey' : 'welcome')} />
+        )}
         {step === 'seed-import' && (
           <SeedImportFlow
             onBack={() => setStep('welcome')}
-            onPasskeyRestore={() => setStep('passkey-restore')}
+            onPasskeyRestore={FEATURES.PASSKEY ? () => setStep('passkey-restore') : undefined}
           />
         )}
-        {step === 'passkey-restore' && <PasskeyRestoreFlow onBack={() => setStep('seed-import')} />}
+        {FEATURES.PASSKEY && step === 'passkey-restore' && (
+          <PasskeyRestoreFlow onBack={() => setStep('seed-import')} />
+        )}
       </div>
 
       {/* Resource links — outside the card on desktop */}
@@ -549,7 +557,7 @@ function SeedImportFlow({
   onPasskeyRestore,
 }: {
   onBack: () => void;
-  onPasskeyRestore: () => void;
+  onPasskeyRestore?: () => void;
 }) {
   const { setAccount, setBalance, saveWithPassword } = useWalletStore();
   const { setAuth } = useAuthStore();
@@ -700,15 +708,17 @@ function SeedImportFlow({
         </p>
       )}
 
-      <div className="text-center">
-        <button
-          onClick={onPasskeyRestore}
-          disabled={stage === 'restoring'}
-          className="py-2 text-[12px] font-medium tracking-wider text-ink2 transition-colors hover:text-bitcoin disabled:opacity-50"
-        >
-          RESTORE WITH PASSKEY
-        </button>
-      </div>
+      {onPasskeyRestore && (
+        <div className="text-center">
+          <button
+            onClick={onPasskeyRestore}
+            disabled={stage === 'restoring'}
+            className="py-2 text-[12px] font-medium tracking-wider text-ink2 transition-colors hover:text-bitcoin disabled:opacity-50"
+          >
+            RESTORE WITH PASSKEY
+          </button>
+        </div>
+      )}
     </div>
   );
 }

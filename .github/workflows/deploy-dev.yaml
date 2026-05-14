@@ -35,6 +35,12 @@ jobs:
           push: true
           tags: ${{ env.DOCKER_TAGS }}
           platforms: linux/arm64
+          build-args: |
+            ENABLE_PASSKEY=true
+            ENABLE_FAUCET=true
+            ENABLE_USERNAMES=true
+            ENABLE_APPS_DIRECTORY=true
+            ENABLE_DEV_ROUTES=true
 
       - name: Install cloudflared
         run: |

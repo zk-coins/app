@@ -2,11 +2,13 @@
 
 import { useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { notFound } from 'next/navigation';
 import { Loader2 } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
 import { initWasm } from '@zkcoins/wasm';
 import { populateDemoHistory } from '@/lib/simulate';
+import { FEATURES } from '@/lib/features';
 
 /**
  * Dev utility: ensures a wallet exists locally, seeds 8 sample transactions
@@ -14,8 +16,15 @@ import { populateDemoHistory } from '@/lib/simulate';
  * a populated state. Useful for screenshots, demos, and design reviews.
  *
  * Visit /simulate to populate.
+ *
+ * Gated by `NEXT_PUBLIC_ENABLE_DEV_ROUTES`. When the flag is statically
+ * `false` at build time, `notFound()` short-circuits before any wallet or
+ * WASM code executes — the gated code path cannot run, regardless of how
+ * the route is reached.
  */
 export default function SimulatePage() {
+  if (!FEATURES.DEV_ROUTES) notFound();
+
   const router = useRouter();
   const { account, setAccount, setBalance, addTransaction } = useWalletStore();
   const ran = useRef(false);

@@ -9,6 +9,7 @@ import { useWalletStore } from '@/stores/wallet';
 import { api, type CommitRequest } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
 import { SATS_PER_BTC, formatBtc, formatBtcCompact } from '@/lib/format';
+import { FEATURES } from '@/lib/features';
 
 /* --- In-flight commit crash recovery --- */
 
@@ -96,17 +97,22 @@ export default function SendPage() {
     setSending(true);
     setError(null);
     try {
-      // Resolve username to address if needed.
+      // Resolve username to address if the recipient looks like one.
+      // Username resolution itself is gated by `NEXT_PUBLIC_ENABLE_USERNAMES`;
+      // when disabled, only raw hex addresses are accepted and the resolver
+      // code (including the `api.resolveUsername` call) is dead.
       let resolvedRecipient = recipient.trim();
-      if (resolvedRecipient.startsWith('$')) {
-        resolvedRecipient = resolvedRecipient.slice(1);
-      }
-      if (resolvedRecipient.endsWith('@zkcoins.app')) {
-        resolvedRecipient = resolvedRecipient.replace('@zkcoins.app', '');
-      }
-      if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
-        const resolved = await api.resolveUsername(resolvedRecipient);
-        resolvedRecipient = resolved.address;
+      if (FEATURES.USERNAMES) {
+        if (resolvedRecipient.startsWith('$')) {
+          resolvedRecipient = resolvedRecipient.slice(1);
+        }
+        if (resolvedRecipient.endsWith('@zkcoins.app')) {
+          resolvedRecipient = resolvedRecipient.replace('@zkcoins.app', '');
+        }
+        if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
+          const resolved = await api.resolveUsername(resolvedRecipient);
+          resolvedRecipient = resolved.address;
+        }
       }
 
       const wasm = await initWasm();
@@ -284,7 +290,7 @@ export default function SendPage() {
             onChange={(e) => setRecipient(e.target.value)}
             spellCheck={false}
             autoComplete="off"
-            placeholder="alice@zkcoins.app"
+            placeholder={FEATURES.USERNAMES ? 'alice@zkcoins.app' : '0x…'}
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
         </div>

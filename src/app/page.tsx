@@ -9,6 +9,7 @@ import { PixelIcon } from '@/components/PixelIcon';
 import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
 import { authenticatePasskey } from '@/lib/crypto/passkey';
+import { FEATURES } from '@/lib/features';
 
 export default function Home() {
   const {
@@ -106,7 +107,7 @@ function UnlockScreen({
         </div>
 
         <div className="mt-10 space-y-4">
-          {authMethod === 'passkey' ? (
+          {FEATURES.PASSKEY && authMethod === 'passkey' ? (
             <button
               onClick={handlePasskeyUnlock}
               disabled={unlocking}

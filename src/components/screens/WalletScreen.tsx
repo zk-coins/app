@@ -19,15 +19,19 @@ import { useWalletStore, type Transaction } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
 import { api } from '@/lib/api/client';
 import { formatBtc, formatBtcCompact, formatUsd, toZkAddress } from '@/lib/format';
+import { FEATURES } from '@/lib/features';
 
 const HIDDEN = '••••';
 
 export function WalletScreen() {
   const { account, transactions, setBalance, setUsername } = useWalletStore();
   const { networkName, setNetworkName } = useNetworkStore();
-  // Faucet must never appear on mainnet. We only enable it once we know the
-  // network and it's anything other than mainnet (testnet, regtest, signet, …).
-  const showFaucet = networkName !== '' && networkName !== 'mainnet';
+  // Faucet is gated at build time by `NEXT_PUBLIC_ENABLE_FAUCET`. When that
+  // flag is off, the entire button — including the mint API call — is dead
+  // code and is removed from the production bundle. The additional runtime
+  // mainnet check is defence in depth: even on a DEV build, never show the
+  // faucet if the connected server happens to report `mainnet`.
+  const showFaucet = FEATURES.FAUCET && networkName !== '' && networkName !== 'mainnet';
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [minting, setMinting] = useState(false);
@@ -43,14 +47,16 @@ export function WalletScreen() {
       .catch(() => {});
   }, [setNetworkName]);
 
-  // Balance + username polling.
+  // Balance polling. Username is only read when the feature is enabled —
+  // when off, the server is not expected to return a username and the
+  // `setUsername` call would be a no-op anyway.
   useEffect(() => {
     if (!account) return;
     const tick = async () => {
       try {
         const res = await api.balance(account.address);
         setBalance(res.balance);
-        if (res.username && !account.username) {
+        if (FEATURES.USERNAMES && res.username && !account.username) {
           setUsername(res.username);
         }
       } catch {
@@ -111,9 +117,11 @@ export function WalletScreen() {
         {account && (
           <div className="mt-2 space-y-1.5">
             <p className="mono text-[12px] text-ink2">
-              {account.username ? `${account.username}@zkcoins.app` : zkAddress}
+              {FEATURES.USERNAMES && account.username
+                ? `${account.username}@zkcoins.app`
+                : zkAddress}
             </p>
-            {!account.username && (
+            {FEATURES.USERNAMES && !account.username && (
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -151,7 +159,9 @@ export function WalletScreen() {
                 </button>
               </div>
             )}
-            {claimError && <p className="text-[11px] text-bad">{claimError}</p>}
+            {FEATURES.USERNAMES && claimError && (
+              <p className="text-[11px] text-bad">{claimError}</p>
+            )}
             <button
               onClick={copyAddress}
               className="inline-flex items-center gap-1.5 mono text-[11px] text-ink3 transition-colors hover:text-ink"
@@ -192,13 +202,21 @@ export function WalletScreen() {
                   </Link>
                   .
                 </>
-              ) : (
+              ) : FEATURES.APPS_DIRECTORY ? (
                 <>
                   Buy private BTC through{' '}
                   <Link href="/apps" className="text-bitcoin hover:underline">
                     DFX
                   </Link>
                   , or share your address via{' '}
+                  <Link href="/receive" className="text-bitcoin hover:underline">
+                    Receive
+                  </Link>
+                  .
+                </>
+              ) : (
+                <>
+                  Share your address via{' '}
                   <Link href="/receive" className="text-bitcoin hover:underline">
                     Receive
                   </Link>

@@ -1,7 +1,9 @@
 'use client';
 
+import { notFound } from 'next/navigation';
 import { Globe, Zap, ExternalLink, type LucideIcon } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
+import { FEATURES } from '@/lib/features';
 
 interface AppEntry {
   name: string;
@@ -34,6 +36,8 @@ const APPS: AppEntry[] = [
 ];
 
 export default function AppsPage() {
+  if (!FEATURES.APPS_DIRECTORY) notFound();
+
   return (
     <AppShell>
       <header className="space-y-1">

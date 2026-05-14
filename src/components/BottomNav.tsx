@@ -3,10 +3,11 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { Wallet, Boxes, Settings, type LucideIcon } from 'lucide-react';
+import { FEATURES } from '@/lib/features';
 
 const TABS: { href: string; label: string; icon: LucideIcon }[] = [
   { href: '/', label: 'Wallet', icon: Wallet },
-  { href: '/apps', label: 'Apps', icon: Boxes },
+  ...(FEATURES.APPS_DIRECTORY ? [{ href: '/apps', label: 'Apps', icon: Boxes }] : []),
   { href: '/settings', label: 'Settings', icon: Settings },
 ];
 
