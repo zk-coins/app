@@ -88,11 +88,12 @@ test.describe('Settings Page', () => {
     page.on('dialog', (dialog) => dialog.accept());
     await page.getByText('Disconnect Wallet').click();
 
-    // Disconnect button should disappear (account is null)
-    await expect(page.getByText('Disconnect Wallet')).not.toBeVisible({ timeout: 10_000 });
-
-    // Navigate to Wallet via bottom nav to reach onboarding
-    await page.getByRole('link', { name: 'Wallet' }).click();
+    // The settings page auto-redirects to `/` once the account becomes null
+    // (~100 ms after deleteWallet resolves). We wait for that navigation
+    // rather than clicking through the bottom nav, which races with the
+    // redirect and intermittently fails when the click lands after the
+    // route has already changed and the nav has disappeared.
+    await page.waitForURL(/\/$/, { timeout: 10_000 });
 
     // Should see the onboarding / CREATE WALLET button
     await expect(page.getByText('CREATE WALLET')).toBeVisible({ timeout: 15_000 });
