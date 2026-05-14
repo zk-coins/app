@@ -23,6 +23,16 @@ Web application for [zkcoins.app](https://zkcoins.app) — private Bitcoin trans
 
 Full rationale: [docs.zkcoins.app/tech-decisions](https://docs.zkcoins.app/tech-decisions)
 
+## Contributing
+
+**New PRs may only merge into `develop` if test coverage is 100% on the activated surface.** Code behind an `NEXT_PUBLIC_ENABLE_*` build-time flag is excluded — feature-gated code does not need to be tested as long as the flag stays off in the PRD build. Concretely:
+
+- `npm run test:coverage` must report `100% lines · 100% statements · 100% functions · 100% branches`. CI enforces this via the `thresholds` block in `vitest.config.ts`.
+- Defensive code that genuinely cannot be reached in happy-dom (SSR guards, IDB `onerror` callbacks, the 2-minute request timeout) is exempted by an inline `/* c8 ignore */` annotation with a one-line reason.
+- The branch is protected on GitHub: a PR cannot be merged while CI is red.
+
+The same rule applies to `zk-coins/server` (gated Cargo features are excluded from the measured scope).
+
 ## Features
 
 User-facing functions, their activation status, and the tests that cover them.
