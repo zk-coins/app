@@ -73,7 +73,7 @@ function saveTransactions(transactions: Transaction[]): void {
 
 export const useWalletStore = create<WalletState>((set, get) => ({
   account: null,
-  transactions: [],
+  transactions: loadTransactions(),
   isLoading: false,
   isLocked: false,
   hasStoredWallet: false,

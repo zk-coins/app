@@ -28,6 +28,17 @@ export default defineConfig({
         'src/lib/api/explorer.ts', // network activity chart (triage: keep)
       ],
       reporter: ['text', 'lcov'],
+      // Coverage baseline for the MVP activated surface. Lines must stay at
+      // 100% — any new untested line in `src/lib/**` or `src/stores/**` is a
+      // CI failure. The other axes are kept just below the current measured
+      // value to allow harmless local fluctuation while still catching real
+      // regressions.
+      thresholds: {
+        lines: 100,
+        statements: 95,
+        functions: 90,
+        branches: 83,
+      },
     },
   },
 });

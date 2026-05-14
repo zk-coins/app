@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useWalletStore } from '@/stores/wallet';
 import type { Account, Transaction } from '@/stores/wallet';
 
@@ -30,6 +30,29 @@ beforeEach(() => {
   });
   // IndexedDB is reset in setup.ts via fresh IDBFactory per test
   localStorage.clear();
+});
+
+describe('wallet store — module load (loadTransactions)', () => {
+  it('hydrates an empty transaction list when localStorage is empty', async () => {
+    localStorage.removeItem('zkcoins_transactions');
+    vi.resetModules();
+    const mod = await import('@/stores/wallet');
+    expect(mod.useWalletStore.getState().transactions).toEqual([]);
+  });
+
+  it('hydrates transactions persisted by a previous session', async () => {
+    localStorage.setItem('zkcoins_transactions', JSON.stringify([testTx]));
+    vi.resetModules();
+    const mod = await import('@/stores/wallet');
+    expect(mod.useWalletStore.getState().transactions).toEqual([testTx]);
+  });
+
+  it('falls back to an empty list when persisted transactions are malformed', async () => {
+    localStorage.setItem('zkcoins_transactions', '{ not valid json');
+    vi.resetModules();
+    const mod = await import('@/stores/wallet');
+    expect(mod.useWalletStore.getState().transactions).toEqual([]);
+  });
 });
 
 describe('wallet store — basic state', () => {
@@ -272,6 +295,52 @@ describe('wallet store — checkForStoredWallet', () => {
     const state = useWalletStore.getState();
     expect(state.hasStoredWallet).toBe(false);
     expect(state.account).toBeNull();
+  });
+
+  it('refreshes stored flags without re-locking on re-mount', async () => {
+    // Simulate a re-mount: the account is already unlocked in memory
+    // (e.g. user navigated away and back) and the encrypted blob still
+    // exists in IndexedDB. checkForStoredWallet should refresh the
+    // hasStoredWallet flag without touching isLocked.
+    const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'ct', iv: 'iv' },
+      authMethod: 'passkey',
+      address: 'b'.repeat(64),
+      createdAt: Date.now(),
+    });
+
+    useWalletStore.setState({
+      account: testAccount,
+      isLocked: false,
+      hasStoredWallet: false,
+      storedAddress: null,
+      storedAuthMethod: null,
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.account).toEqual(testAccount);
+    expect(state.isLocked).toBe(false);
+    expect(state.hasStoredWallet).toBe(true);
+    expect(state.storedAddress).toBe('b'.repeat(64));
+    expect(state.storedAuthMethod).toBe('passkey');
+  });
+
+  it('returns early without setting flags when the unlocked account has no stored blob', async () => {
+    // Re-mount path but IndexedDB is empty — the function should still
+    // return early and leave the existing in-memory state intact.
+    useWalletStore.setState({
+      account: testAccount,
+      isLocked: false,
+      hasStoredWallet: false,
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.account).toEqual(testAccount);
+    expect(state.isLocked).toBe(false);
+    expect(state.hasStoredWallet).toBe(false);
   });
 });
 

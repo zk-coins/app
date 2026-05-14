@@ -240,12 +240,12 @@ Image build vs. container start: the two `_URL` placeholders are baked at build 
 
 ### Tests
 
-| Stack       | Command                 | What it covers                                                                                                                       |
-| ----------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| Vitest + v8 | `npm run test`          | 144 unit tests across `src/lib/**` and `src/stores/**`                                                                               |
-| Coverage    | `npm run test:coverage` | v8 line coverage, scoped to the MVP activated surface. Latest run: **91.1% stmts · 95.5% lines** (291 line-counted lines, 13 missed) |
-| Playwright  | `npm run test:e2e`      | 5 suites — `wallet`, `send-flow`, `webauthn`, `settings`, `visual`. Runs against `E2E_BASE_URL`                                      |
-| Playwright  | `npm run test:visual`   | Visual regression subset only                                                                                                        |
+| Stack       | Command                 | What it covers                                                                                                                                                          |
+| ----------- | ----------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vitest + v8 | `npm run test`          | 144 unit tests across `src/lib/**` and `src/stores/**`                                                                                                                  |
+| Coverage    | `npm run test:coverage` | v8 line coverage, scoped to the MVP activated surface. Latest run: **100% lines · 95.4% stmts · 90.8% fns · 84.0% branches** (291/291 lines). CI fails if `lines < 100` |
+| Playwright  | `npm run test:e2e`      | 5 suites — `wallet`, `send-flow`, `webauthn`, `settings`, `visual`. Runs against `E2E_BASE_URL`                                                                         |
+| Playwright  | `npm run test:visual`   | Visual regression subset only                                                                                                                                           |
 
 The coverage scope excludes `src/components/**`, `src/app/**`, and four files that belong to gated features (`crypto/passkey.ts`, `simulate.ts`, `simulate-network.ts`, `api/explorer.ts`) — see `vitest.config.ts`. Those files still have unit tests that run unconditionally; they are simply not counted toward the MVP coverage figure because the PRD build never reaches them.
 
@@ -253,17 +253,17 @@ Per-file unit coverage of the MVP activated surface (latest run):
 
 | File                               | Line % |
 | ---------------------------------- | ------ |
-| `src/lib/features.ts`              | 0%¹    |
+| `src/lib/features.ts`              | 100%   |
 | `src/lib/format.ts`                | 100%   |
-| `src/lib/api/client.ts`            | 98.6%  |
+| `src/lib/api/client.ts`            | 100%   |
 | `src/lib/crypto/encryption.ts`     | 100%   |
 | `src/lib/crypto/key-derivation.ts` | 100%   |
 | `src/lib/crypto/storage.ts`        | 100%   |
 | `src/stores/auth.ts`               | 100%   |
 | `src/stores/network.ts`            | 100%   |
-| `src/stores/wallet.ts`             | 87.8%  |
+| `src/stores/wallet.ts`             | 100%   |
 
-¹ `features.ts` is the build-time flag module. Its 3 active lines (the `FEATURES` constant body) are uncovered by unit tests but exercised in every page render — the gaps trigger no failure path.
+The remaining sub-100 numbers on the other axes are concentrated in a handful of legitimate gaps: IndexedDB `onerror`/`onupgradeneeded` callbacks in `storage.ts` (uncovered by happy-dom which never fires those paths) and a `typeof window === 'undefined'` SSR guard. Closing them needs targeted IDB mocks — not in MVP scope.
 
 ## Development
 
