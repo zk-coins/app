@@ -70,9 +70,11 @@ test.describe('Wallet Address Display', () => {
   });
 
   test('faucet button visible in empty wallet banner', async ({ page }) => {
-    // New wallet has zero balance, so the empty wallet banner with Faucet should show
+    // New wallet has zero balance, so the empty wallet banner with Faucet should show.
+    // The Faucet button only renders once /api/info responds with a non-mainnet
+    // network — give the async fetch room to land before asserting.
     await expect(page.getByText('Wallet is empty')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('button', { name: 'Faucet' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Faucet' })).toBeVisible({ timeout: 15_000 });
   });
 
   test('transaction list shows "No transactions yet" for new wallet', async ({ page }) => {
