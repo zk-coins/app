@@ -27,39 +27,58 @@ Full rationale: [docs.zkcoins.app/tech-decisions](https://docs.zkcoins.app/tech-
 
 User-facing functions, their activation status, and the tests that cover them.
 
-**Status legend:** `always` = hard-coded on · `env` = togglable via `NEXT_PUBLIC_*` env var · `settings` = togglable via in-app Settings · `planned` = UI present but disabled
+**Status legend** (current behaviour): `always` = hard-coded on · `env` = togglable via `NEXT_PUBLIC_*` env var · `settings` = togglable via in-app Settings · `planned` = UI present but disabled · `dev` = dev/demo route, not in nav.
+
+**Triage legend** (target state for MVP): `mvp` = in scope, must reach full test coverage before launch · `gate (VAR)` = to be hidden behind the named env var (default off) until tests exist · `planned` = not in scope for MVP · `keep` = current gating already adequate, no migration needed.
 
 **Coverage legend:** unit % refers to Vitest line coverage of the lowest-covered involved file in `src/lib/**` + `src/stores/**` (Components are excluded from coverage scope). `e2e` means a Playwright spec covers the flow. `—` means no test exists.
 
-| Feature                        | Status  | Tests                  |
-| ------------------------------ | ------- | ---------------------- |
-| Create wallet — seed phrase    | always  | 88% · e2e              |
-| Create wallet — passkey        | always  | 14% · e2e              |
-| Restore wallet — seed phrase   | always  | 88% · e2e              |
-| Restore wallet — passkey       | always  | 14% · e2e              |
-| Unlock wallet — password       | always  | 100% · —               |
-| Unlock wallet — passkey        | always  | 14% · e2e              |
-| Disconnect wallet              | always  | 88% · e2e              |
-| View balance                   | always  | 88% · e2e              |
-| View transaction history       | always  | 88% · e2e              |
-| Send Bitcoin (2-phase)         | always  | 88% · e2e              |
-| Receive Bitcoin (address + QR) | always  | 100% · e2e             |
-| Mint test BTC (faucet)         | always¹ | 99% · e2e              |
-| Claim username                 | always  | 99% · e2e              |
-| Resolve username (in Send)     | always  | 99% · e2e              |
-| Network info badge             | always  | 100% · e2e             |
-| Network activity chart         | env²    | 0% · e2e (visual only) |
-| Install as PWA                 | always  | —                      |
-| Apps directory                 | always  | e2e (visual only)      |
-| Auto-lock                      | planned | —                      |
-| Auto-rotate addresses          | planned | —                      |
-| Tor routing                    | planned | —                      |
-| `/reset` — wipe local state    | dev³    | —                      |
-| `/simulate` — demo populate    | dev³    | —                      |
+| Feature                        | Status  | Triage                                     | Tests                  |
+| ------------------------------ | ------- | ------------------------------------------ | ---------------------- |
+| Create wallet — seed phrase    | always  | mvp                                        | 88% · e2e              |
+| Create wallet — passkey        | always  | gate (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | 14% · e2e              |
+| Restore wallet — seed phrase   | always  | mvp                                        | 88% · e2e              |
+| Restore wallet — passkey       | always  | gate (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | 14% · e2e              |
+| Unlock wallet — password       | always  | mvp                                        | 100% · —               |
+| Unlock wallet — passkey        | always  | gate (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | 14% · e2e              |
+| Disconnect wallet              | always  | mvp                                        | 88% · e2e              |
+| View balance                   | always  | mvp                                        | 88% · e2e              |
+| View transaction history       | always  | mvp                                        | 88% · e2e              |
+| Send Bitcoin (2-phase)         | always  | mvp                                        | 88% · e2e              |
+| Receive Bitcoin (address + QR) | always  | mvp                                        | 100% · e2e             |
+| Mint test BTC (faucet)         | always¹ | gate (`NEXT_PUBLIC_ENABLE_FAUCET`)         | 99% · e2e              |
+| Claim username                 | always  | gate (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | 99% · e2e              |
+| Resolve username (in Send)     | always  | gate (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | 99% · e2e              |
+| Network info badge             | always  | mvp                                        | 100% · e2e             |
+| Network activity chart         | env²    | keep                                       | 0% · e2e (visual only) |
+| Install as PWA                 | always  | mvp                                        | —                      |
+| Apps directory                 | always  | gate (`NEXT_PUBLIC_ENABLE_APPS_DIRECTORY`) | e2e (visual only)      |
+| Auto-lock                      | planned | planned                                    | —                      |
+| Auto-rotate addresses          | planned | planned                                    | —                      |
+| Tor routing                    | planned | planned                                    | —                      |
+| `/reset` — wipe local state    | dev³    | gate (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | —                      |
+| `/simulate` — demo populate    | dev³    | gate (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | —                      |
 
-¹ Faucet button is auto-hidden when `/api/info` reports `network = mainnet`. No flag, runtime check.
+¹ Faucet button is auto-hidden when `/api/info` reports `network = mainnet`. No flag today — runtime check.
 ² `NEXT_PUBLIC_EXPLORER_URL` empty (default) → simulated data is shown; URL set → live chart is fetched from the explorer.
 ³ Dev/demo routes, always reachable but not part of the user-facing nav.
+
+### Triage gaps
+
+Features tagged `mvp` whose current test coverage is insufficient — these block "100% on activated features":
+
+- **Unlock wallet — password** — unit covers the crypto path, but no E2E exercises the unlock screen
+- **Install as PWA** — no automated test (browser-native install prompt, hard to exercise in CI)
+
+Env vars that need to be implemented to honour the `gate (…)` decisions above:
+
+- `NEXT_PUBLIC_ENABLE_PASSKEY` — gates the three passkey flows (create / restore / unlock). Default off
+- `NEXT_PUBLIC_ENABLE_FAUCET` — gates the Mint button (replaces the current runtime mainnet check). Default off
+- `NEXT_PUBLIC_ENABLE_USERNAMES` — gates Username claim + the `@`/`$` resolver in Send. Default off
+- `NEXT_PUBLIC_ENABLE_APPS_DIRECTORY` — gates the `/apps` route + nav entry. Default off
+- `NEXT_PUBLIC_ENABLE_DEV_ROUTES` — gates `/reset` and `/simulate`. Default off
+
+Until the gates are wired, the listed `gate (…)` features still run unconditionally; the Triage column is the agreed target, not the current code state.
 
 ### Details
 
