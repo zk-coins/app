@@ -27,7 +27,11 @@ const PASSWORD = 'TestPass123!';
 async function enterImportFlow(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByText('Restore existing wallet').click();
-  await expect(page.getByText('Restore wallet', { exact: true })).toBeVisible({ timeout: 10_000 });
+  // The textarea is the only stable marker on stage='input' — the
+  // "Restore wallet" text is reused by both the H1 and (later, on
+  // stage='password') the submit button, so locating by role/text
+  // here would be ambiguous.
+  await expect(page.locator('textarea')).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('Restore wallet — seed phrase', () => {
@@ -78,7 +82,7 @@ test.describe('Restore wallet — seed phrase', () => {
     await page.locator('textarea').fill(alice.mnemonic.join(' '));
     await page.getByText('Continue', { exact: true }).click();
     await expect(page.getByText('Set an encryption password')).toBeVisible();
-    await expect(page.getByText('Restore wallet', { exact: true })).toBeDisabled();
+    await expect(page.getByRole('button', { name: 'Restore wallet' })).toBeDisabled();
     await snap(page, '03-restore-password-empty');
   });
 
@@ -90,7 +94,7 @@ test.describe('Restore wallet — seed phrase', () => {
     const pw = page.locator('input[type="password"]');
     await pw.first().fill(PASSWORD);
     await pw.last().fill(PASSWORD);
-    await expect(page.getByText('Restore wallet', { exact: true })).toBeEnabled();
+    await expect(page.getByRole('button', { name: 'Restore wallet' })).toBeEnabled();
     await snap(page, '03-restore-password-filled');
   });
 
@@ -102,7 +106,7 @@ test.describe('Restore wallet — seed phrase', () => {
     const pw = page.locator('input[type="password"]');
     await pw.first().fill('short');
     await pw.last().fill('short');
-    await page.getByText('Restore wallet', { exact: true }).click();
+    await page.getByRole('button', { name: 'Restore wallet' }).click();
     await expect(page.getByText('Password must be at least 8 characters')).toBeVisible({
       timeout: 5_000,
     });
@@ -117,7 +121,7 @@ test.describe('Restore wallet — seed phrase', () => {
     const pw = page.locator('input[type="password"]');
     await pw.first().fill(PASSWORD);
     await pw.last().fill('DifferentPass456!');
-    await page.getByText('Restore wallet', { exact: true }).click();
+    await page.getByRole('button', { name: 'Restore wallet' }).click();
     await expect(page.getByText('Passwords do not match')).toBeVisible({ timeout: 5_000 });
     await snap(page, '03-restore-password-mismatch');
   });
@@ -136,7 +140,7 @@ test.describe('Restore wallet — seed phrase', () => {
     const pw = page.locator('input[type="password"]');
     await pw.first().fill(PASSWORD);
     await pw.last().fill(PASSWORD);
-    await page.getByText('Restore wallet', { exact: true }).click();
+    await page.getByRole('button', { name: 'Restore wallet' }).click();
     await expect(page.getByText('Restoring…')).toBeVisible({ timeout: 5_000 });
     await snap(page, '03-restoring');
   });
@@ -149,7 +153,7 @@ test.describe('Restore wallet — seed phrase', () => {
     const pw = page.locator('input[type="password"]');
     await pw.first().fill(PASSWORD);
     await pw.last().fill(PASSWORD);
-    await page.getByText('Restore wallet', { exact: true }).click();
+    await page.getByRole('button', { name: 'Restore wallet' }).click();
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 30_000,
     });
