@@ -19,7 +19,7 @@ export default defineConfig({
   //
   // Active specs (baselines committed):
   //   01-onboarding-welcome.spec.ts (PR #18)
-  testIgnore: process.env.E2E_NEED_FIXTURES === 'true' ? [] : [],
+  testIgnore: process.env.E2E_NEED_FIXTURES === 'true' ? [] : ['02-create-seed.spec.ts'],
   // Seed Alice + Bob once before any worker starts; remove the fixture
   // file afterwards. See e2e/_global-setup.ts and e2e/_global-teardown.ts.
   globalSetup: require.resolve('./e2e/_global-setup.ts'),
