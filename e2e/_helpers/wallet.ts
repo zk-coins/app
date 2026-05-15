@@ -123,7 +123,11 @@ export async function restoreSeedWallet(
   await page.goto('/');
   await page.getByText('Restore existing wallet').click();
 
-  await expect(page.getByText('Restore wallet')).toBeVisible({ timeout: 10_000 });
+  // The textarea is the only stable marker on stage='input' — the
+  // "Restore wallet" text is reused by both the H1 and (later, on
+  // stage='password') the submit button. Locating by text would hit
+  // a strict-mode violation.
+  await expect(page.locator('textarea')).toBeVisible({ timeout: 10_000 });
   await page.locator('textarea').fill(mnemonic.join(' '));
   await page.getByText('Continue').click();
 
@@ -131,7 +135,7 @@ export async function restoreSeedWallet(
   const pwInputs = page.locator('input[type="password"]');
   await pwInputs.first().fill(password);
   await pwInputs.last().fill(password);
-  await page.getByText('Restore wallet').click();
+  await page.getByRole('button', { name: 'Restore wallet' }).click();
 
   const chip = page.locator(`text=${ZK_ADDRESS_RE}`).first();
   await expect(chip).toBeVisible({ timeout: 30_000 });
