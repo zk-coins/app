@@ -3,7 +3,8 @@
  *
  * Covers § 8.2 of e2e/README.md. Drives Welcome → CREATE WALLET → (PasskeyFlow
  * intro — traversed, no shot) → OTHER LOGIN OPTIONS → SeedFlow through every
- * stage. 11 tests, 10 linux baselines, 1 no-shot.
+ * stage. 10 tests, 9 linux baselines, 1 no-shot. The `creating` shot from
+ * the original plan was dropped — the state is too transient to snapshot.
  *
  * DEV-only widgets visible in these baselines (per § 8.0 (b)):
  *   - `dev-*` hostnames in the FooterLinks below the card on Welcome screens.
