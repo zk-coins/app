@@ -42,9 +42,11 @@ export const api = {
   info: () => request<InfoResponse>('/api/info'),
   balance: (address: string) =>
     request<BalanceResponse>(`/api/balance?address=${encodeURIComponent(address)}`),
-  mint: (address: string) =>
+  // Mirrors `src/lib/api/client.ts::api.mint` — the server expects
+  // `{ account_address, amount }` and rejects missing fields with 422.
+  mint: (address: string, amount: number = 100_000) =>
     request<MintResponse>('/api/mint', {
       method: 'POST',
-      body: JSON.stringify({ address }),
+      body: JSON.stringify({ account_address: address, amount }),
     }),
 };
