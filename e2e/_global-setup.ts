@@ -59,6 +59,27 @@ async function mintWithRetry(address: string, attempt = 1): Promise<void> {
   }
 }
 
+/**
+ * Retry-wrapped `/api/info` — the DEV API sometimes returns a transient
+ * Cloudflare 502 / 504 while the worker behind it cycles. A single
+ * GET shouldn't fail the whole regen run; 5 retries × 2 s backoff
+ * cover everything we've seen in practice.
+ */
+async function infoWithRetry(attempt = 1): Promise<{ network: string }> {
+  const maxAttempts = 5;
+  try {
+    return await api.info();
+  } catch (err) {
+    if (attempt >= maxAttempts) throw err;
+    const wait = 2_000 * attempt;
+    console.warn(
+      `globalSetup: /api/info failed (attempt ${attempt}/${maxAttempts}), retrying in ${wait}ms`,
+    );
+    await new Promise((r) => setTimeout(r, wait));
+    return infoWithRetry(attempt + 1);
+  }
+}
+
 export default async function globalSetup(config: FullConfig): Promise<void> {
   // Opt-in. The legacy specs (wallet.spec.ts, send-flow.spec.ts,
   // settings.spec.ts, visual.spec.ts, webauthn.spec.ts) create their
@@ -77,7 +98,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   if (!baseURL) throw new Error('globalSetup: no baseURL configured');
 
   // Refuse to run against mainnet — Alice can't be seeded there.
-  const info = await api.info();
+  const info = await infoWithRetry();
   if (info.network === 'mainnet') {
     throw new Error(
       `globalSetup: refusing to seed accounts on mainnet (E2E_API_URL=${process.env.E2E_API_URL ?? 'default'}). ` +
