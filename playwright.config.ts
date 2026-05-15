@@ -11,8 +11,14 @@ export default defineConfig({
   // New exhaustive-suite specs are listed here while their linux
   // baselines are missing — the regular CI run ignores them so it
   // doesn't fail on a `Snapshot doesn't exist` error. The regen
-  // workflow sets E2E_NEED_FIXTURES=true to opt every new spec back
+  // workflow sets E2E_REGENERATING=true to opt every new spec back
   // in so the workflow can produce the missing PNGs.
+  //
+  // E2E_REGENERATING is intentionally separate from E2E_NEED_FIXTURES:
+  // the regular CI job sets E2E_NEED_FIXTURES=true (so globalSetup
+  // mints Alice+Bob for the *already-active* specs), but NOT
+  // E2E_REGENERATING (so testIgnore still excludes pending specs).
+  // Only the regen workflow sets both.
   //
   // Once a spec's snapshots directory is committed, remove its file
   // name from this list. Tracked in e2e/README.md § 11.3.
@@ -21,7 +27,8 @@ export default defineConfig({
   //   01-onboarding-welcome.spec.ts (PR #18)
   //   02-create-seed.spec.ts        (PR #19)
   //   03-restore-seed.spec.ts       (PR #20)
-  testIgnore: process.env.E2E_NEED_FIXTURES === 'true' ? [] : ['04-unlock-password.spec.ts'],
+  testIgnore:
+    process.env.E2E_REGENERATING === 'true' ? [] : ['04-unlock-password.spec.ts'],
   // Seed Alice + Bob once before any worker starts; remove the fixture
   // file afterwards. See e2e/_global-setup.ts and e2e/_global-teardown.ts.
   globalSetup: require.resolve('./e2e/_global-setup.ts'),

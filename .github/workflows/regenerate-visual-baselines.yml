@@ -34,6 +34,11 @@ jobs:
       E2E_FAUCET_CALLS: '1'
       # Opt globalSetup in so Alice + Bob get minted before the suite runs.
       E2E_NEED_FIXTURES: 'true'
+      # Opt every spec back in (including those listed in
+      # playwright.config.ts::testIgnore) so this workflow can produce
+      # their missing linux baselines. The regular CI job does NOT set
+      # this — testIgnore stays in effect there.
+      E2E_REGENERATING: 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
