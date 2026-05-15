@@ -16,3 +16,8 @@ coverage/
 
 # local design iteration artifacts (screenshots, helper scripts, references)
 .design/
+
+# Per-run E2E account fixtures (mnemonics + addresses) written by
+# e2e/_global-setup.ts. They contain test-only secrets but should never
+# be committed.
+e2e/.fixtures/
