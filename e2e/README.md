@@ -494,32 +494,29 @@ jobs:
 
 ### 9.2 Baseline regeneration workflow
 
-`.github/workflows/regenerate-visual-baselines.yml`:
+`.github/workflows/regenerate-visual-baselines.yml`. Triggered manually via `gh workflow run "Regenerate Visual Baselines" --ref develop -f branch=develop`.
 
 ```text
-on:
-  workflow_dispatch:
-    inputs:
-      branch:
-        description: Branch to update baselines on
-        required: true
-
-jobs:
-  regen:
-    runs-on: ubuntu-latest
-    timeout-minutes: 25
-    permissions:
-      contents: write
-    steps:
-      - checkout (ref = inputs.branch)
-      - setup-node 22; npm ci; playwright install
-      - npx playwright test --update-snapshots
-      - git add e2e/*.spec.ts-snapshots/
-      - git commit -m "test(e2e): regenerate visual baselines"
-      - git push origin HEAD:${{ inputs.branch }}
+on: workflow_dispatch
+permissions: contents: write, pull-requests: write
+steps:
+  1. checkout inputs.branch
+  2. setup-node 22; npm ci; npx playwright install --with-deps chromium
+  3. npx playwright test --project=chromium --update-snapshots=all e2e/0*.spec.ts
+     (E2E_NEED_FIXTURES=true so globalSetup runs; E2E_API_URL points at DEV)
+  4. Create side branch `e2e/regen-baselines-<run-id>`, commit *.spec.ts-snapshots/*.png
+  5. Push side branch, open PR against inputs.branch
+  6. Print PR URL as a workflow notice (no auto-merge)
 ```
 
-Branch protection on `develop` and `main` must allow this workflow's bot push.
+**Side branch + PR (not direct push)** for two reasons that together rule out the simpler `git push origin develop`:
+
+- `develop` is branch-protected and the `GITHUB_TOKEN`-scoped bot is not a bypass actor. A direct push is rejected with `GH006: Protected branch update failed`.
+- Even on a side branch, workflows started by `GITHUB_TOKEN` do not cascade-trigger CI on the new branch (GitHub anti-loop policy). The protection rule's required status checks therefore never appear on the PR, and `gh pr merge --auto` blocks indefinitely.
+
+**Merge the PR with admin override**: `gh pr merge <N> --squash --delete-branch --admin`. The repo owner runs this from the workflow's printed PR URL. Branch-protection `enforce_admins: false` is what makes the override possible; do not flip that to `true` without first adding an explicit bypass actor for `github-actions[bot]` (current config in `branch-protection.tf` / GitHub UI). Repo setting `allow_auto_merge=true` is enabled but unused while the cascade-trigger limitation remains — kept on so a future PAT-based flow needs no settings change.
+
+`--update-snapshots=all` is mandatory: newer Playwright parses bare `--update-snapshots` as taking the next CLI argument as its mode value (`all|changed|missing|none`) and would greedily consume the file pattern.
 
 ### 9.3 PR gating
 
@@ -584,10 +581,12 @@ Each PR:
 
 - Adds **only the spec it's labelled with** plus any unblocking helper change.
 - Lands the spec with its file name added to `playwright.config.ts::testIgnore` so the existing `e2e-tests` job doesn't fail on missing baselines.
-- Dispatches `regenerate-visual-baselines.yml` (manual workflow_dispatch) to produce linux PNGs. The workflow commits `e2e/<spec>-snapshots/*.png` back to the branch.
+- **Wipes the DEV server state** before triggering the regen so the run starts from a known-empty `accounts.bin` / `smt.bin` / `mmr.bin` / `latest_block.bin` / `minting_num_pubkeys.bin`. See `zk-coins/server CONTRIBUTING.md § DEV state recovery`.
+- Dispatches `regenerate-visual-baselines.yml` via `gh workflow run "Regenerate Visual Baselines" --ref develop -f branch=develop`. The workflow opens a side-branch PR `e2e/regen-baselines-<run-id>` against develop (it does not push directly — see §9.2).
+- **Admin-merges the regen PR**: `gh pr merge <N> --squash --delete-branch --admin`. The protection rule allows admin override (`enforce_admins: false`), which is the unblocking mechanism while the GITHUB_TOKEN cascade-trigger limitation persists.
 - After baselines land, removes the spec from `testIgnore` in a second commit. CI now exercises the spec on every push.
 - Updates §8.13 totals in this file when the spec lands.
-- Is reviewed for the screenshot diff in the auto-commit by a human (or, for autonomous Claude work, by the next reviewer).
+- Is reviewed for the screenshot diff in the regen PR by a human (or, for autonomous Claude work, by the next reviewer).
 
 If a PR can't reach green inside 25 minutes of CI: don't merge, downgrade to focused work; do **not** raise the timeout.
 
