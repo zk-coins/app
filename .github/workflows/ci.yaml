@@ -117,6 +117,15 @@ jobs:
         run: npx playwright test --project=chromium
         env:
           E2E_BASE_URL: https://dev.zkcoins.app
+          E2E_API_URL: https://dev-api.zkcoins.app
+          E2E_NETWORK_EXPECTED: signet
+          E2E_FAUCET_CALLS: '1'
+          # globalSetup runs once per CI invocation and mints fresh Alice + Bob
+          # via /api/mint. The active specs (03-restore-seed et al.) consume
+          # the resulting e2e/.fixtures/accounts.json via aliceLogin/bobLogin.
+          # Legacy specs are unaffected — they create their own throwaway
+          # wallets inline. See e2e/README.md § 4 and § 5.
+          E2E_NEED_FIXTURES: 'true'
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
