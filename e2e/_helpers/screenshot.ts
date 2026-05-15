@@ -42,12 +42,18 @@ function defaultMasks(page: Page): Locator[] {
  * Take a screenshot and compare against the baseline.
  *
  * Always:
- *   - waits for `networkidle`
+ *   - waits for `domcontentloaded` (initial render landed)
  *   - waits for web fonts (`document.fonts.ready`)
  *   - applies the default mask set, then any spec-specific masks
+ *
+ * **Why not `networkidle`**: WalletScreen polls `/api/balance` every 5 s
+ * and we have other periodic fetches too. `waitForLoadState('networkidle')`
+ * requires 500 ms of network silence and can deadlock under sustained
+ * polling. `domcontentloaded` is enough for visual stability once the
+ * caller has already asserted a marker locator is visible.
  */
 export async function snap(page: Page, name: string, opts: SnapOptions = {}): Promise<void> {
-  await page.waitForLoadState('networkidle');
+  await page.waitForLoadState('domcontentloaded');
   await page.evaluate(() => document.fonts?.ready);
   const masks = [...defaultMasks(page), ...(opts.mask ?? [])];
   await expect(page).toHaveScreenshot(`${name}.png`, {
