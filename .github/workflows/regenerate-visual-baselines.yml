@@ -31,6 +31,8 @@ jobs:
       E2E_API_URL: https://dev-api.zkcoins.app
       E2E_NETWORK_EXPECTED: signet
       E2E_FAUCET_CALLS: '1'
+      # Opt globalSetup in so Alice + Bob get minted before the suite runs.
+      E2E_NEED_FIXTURES: 'true'
     steps:
       - name: Checkout
         uses: actions/checkout@v4

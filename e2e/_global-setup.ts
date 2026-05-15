@@ -60,6 +60,19 @@ async function mintWithRetry(address: string, attempt = 1): Promise<void> {
 }
 
 export default async function globalSetup(config: FullConfig): Promise<void> {
+  // Opt-in. The legacy specs (wallet.spec.ts, send-flow.spec.ts,
+  // settings.spec.ts, visual.spec.ts, webauthn.spec.ts) create their
+  // own wallets and don't need pre-minted fixtures. The new exhaustive
+  // suite (01-onboarding-welcome.spec.ts onwards) needs Alice + Bob
+  // and sets E2E_NEED_FIXTURES=true in its workflow env.
+  //
+  // Running globalSetup unconditionally on every CI invocation would
+  // add 30-60 s of network work plus dependency on /api/info to runs
+  // that don't need it.
+  if (process.env.E2E_NEED_FIXTURES !== 'true') {
+    return;
+  }
+
   const baseURL = config.projects[0]?.use.baseURL ?? process.env.E2E_BASE_URL;
   if (!baseURL) throw new Error('globalSetup: no baseURL configured');
 
