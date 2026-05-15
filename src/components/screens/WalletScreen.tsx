@@ -96,7 +96,7 @@ export function WalletScreen() {
       </header>
 
       {/* Balance */}
-      <div>
+      <div data-testid="balance-value">
         <div className="flex items-center gap-3">
           <h1 className="text-[56px] font-bold leading-none -tracking-[0.02em] text-ink tabular-nums">
             {hidden ? HIDDEN : `$${usd}`}
