@@ -20,6 +20,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   regen:
@@ -61,14 +62,29 @@ jobs:
         # as its mode value (and would greedily consume the file pattern).
         run: npx playwright test --project=chromium --update-snapshots=all e2e/0*.spec.ts
 
-      - name: Commit and push if baselines changed
+      - name: Commit, push to a side branch, open auto-merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          set -euo pipefail
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           if [[ -z "$(git status --porcelain e2e/*-snapshots/)" ]]; then
             echo "No baseline changes."
             exit 0
           fi
+          # `develop` is branch-protected; the github-actions bot cannot push
+          # to it directly. Land the PNGs on a side branch and open a PR
+          # against `inputs.branch`, then auto-merge once required checks
+          # pass.
+          NEW_BRANCH="e2e/regen-baselines-${{ github.run_id }}"
+          git checkout -b "$NEW_BRANCH"
           git add e2e/*-snapshots/
           git commit -m "test(e2e): regenerate visual baselines"
-          git push origin HEAD:${{ inputs.branch }}
+          git push origin "$NEW_BRANCH"
+          gh pr create \
+            --base "${{ inputs.branch }}" \
+            --head "$NEW_BRANCH" \
+            --title "test(e2e): regenerate visual baselines" \
+            --body "Automated baseline refresh triggered by run ${{ github.run_id }}. Generated from \`${{ inputs.branch }}\`@${{ github.sha }}."
+          gh pr merge --auto --squash --delete-branch "$NEW_BRANCH"
