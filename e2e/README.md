@@ -49,7 +49,7 @@ What exists today in `e2e/`:
 | --- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Test target                         | Real server (default: DEV at `https://dev.zkcoins.app`) — overridable via `E2E_BASE_URL`/`E2E_API_URL`                                                         | True end-to-end; no mock/real divergence. DEV/PRD switchable in config.                                                                       |
 | 2   | Determinism                         | `globalSetup` creates **two fresh random accounts (Alice + Bob)** before every run                                                                             | Every step starts from a byte-identical state across runs except the on-chain address. Wallet addresses are masked in every screenshot.       |
-| 3   | Baseline platforms                  | **Linux only**, generated in CI                                                                                                                                | Halves baseline count to 74. Developers can compare locally but only CI produces canonical PNGs.                                              |
+| 3   | Baseline platforms                  | **Linux only**, generated in CI                                                                                                                                | Halves baseline count to 73. Developers can compare locally but only CI produces canonical PNGs.                                              |
 | 4   | Cross-spec wallet sharing           | Onboarding specs create their own throwaway wallets. Send / Receive / Balance / Disconnect specs reuse Alice + Bob.                                            | Onboarding flows must start from a blank slate; everything else benefits from shared setup speed.                                             |
 | 5   | Masks for non-deterministic content | Addresses (`{8hex}@zkcoins.app`), mnemonic word grid, balance numbers from server, ISO timestamps, copy hash, QR code                                          | Anything that varies between runs is masked at the locator level so the rest of the screen is pixel-checked.                                  |
 | 6   | Screenshot tolerance                | `maxDiffPixelRatio: 0.01`, `animations: 'disabled'`, `caret: 'hide'`, `scale: 'css'`                                                                           | Already the project default in `playwright.config.ts`. We keep it tight — 1% lets through font-rendering jitter but flags any real UI change. |
@@ -288,9 +288,15 @@ The landing entry plus both onward affordances. Onboarding has its own visual st
 | 4   | welcome-create-hover  | Hover on "CREATE WALLET" — colour shift to `bg-bitcoin-hover`. (Trace `:hover` via `page.hover()`.)                             |
 | 5   | welcome-restore-hover | Hover on "Restore existing wallet" — text colour shifts to bitcoin orange.                                                      |
 
-### 8.2 `02-create-seed.spec.ts` (11 tests / 10 shots, 1 no-shot)
+### 8.2 `02-create-seed.spec.ts` (10 tests / 9 shots, 1 no-shot)
 
 Drives `Welcome → CREATE WALLET → (PasskeyFlow intro — traversed, no shot) → OTHER LOGIN OPTIONS → SeedFlow` through every stage. Resets IDB+localStorage in `beforeEach`. The DEV passkey-intro screen is clicked through but **not** screenshotted — see §8.0 (a).
+
+The originally-planned `creating` shot was dropped: SeedFlow's
+`create()` finishes the WASM + IDB work in under 50 ms and `Home`
+swaps to `WalletScreen` before any DOM screenshot can land — there
+is no stable window for that state. `wallet-after-create` covers the
+transition functionally.
 
 | #   | Step                       | Notes                                                                                                                                                                                             |
 | --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -302,9 +308,8 @@ Drives `Welcome → CREATE WALLET → (PasskeyFlow intro — traversed, no shot)
 | 6   | password-filled            | Both inputs filled. Button enabled.                                                                                                                                                               |
 | 7   | password-too-short         | Confirm a < 8 char password — error "Password must be at least 8 characters", `stage` reverts.                                                                                                    |
 | 8   | password-mismatch          | Mismatched confirms — error "Passwords do not match".                                                                                                                                             |
-| 9   | creating                   | After Create wallet — `stage='creating'`, button "Creating…" disabled. Capture before the wallet renders (`waitForResponse('**/api/balance**')` interceptor).                                     |
-| 10  | wallet-after-create        | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, no-balance banner shown.                                                                                              |
-| 11  | back-from-reveal (no shot) | At `stage='reveal'`, click StepHeader Back → returns to Welcome. Asserts URL only.                                                                                                                |
+| 9   | wallet-after-create        | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, no-balance banner shown.                                                                                              |
+| 10  | back-from-reveal (no shot) | At `stage='reveal'`, click StepHeader Back (twice on DEV — passkey-intro is the intermediate, see §8.0(a)) → returns to Welcome. Asserts URL only.                                                |
 
 ### 8.3 `03-restore-seed.spec.ts` (11 tests / 10 shots, 1 no-shot)
 
@@ -445,7 +450,7 @@ After §8.1 lands (`01-onboarding-welcome.spec.ts`), the new spec captures `welc
 | Spec file                         | Tests  | Screenshots (linux only) |
 | --------------------------------- | ------ | ------------------------ |
 | `01-onboarding-welcome.spec.ts`   | 5      | 5                        |
-| `02-create-seed.spec.ts`          | 11     | 10                       |
+| `02-create-seed.spec.ts`          | 10     | 9                        |
 | `03-restore-seed.spec.ts`         | 11     | 10                       |
 | `04-unlock-password.spec.ts`      | 5      | 5                        |
 | `05-disconnect.spec.ts`           | 7      | 7                        |
@@ -455,9 +460,9 @@ After §8.1 lands (`01-onboarding-welcome.spec.ts`), the new spec captures `welc
 | `09-network-and-shell.spec.ts`    | 6      | 6                        |
 | `10-pwa.spec.ts`                  | 4      | 4                        |
 | `11-cross-spec-redirects.spec.ts` | 3      | 3                        |
-| **Σ**                             | **77** | **74**                   |
+| **Σ**                             | **76** | **73**                   |
 
-74 linux baselines, 77 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated.
+73 linux baselines, 76 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated.
 
 ## 9. CI integration
 
