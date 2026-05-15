@@ -99,10 +99,13 @@ test.describe('Disconnect wallet', () => {
     page.once('dialog', (dialog) => dialog.dismiss());
     await page.getByRole('button', { name: 'Disconnect Wallet' }).scrollIntoViewIfNeeded();
     await page.getByRole('button', { name: 'Disconnect Wallet' }).click();
-    // Wallet should still be there.
+    // Wallet still there — the heading + the Disconnect button still
+    // render (both are `{account && (…)}`-gated, so their continued
+    // presence proves the wallet wasn't cleared). Settings page shows
+    // the full hex address rather than the `{8hex}@zkcoins.app` chip,
+    // so don't match the chip regex here.
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-    // Verify address chip still rendered (would be gone after disconnect).
-    await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Disconnect Wallet' })).toBeVisible();
     await snap(page, '05-disconnect-cancel-noop', { fullPage: true });
   });
 });
