@@ -27,8 +27,7 @@ export default defineConfig({
   //   01-onboarding-welcome.spec.ts (PR #18)
   //   02-create-seed.spec.ts        (PR #19)
   //   03-restore-seed.spec.ts       (PR #20)
-  testIgnore:
-    process.env.E2E_REGENERATING === 'true' ? [] : ['04-unlock-password.spec.ts'],
+  testIgnore: process.env.E2E_REGENERATING === 'true' ? [] : ['04-unlock-password.spec.ts'],
   // Seed Alice + Bob once before any worker starts; remove the fixture
   // file afterwards. See e2e/_global-setup.ts and e2e/_global-teardown.ts.
   globalSetup: require.resolve('./e2e/_global-setup.ts'),
