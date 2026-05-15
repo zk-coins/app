@@ -300,7 +300,10 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       {/* Word grid */}
       {mnemonic.length > 0 && stage !== 'password' && stage !== 'creating' && (
         <div className="relative">
-          <div className="grid grid-cols-3 gap-2 rounded-md border border-line2 bg-surface p-3">
+          <div
+            data-testid="seed-grid"
+            className="grid grid-cols-3 gap-2 rounded-md border border-line2 bg-surface p-3"
+          >
             {mnemonic.map((word, i) => (
               <div key={i} className="flex items-center gap-2 rounded-sm bg-bg px-2.5 py-2">
                 <span className="mono w-4 text-right text-[10px] text-ink4 tabular-nums">
