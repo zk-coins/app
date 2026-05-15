@@ -555,7 +555,7 @@ Local iteration without CI: `E2E_BASE_URL=https://dev.zkcoins.app npx playwright
 The implementation order **matters** because later specs depend on earlier helpers:
 
 1. **PR-1**: §6 helpers (`_helpers/api.ts`, `_helpers/wallet.ts`, `_helpers/screenshot.ts`, `_helpers/fixtures.ts`), §5 global setup/teardown, `.gitignore` rule for `e2e/.fixtures/`. No specs yet. CI still green because the new files aren't picked up by `testDir` until they live under `e2e/*.spec.ts`.
-2. **PR-2**: §8.1 `01-onboarding-welcome.spec.ts`. The address-chip mask is a regex match (no attribute needed). Does **not** retire `visual.spec.ts` yet — its `landing-*` shots still serve as a sanity diff while the new suite ramps.
+2. **PR-2**: §8.1 `01-onboarding-welcome.spec.ts` + the `regenerate-visual-baselines.yml` workflow itself (was originally bundled with PR-13 but is needed earlier — every spec PR depends on it to produce its linux PNGs). The address-chip mask is a regex match (no attribute needed). Does **not** retire `visual.spec.ts` yet — its `landing-*` shots still serve as a sanity diff while the new suite ramps.
 3. **PR-3**: §8.2 `02-create-seed.spec.ts`. Adds `data-testid="seed-grid"` to `Onboarding.tsx::SeedFlow`. Retires `visual.spec.ts` and its snapshots dir in the same PR (the new file is a superset).
 4. **PR-4**: §8.3 `03-restore-seed.spec.ts`. Wires up `fixtures.aliceLogin`.
 5. **PR-5**: §8.4 `04-unlock-password.spec.ts` _(closes MVP triage gap)_.
@@ -573,7 +573,9 @@ The implementation order **matters** because later specs depend on earlier helpe
 Each PR:
 
 - Adds **only the spec it's labelled with** plus any unblocking helper change.
-- Runs `regenerate-visual-baselines.yml` once to commit the linux baselines.
+- Lands the spec with its file name added to `playwright.config.ts::testIgnore` so the existing `e2e-tests` job doesn't fail on missing baselines.
+- Dispatches `regenerate-visual-baselines.yml` (manual workflow_dispatch) to produce linux PNGs. The workflow commits `e2e/<spec>-snapshots/*.png` back to the branch.
+- After baselines land, removes the spec from `testIgnore` in a second commit. CI now exercises the spec on every push.
 - Updates §8.13 totals in this file when the spec lands.
 - Is reviewed for the screenshot diff in the auto-commit by a human (or, for autonomous Claude work, by the next reviewer).
 

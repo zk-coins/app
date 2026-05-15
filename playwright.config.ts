@@ -8,6 +8,12 @@ export default defineConfig({
   // / `visual.spec.ts` / `webauthn.spec.ts`; underscore-prefixed files
   // (`_global-setup.ts`, `_helpers/*.ts`) are excluded by the glob.
   testMatch: ['*.spec.ts', '*.spec.mjs'],
+  // The new exhaustive suite (e2e/01-onboarding-welcome.spec.ts etc.) is
+  // ignored until linux baselines have been generated for it via the
+  // regenerate-visual-baselines workflow. Once a spec has its baseline
+  // snapshots directory committed, remove its prefix from this list.
+  // Tracked in e2e/README.md § 11.3.
+  testIgnore: ['01-onboarding-welcome.spec.ts'],
   // Seed Alice + Bob once before any worker starts; remove the fixture
   // file afterwards. See e2e/_global-setup.ts and e2e/_global-teardown.ts.
   globalSetup: require.resolve('./e2e/_global-setup.ts'),

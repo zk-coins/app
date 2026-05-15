@@ -1,0 +1,69 @@
+name: Regenerate Visual Baselines
+
+# Manually-dispatched workflow that runs the new exhaustive E2E suite with
+# --update-snapshots and commits the resulting linux baselines back to the
+# triggering branch. See e2e/README.md § 9.2.
+#
+# This is the canonical way to:
+#   - Generate baselines for a brand-new spec.
+#   - Refresh baselines after an intentional UI change.
+#
+# Never edit baselines by hand — always go through this workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to update baselines on
+        required: true
+        default: develop
+
+permissions:
+  contents: write
+
+jobs:
+  regen:
+    name: Regenerate baselines
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      E2E_BASE_URL: https://dev.zkcoins.app
+      E2E_API_URL: https://dev-api.zkcoins.app
+      E2E_NETWORK_EXPECTED: signet
+      E2E_FAUCET_CALLS: '1'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          # Need to push back to the same branch; default token works if
+          # branch protection allows the bot. Otherwise switch to a PAT
+          # via secrets.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Regenerate baselines for the new exhaustive suite
+        run: npx playwright test --project=chromium --update-snapshots e2e/0*.spec.ts
+
+      - name: Commit and push if baselines changed
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ -z "$(git status --porcelain e2e/*-snapshots/)" ]]; then
+            echo "No baseline changes."
+            exit 0
+          fi
+          git add e2e/*-snapshots/
+          git commit -m "test(e2e): regenerate visual baselines"
+          git push origin HEAD:${{ inputs.branch }}
