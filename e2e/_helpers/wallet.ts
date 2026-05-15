@@ -49,6 +49,11 @@ export async function clearWalletState(page: Page): Promise<void> {
  * Assumes a blank-slate state (no wallet in IDB). Caller must `clearWalletState`
  * first.
  */
+/**
+ * Returns the full 64-character hex address — not the `{8hex}@zkcoins.app`
+ * chip text. `/api/mint` and `/api/balance` accept only the full address;
+ * the chip is purely a display affordance.
+ */
 export async function createSeedWallet(
   page: Page,
   password: string = DEFAULT_PASSWORD,
@@ -86,10 +91,19 @@ export async function createSeedWallet(
   await pwInputs.last().fill(password);
   await page.getByText('Create wallet').click();
 
+  // The full 64-hex address is exposed via the `title` attribute on the
+  // copy-address button in WalletScreen (the visible text is the truncated
+  // `{8hex}@zkcoins.app` chip). Wait for the chip to render, then read the
+  // title from the surrounding `<button>` for the canonical form.
   const chip = page.locator(`text=${ZK_ADDRESS_RE}`).first();
   await expect(chip).toBeVisible({ timeout: 30_000 });
-  const address = (await chip.textContent())?.trim() ?? '';
-  if (!address) throw new Error('createSeedWallet: wallet rendered but address chip was empty');
+  const copyButton = page.locator(`button:has-text("@zkcoins.app")`).first();
+  const address = (await copyButton.getAttribute('title'))?.trim() ?? '';
+  if (!address || address.length < 64) {
+    throw new Error(
+      `createSeedWallet: failed to read full address from chip title, got "${address}"`,
+    );
+  }
 
   return { mnemonic, address };
 }
