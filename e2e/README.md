@@ -49,7 +49,7 @@ What exists today in `e2e/`:
 | --- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Test target                         | Real server (default: DEV at `https://dev.zkcoins.app`) — overridable via `E2E_BASE_URL`/`E2E_API_URL`                                                         | True end-to-end; no mock/real divergence. DEV/PRD switchable in config.                                                                       |
 | 2   | Determinism                         | `globalSetup` creates **two fresh random accounts (Alice + Bob)** before every run                                                                             | Every step starts from a byte-identical state across runs except the on-chain address. Wallet addresses are masked in every screenshot.       |
-| 3   | Baseline platforms                  | **Linux only**, generated in CI                                                                                                                                | Halves baseline count to 73. Developers can compare locally but only CI produces canonical PNGs.                                              |
+| 3   | Baseline platforms                  | **Linux only**, generated in CI                                                                                                                                | Halves baseline count to 72. Developers can compare locally but only CI produces canonical PNGs.                                              |
 | 4   | Cross-spec wallet sharing           | Onboarding specs create their own throwaway wallets. Send / Receive / Balance / Disconnect specs reuse Alice + Bob.                                            | Onboarding flows must start from a blank slate; everything else benefits from shared setup speed.                                             |
 | 5   | Masks for non-deterministic content | Addresses (`{8hex}@zkcoins.app`), mnemonic word grid, balance numbers from server, ISO timestamps, copy hash, QR code                                          | Anything that varies between runs is masked at the locator level so the rest of the screen is pixel-checked.                                  |
 | 6   | Screenshot tolerance                | `maxDiffPixelRatio: 0.01`, `animations: 'disabled'`, `caret: 'hide'`, `scale: 'css'`                                                                           | Already the project default in `playwright.config.ts`. We keep it tight — 1% lets through font-rendering jitter but flags any real UI change. |
@@ -311,7 +311,12 @@ transition functionally.
 | 9   | wallet-after-create        | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, no-balance banner shown.                                                                                              |
 | 10  | back-from-reveal (no shot) | At `stage='reveal'`, click StepHeader Back (twice on DEV — passkey-intro is the intermediate, see §8.0(a)) → returns to Welcome. Asserts URL only.                                                |
 
-### 8.3 `03-restore-seed.spec.ts` (11 tests / 10 shots, 1 no-shot)
+### 8.3 `03-restore-seed.spec.ts` (10 tests / 9 shots, 1 no-shot)
+
+The originally-planned `restoring` shot was dropped for the same
+reason as `creating` in §8.2: SeedImportFlow's `restore()` finishes
+the WASM + IDB work in <50 ms and `Home` swaps to `WalletScreen`
+before the "Restoring…" state can be screenshotted.
 
 Drives `Welcome → Restore existing wallet → SeedImportFlow` through every stage. Reuses Alice's mnemonic from `_global-setup.ts`.
 
@@ -325,9 +330,8 @@ Drives `Welcome → Restore existing wallet → SeedImportFlow` through every st
 | 6   | restore-password-filled    | Both inputs filled, "Restore wallet" enabled.                                                       |
 | 7   | restore-password-too-short | Confirm < 8 char password — error + stage stays.                                                    |
 | 8   | restore-password-mismatch  | Mismatched confirms — error.                                                                        |
-| 9   | restoring                  | `stage='restoring'`, button "Restoring…" disabled.                                                  |
-| 10  | wallet-after-restore       | Final WalletScreen with Alice's address (masked) and her seeded balance.                            |
-| 11  | back-from-input (no shot)  | StepHeader Back returns to Welcome.                                                                 |
+| 9   | wallet-after-restore       | Final WalletScreen with Alice's address (masked) and her seeded balance.                            |
+| 10  | back-from-input (no shot)  | StepHeader Back returns to Welcome.                                                                 |
 
 ### 8.4 `04-unlock-password.spec.ts` (5 tests / 5 shots)
 
@@ -451,7 +455,7 @@ After §8.1 lands (`01-onboarding-welcome.spec.ts`), the new spec captures `welc
 | --------------------------------- | ------ | ------------------------ |
 | `01-onboarding-welcome.spec.ts`   | 5      | 5                        |
 | `02-create-seed.spec.ts`          | 10     | 9                        |
-| `03-restore-seed.spec.ts`         | 11     | 10                       |
+| `03-restore-seed.spec.ts`         | 10     | 9                        |
 | `04-unlock-password.spec.ts`      | 5      | 5                        |
 | `05-disconnect.spec.ts`           | 7      | 7                        |
 | `06-balance.spec.ts`              | 6      | 6                        |
@@ -460,9 +464,9 @@ After §8.1 lands (`01-onboarding-welcome.spec.ts`), the new spec captures `welc
 | `09-network-and-shell.spec.ts`    | 6      | 6                        |
 | `10-pwa.spec.ts`                  | 4      | 4                        |
 | `11-cross-spec-redirects.spec.ts` | 3      | 3                        |
-| **Σ**                             | **76** | **73**                   |
+| **Σ**                             | **75** | **72**                   |
 
-73 linux baselines, 76 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated.
+72 linux baselines, 75 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated.
 
 ## 9. CI integration
 
