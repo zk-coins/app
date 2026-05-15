@@ -56,7 +56,10 @@ jobs:
         run: npx playwright install --with-deps chromium
 
       - name: Regenerate baselines for the new exhaustive suite
-        run: npx playwright test --project=chromium --update-snapshots e2e/0*.spec.ts
+        # `--update-snapshots=all` is mandatory because newer Playwright
+        # parses the bare `--update-snapshots` as taking the next CLI arg
+        # as its mode value (and would greedily consume the file pattern).
+        run: npx playwright test --project=chromium --update-snapshots=all e2e/0*.spec.ts
 
       - name: Commit and push if baselines changed
         run: |
