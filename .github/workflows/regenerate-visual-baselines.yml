@@ -88,11 +88,10 @@ jobs:
           # on the PR and `gh pr merge --auto` blocks indefinitely. The
           # downstream operator (or a follow-up admin-merge command) is
           # expected to close the loop.
+          PR_BODY="Automated baseline refresh triggered by run ${{ github.run_id }}. Generated from \`${{ inputs.branch }}\`@${{ github.sha }}. Merge with \`gh pr merge --admin --squash --delete-branch\` once reviewed."
           PR_URL=$(gh pr create \
             --base "${{ inputs.branch }}" \
             --head "$NEW_BRANCH" \
             --title "test(e2e): regenerate visual baselines" \
-            --body "Automated baseline refresh triggered by run ${{ github.run_id }}. Generated from \`${{ inputs.branch }}\`@${{ github.sha }}.
-
-Merge with \`gh pr merge --admin --squash --delete-branch\` once reviewed.")
+            --body "$PR_BODY")
           echo "::notice title=Baselines PR::$PR_URL"
