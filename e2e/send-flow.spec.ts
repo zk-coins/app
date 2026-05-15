@@ -71,10 +71,12 @@ test.describe('Wallet Address Display', () => {
 
   test('faucet button visible in empty wallet banner', async ({ page }) => {
     // New wallet has zero balance, so the empty wallet banner with Faucet should show.
-    // The Faucet button only renders once /api/info responds with a non-mainnet
-    // network — give the async fetch room to land before asserting.
-    await expect(page.getByText('Wallet is empty')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByRole('button', { name: 'Faucet' })).toBeVisible({ timeout: 15_000 });
+    // Both assertions race the post-create balance polling tick that fetches
+    // `/api/balance` for the freshly-derived address. On a quiet DEV server
+    // that tick returns 0 quickly and the banner is up immediately; under
+    // load the round-trip can stretch past 10 s, so use 30 s on both.
+    await expect(page.getByText('Wallet is empty')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByRole('button', { name: 'Faucet' })).toBeVisible({ timeout: 30_000 });
   });
 
   test('transaction list shows "No transactions yet" for new wallet', async ({ page }) => {
