@@ -9,9 +9,21 @@
  *   - `dev-*` hostnames in the FooterLinks grid inside § Resources
  */
 
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { aliceLogin } from './_helpers/fixtures';
 import { snap, setViewport } from './_helpers/screenshot';
+
+/**
+ * Reach /settings while logged in. `page.goto('/settings')` does a full
+ * page load, which re-initialises the zustand wallet store and locks the
+ * wallet — /settings then sees `account=null` and redirects to /. The
+ * BottomNav Settings link is a Next.js `<Link>` and navigates client-side
+ * with the store intact.
+ */
+async function goToSettings(page: Page): Promise<void> {
+  await page.getByRole('link', { name: 'Settings' }).click();
+  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
+}
 
 test.describe('Disconnect wallet', () => {
   test.beforeEach(async ({ page }) => {
@@ -29,21 +41,21 @@ test.describe('Disconnect wallet', () => {
 
   test('settings-desktop', async ({ page }) => {
     await setViewport(page, 'desktop');
-    await page.goto('/settings');
+    await goToSettings(page);
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
     await snap(page, '05-settings-desktop', { fullPage: true });
   });
 
   test('settings-mobile', async ({ page }) => {
     await setViewport(page, 'mobile');
-    await page.goto('/settings');
+    await goToSettings(page);
     await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
     await snap(page, '05-settings-mobile', { fullPage: true });
   });
 
   test('settings-disconnect-hover', async ({ page }) => {
     await setViewport(page, 'desktop');
-    await page.goto('/settings');
+    await goToSettings(page);
     const disconnect = page.getByRole('button', { name: 'Disconnect Wallet' });
     await expect(disconnect).toBeVisible();
     await disconnect.scrollIntoViewIfNeeded();
@@ -54,7 +66,7 @@ test.describe('Disconnect wallet', () => {
 
   test('disconnect-confirm-dialog', async ({ page }) => {
     await setViewport(page, 'desktop');
-    await page.goto('/settings');
+    await goToSettings(page);
     // The dialog itself is browser chrome (window.confirm) and can't
     // be captured by Playwright's screenshot. This test asserts the
     // dialog's message text and screenshots the underlying settings
@@ -73,7 +85,7 @@ test.describe('Disconnect wallet', () => {
   test('post-disconnect-welcome', async ({ page }) => {
     test.setTimeout(60_000);
     await setViewport(page, 'desktop');
-    await page.goto('/settings');
+    await goToSettings(page);
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByRole('button', { name: 'Disconnect Wallet' }).scrollIntoViewIfNeeded();
     await page.getByRole('button', { name: 'Disconnect Wallet' }).click();
@@ -83,7 +95,7 @@ test.describe('Disconnect wallet', () => {
 
   test('disconnect-cancel-noop', async ({ page }) => {
     await setViewport(page, 'desktop');
-    await page.goto('/settings');
+    await goToSettings(page);
     page.once('dialog', (dialog) => dialog.dismiss());
     await page.getByRole('button', { name: 'Disconnect Wallet' }).scrollIntoViewIfNeeded();
     await page.getByRole('button', { name: 'Disconnect Wallet' }).click();
