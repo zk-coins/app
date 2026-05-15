@@ -49,7 +49,7 @@ What exists today in `e2e/`:
 | - | --------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1 | Test target                             | Real server (default: DEV at `https://dev.zkcoins.app`) — overridable via `E2E_BASE_URL`/`E2E_API_URL`       | True end-to-end; no mock/real divergence. DEV/PRD switchable in config.                                                                                        |
 | 2 | Determinism                             | `globalSetup` creates **two fresh random accounts (Alice + Bob)** before every run                            | Every step starts from a byte-identical state across runs except the on-chain address. Wallet addresses are masked in every screenshot.                        |
-| 3 | Baseline platforms                      | **Linux only**, generated in CI                                                                              | Halves baseline count to 78. Developers can compare locally but only CI produces canonical PNGs.                                                              |
+| 3 | Baseline platforms                      | **Linux only**, generated in CI                                                                              | Halves baseline count to 77. Developers can compare locally but only CI produces canonical PNGs.                                                              |
 | 4 | Cross-spec wallet sharing               | Onboarding specs create their own throwaway wallets. Send/Receive/Balance/Tx specs reuse Alice + Bob.        | Onboarding flows must start from a blank slate; everything else benefits from shared setup speed.                                                              |
 | 5 | Masks for non-deterministic content     | Addresses (`{8hex}@zkcoins.app`), mnemonic word grid, balance numbers from server, ISO timestamps, copy hash | Anything that varies between runs is masked at the locator level so the rest of the screen is pixel-checked.                                                   |
 | 6 | Screenshot tolerance                    | `maxDiffPixelRatio: 0.01`, `animations: 'disabled'`, `caret: 'hide'`, `scale: 'css'`                          | Already the project default in `playwright.config.ts`. We keep it tight — 1% lets through font-rendering jitter but flags any real UI change.                  |
@@ -195,19 +195,24 @@ Other screens are desktop-only — going wider doesn't add value to a regression
 
 This section is the result of a line-by-line audit of every MVP component (`src/components/onboarding/Onboarding.tsx`, `src/components/screens/WalletScreen.tsx`, `src/app/page.tsx`, `src/app/send/page.tsx`, `src/app/receive/page.tsx`, `src/app/settings/page.tsx`, `src/components/AppShell.tsx`, `src/components/BottomNav.tsx`, `src/components/FooterLinks.tsx`, `src/components/PwaPrompt.tsx`). **Every button, every visible visual state, every conditional render** that the MVP user can reach is enumerated below. Each row is one `test()` and one screenshot baseline (unless marked `(no shot)`).
 
-### 8.0 DEV-bundle vs PRD-bundle divergence
+### 8.0 DEV-bundle vs PRD-bundle — what we screenshot
 
-The E2E suite runs against the **DEV-built frontend** (https://dev.zkcoins.app) because that's the only deployment where `/api/mint` (faucet) is available — without it we can't seed Alice every run. The DEV bundle has every `FEATURES.*` flag ON, so the screens the test traverses include UI that is dead-stripped from the PRD bundle:
+The E2E suite runs against the **DEV-built frontend** (https://dev.zkcoins.app) because that's the only deployment where `/api/mint` (faucet) is available — without it we can't seed Alice every run. The DEV bundle has every `FEATURES.*` flag ON. That introduces two categories of difference from PRD:
 
-| Screen                   | Extra UI in DEV bundle                                             |
-| ------------------------ | ------------------------------------------------------------------ |
-| Welcome → CREATE WALLET  | `PasskeyFlow` intro screen with an "OTHER LOGIN OPTIONS" link to `SeedFlow`. PRD skips this and goes straight to `SeedFlow`. |
-| Wallet screen            | Username claim input + Claim button; Faucet button on the empty-balance banner; Apps tab in BottomNav. |
-| Send page                | `@username` / `$username` recipient resolver. PRD only accepts `0x…` hex. |
-| Settings page            | Auth method line shows "Passkey — wallet derived from WebAuthn PRF output" branch where applicable. |
-| FooterLinks              | `dev-*` host variants of Docs / Explorer / Blog / Status.          |
+**(a) Pure navigation detours — traversed silently, not screenshotted.**
 
-**Implication for screenshots**: the baselines in this plan capture the **DEV bundle**. A separate PRD smoke pass (out of scope here) would re-run the same flows against `https://zkcoins.app` and assert that the gated UI is *gone* — that's a structural check, not a pixel diff against these baselines.
+Where DEV inserts an extra screen on the way to an MVP screen, the test clicks through it without taking a baseline. The screen is not MVP and locking its pixels would lock in a build-flag artefact.
+
+| Detour                                                          | Test behaviour                                                              |
+| --------------------------------------------------------------- | --------------------------------------------------------------------------- |
+| `Welcome → CREATE WALLET → PasskeyFlow intro → OTHER LOGIN OPTIONS → SeedFlow` | Click `CREATE WALLET`, immediately click `OTHER LOGIN OPTIONS`. No shot.   |
+| `SeedImportFlow → PasskeyRestore link`                          | Ignored — not clicked.                                                       |
+
+**(b) Inline gated UI on MVP screens — accepted in baselines.**
+
+On screens we DO screenshot, the DEV bundle renders extra widgets the PRD bundle dead-strips: the username claim input on `WalletScreen`, the Faucet button on the empty-balance banner, `@username` resolution on the Send recipient, dev-* hostnames in `FooterLinks`. These are inside the area we baseline. A future PRD smoke pass (out of scope here) is the only way to assert their absence — these specs deliberately do **not** try to.
+
+**Implication**: a reviewer looking at a new baseline must mentally subtract the DEV-only widgets and verify the rest. The doc comments in each test list which DEV-only widgets are in-frame so the reviewer doesn't have to guess.
 
 ### 8.1 `01-onboarding-welcome.spec.ts` (5 tests / 5 shots)
 
@@ -221,24 +226,23 @@ The landing entry plus both onward affordances. Onboarding has its own visual st
 | 4  | welcome-create-hover          | Hover on "CREATE WALLET" — colour shift to `bg-bitcoin-hover`. (Trace `:hover` via `page.hover()`.) |
 | 5  | welcome-restore-hover         | Hover on "Restore existing wallet" — text colour shifts to bitcoin orange.               |
 
-### 8.2 `02-create-seed.spec.ts` (12 tests / 11 shots, 1 no-shot)
+### 8.2 `02-create-seed.spec.ts` (11 tests / 10 shots, 1 no-shot)
 
-Drives `Welcome → CREATE WALLET → PasskeyFlow (DEV) → OTHER LOGIN OPTIONS → SeedFlow` through every stage. Resets IDB+localStorage in `beforeEach`.
+Drives `Welcome → CREATE WALLET → (PasskeyFlow intro — traversed, no shot) → OTHER LOGIN OPTIONS → SeedFlow` through every stage. Resets IDB+localStorage in `beforeEach`. The DEV passkey-intro screen is clicked through but **not** screenshotted — see §8.0 (a).
 
 | #  | Step                          | Notes                                                                                                |
 | -- | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
-| 1  | passkey-intro                 | After CREATE WALLET click (DEV-bundle artefact, see §8.0). `OTHER LOGIN OPTIONS` link visible.       |
-| 2  | seed-generating               | After OTHER LOGIN OPTIONS — `stage='generating'`, "Generating seed phrase…" text. Race the WASM with a small artificial slowdown (`page.route('**/zkcoins_wasm_bg.wasm', delay 800ms)`). |
-| 3  | seed-reveal-hidden            | `stage='reveal'`, `revealed=false`. 12-word grid blurred + "Tap to reveal" overlay button.           |
-| 4  | seed-reveal-shown             | `stage='reveal'`, `revealed=true`. Mnemonic grid revealed (masked), "Important" warning box, "I've written it down" button. |
-| 5  | seed-acknowledged             | `stage='confirm'`. Word grid still revealed, warning box + I've-written-it-down gone, "Continue" button alone. |
-| 6  | password-empty                | `stage='password'`. Both inputs empty, "Create wallet" button disabled.                              |
-| 7  | password-filled               | Both inputs filled. Button enabled.                                                                  |
-| 8  | password-too-short            | Confirm a < 8 char password — error "Password must be at least 8 characters", `stage` reverts.       |
-| 9  | password-mismatch             | Mismatched confirms — error "Passwords do not match".                                                 |
-| 10 | creating                      | After Create wallet — `stage='creating'`, button "Creating…" disabled. Capture before the wallet renders (`waitForResponse('**/api/balance**')` interceptor). |
-| 11 | wallet-after-create           | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, no-balance banner shown. |
-| 12 | back-from-reveal (no shot)    | At `stage='reveal'`, click StepHeader Back → returns to Welcome. Asserts URL only.                   |
+| 1  | seed-generating               | After clicking through to SeedFlow — `stage='generating'`, "Generating seed phrase…" text. Race the WASM with a small artificial slowdown (`page.route('**/zkcoins_wasm_bg.wasm', delay 800ms)`). |
+| 2  | seed-reveal-hidden            | `stage='reveal'`, `revealed=false`. 12-word grid blurred + "Tap to reveal" overlay button.           |
+| 3  | seed-reveal-shown             | `stage='reveal'`, `revealed=true`. Mnemonic grid revealed (masked), "Important" warning box, "I've written it down" button. |
+| 4  | seed-acknowledged             | `stage='confirm'`. Word grid still revealed, warning box + I've-written-it-down gone, "Continue" button alone. |
+| 5  | password-empty                | `stage='password'`. Both inputs empty, "Create wallet" button disabled.                              |
+| 6  | password-filled               | Both inputs filled. Button enabled.                                                                  |
+| 7  | password-too-short            | Confirm a < 8 char password — error "Password must be at least 8 characters", `stage` reverts.       |
+| 8  | password-mismatch             | Mismatched confirms — error "Passwords do not match".                                                 |
+| 9  | creating                      | After Create wallet — `stage='creating'`, button "Creating…" disabled. Capture before the wallet renders (`waitForResponse('**/api/balance**')` interceptor). |
+| 10 | wallet-after-create           | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, no-balance banner shown. |
+| 11 | back-from-reveal (no shot)    | At `stage='reveal'`, click StepHeader Back → returns to Welcome. Asserts URL only.                   |
 
 ### 8.3 `03-restore-seed.spec.ts` (11 tests / 10 shots, 1 no-shot)
 
@@ -382,7 +386,7 @@ After §8.1 lands (`01-onboarding-welcome.spec.ts`), the new spec captures `welc
 | Spec file                                  | Tests | Screenshots (linux only) |
 | ------------------------------------------ | ----- | ------------------------ |
 | `01-onboarding-welcome.spec.ts`            | 5     | 5                        |
-| `02-create-seed.spec.ts`                   | 12    | 11                       |
+| `02-create-seed.spec.ts`                   | 11    | 10                       |
 | `03-restore-seed.spec.ts`                  | 11    | 10                       |
 | `04-unlock-password.spec.ts`               | 5     | 5                        |
 | `05-disconnect.spec.ts`                    | 8     | 8                        |
@@ -392,9 +396,9 @@ After §8.1 lands (`01-onboarding-welcome.spec.ts`), the new spec captures `welc
 | `09-network-and-shell.spec.ts`             | 6     | 6                        |
 | `10-pwa.spec.ts`                           | 4     | 4                        |
 | `11-cross-spec-redirects.spec.ts`          | 3     | 3                        |
-| **Σ**                                      | **81**| **78**                   |
+| **Σ**                                      | **80**| **77**                   |
 
-78 linux baselines, 81 tests. Approximately 1.6× the original draft's scope. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding.
+77 linux baselines, 80 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, and pure DEV-bundle navigation detours (see §8.0 (a)) are traversed without taking a shot.
 
 ## 9. CI integration
 
