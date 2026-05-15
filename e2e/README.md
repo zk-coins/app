@@ -49,7 +49,7 @@ What exists today in `e2e/`:
 | - | --------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1 | Test target                             | Real server (default: DEV at `https://dev.zkcoins.app`) — overridable via `E2E_BASE_URL`/`E2E_API_URL`       | True end-to-end; no mock/real divergence. DEV/PRD switchable in config.                                                                                        |
 | 2 | Determinism                             | `globalSetup` creates **two fresh random accounts (Alice + Bob)** before every run                            | Every step starts from a byte-identical state across runs except the on-chain address. Wallet addresses are masked in every screenshot.                        |
-| 3 | Baseline platforms                      | **Linux only**, generated in CI                                                                              | Halves baseline count to ~47. Developers can compare locally but only CI produces canonical PNGs.                                                              |
+| 3 | Baseline platforms                      | **Linux only**, generated in CI                                                                              | Halves baseline count to 78. Developers can compare locally but only CI produces canonical PNGs.                                                              |
 | 4 | Cross-spec wallet sharing               | Onboarding specs create their own throwaway wallets. Send/Receive/Balance/Tx specs reuse Alice + Bob.        | Onboarding flows must start from a blank slate; everything else benefits from shared setup speed.                                                              |
 | 5 | Masks for non-deterministic content     | Addresses (`{8hex}@zkcoins.app`), mnemonic word grid, balance numbers from server, ISO timestamps, copy hash | Anything that varies between runs is masked at the locator level so the rest of the screen is pixel-checked.                                                   |
 | 6 | Screenshot tolerance                    | `maxDiffPixelRatio: 0.01`, `animations: 'disabled'`, `caret: 'hide'`, `scale: 'css'`                          | Already the project default in `playwright.config.ts`. We keep it tight — 1% lets through font-rendering jitter but flags any real UI change.                  |
@@ -191,138 +191,210 @@ Default desktop 1440 × 900. Mobile 375 × 812 is captured **only for**:
 
 Other screens are desktop-only — going wider doesn't add value to a regression gate.
 
-## 8. Test inventory (the complete step list)
+## 8. Test inventory (the exhaustive step list)
 
-Each row below becomes a `test()` block. Naming convention: `<step-slug>` (lowercase). Every test takes one screenshot at the end of its body unless marked `(no shot)`.
+This section is the result of a line-by-line audit of every MVP component (`src/components/onboarding/Onboarding.tsx`, `src/components/screens/WalletScreen.tsx`, `src/app/page.tsx`, `src/app/send/page.tsx`, `src/app/receive/page.tsx`, `src/app/settings/page.tsx`, `src/components/AppShell.tsx`, `src/components/BottomNav.tsx`, `src/components/FooterLinks.tsx`, `src/components/PwaPrompt.tsx`). **Every button, every visible visual state, every conditional render** that the MVP user can reach is enumerated below. Each row is one `test()` and one screenshot baseline (unless marked `(no shot)`).
 
-### 8.1 `01-create-seed.spec.ts` (10 tests / 9 shots)
+### 8.0 DEV-bundle vs PRD-bundle divergence
 
-| # | Step                                                   | Notes                                                                |
-| - | ------------------------------------------------------ | -------------------------------------------------------------------- |
-| 1 | landing-desktop                                        | Replace today's `landing-desktop` baseline.                          |
-| 2 | landing-mobile                                         | Replace today's `landing-mobile`. Drop `landing-tablet` baseline.    |
-| 3 | passkey-intro                                          | After clicking CREATE WALLET. The `OTHER LOGIN OPTIONS` link visible. |
-| 4 | seed-reveal-hidden                                     | After OTHER LOGIN OPTIONS. The "Tap to reveal" tile.                 |
-| 5 | seed-reveal-shown                                      | After clicking "Tap to reveal". Mnemonic grid masked.                |
-| 6 | seed-acknowledged                                      | After "I've written it down". Continue enabled.                      |
-| 7 | password-empty                                         | After Continue. Both password inputs empty, "Create wallet" disabled. |
-| 8 | password-filled                                        | After typing matching passwords. Button enabled.                     |
-| 9 | wallet-created                                         | After Create wallet click. Landed on `/`. Empty wallet banner visible. |
-|10 | clears-state-on-rerun (no shot)                        | Sanity assertion that a second wallet creation overwrites the first. |
+The E2E suite runs against the **DEV-built frontend** (https://dev.zkcoins.app) because that's the only deployment where `/api/mint` (faucet) is available — without it we can't seed Alice every run. The DEV bundle has every `FEATURES.*` flag ON, so the screens the test traverses include UI that is dead-stripped from the PRD bundle:
 
-### 8.2 `02-restore-seed.spec.ts` (7 tests / 6 shots)
+| Screen                   | Extra UI in DEV bundle                                             |
+| ------------------------ | ------------------------------------------------------------------ |
+| Welcome → CREATE WALLET  | `PasskeyFlow` intro screen with an "OTHER LOGIN OPTIONS" link to `SeedFlow`. PRD skips this and goes straight to `SeedFlow`. |
+| Wallet screen            | Username claim input + Claim button; Faucet button on the empty-balance banner; Apps tab in BottomNav. |
+| Send page                | `@username` / `$username` recipient resolver. PRD only accepts `0x…` hex. |
+| Settings page            | Auth method line shows "Passkey — wallet derived from WebAuthn PRF output" branch where applicable. |
+| FooterLinks              | `dev-*` host variants of Docs / Explorer / Blog / Status.          |
 
-| # | Step                            | Notes                                                                                     |
-| - | ------------------------------- | ----------------------------------------------------------------------------------------- |
-| 1 | restore-entry                   | After "Restore existing wallet" on landing.                                               |
-| 2 | mnemonic-input-empty            | The 24-word input grid.                                                                   |
-| 3 | mnemonic-input-filled-valid     | Pre-filled with Alice's mnemonic. "Continue" enabled.                                     |
-| 4 | mnemonic-input-filled-invalid   | Pre-filled with garbage. Error visible, Continue disabled.                                |
-| 5 | restore-password-empty          | Password setup after Continue.                                                            |
-| 6 | restore-password-filled         | Matching passwords typed.                                                                 |
-| 7 | restored-wallet                 | Lands on `/`, wallet view, balance ≥ 0 (masked).                                          |
+**Implication for screenshots**: the baselines in this plan capture the **DEV bundle**. A separate PRD smoke pass (out of scope here) would re-run the same flows against `https://zkcoins.app` and assert that the gated UI is *gone* — that's a structural check, not a pixel diff against these baselines.
 
-### 8.3 `03-unlock-password.spec.ts` (4 tests / 4 shots)
+### 8.1 `01-onboarding-welcome.spec.ts` (5 tests / 5 shots)
 
-| # | Step                | Notes                                                                                       |
-| - | ------------------- | ------------------------------------------------------------------------------------------- |
-| 1 | unlock-screen-empty | Cold start with Alice in IDB. UnlockScreen visible.                                         |
-| 2 | unlock-typed        | Password field filled.                                                                       |
-| 3 | unlock-wrong-error  | After clicking unlock with wrong password. Error message visible.                            |
-| 4 | unlocked            | After correct password — wallet view.                                                        |
+The landing entry plus both onward affordances. Onboarding has its own visual style (full-bleed hero on mobile, framed card on desktop, decorative pixel-grid background) that needs to lock in.
 
-Closes the **MVP triage gap** noted in `README.md`.
+| #  | Step                          | Notes                                                                                    |
+| -- | ----------------------------- | ---------------------------------------------------------------------------------------- |
+| 1  | welcome-desktop               | Default 1440 × 900. PixelLogo, "Welcome to zkCoins" + ghost icon, 3 Benefit cards, both buttons, footer label, FooterLinks row. |
+| 2  | welcome-mobile                | 375 × 812. Same content stacked.                                                          |
+| 3  | welcome-tablet                | 768 × 1024 — the mid-breakpoint where the card frame appears (`md:border md:bg-surface`). |
+| 4  | welcome-create-hover          | Hover on "CREATE WALLET" — colour shift to `bg-bitcoin-hover`. (Trace `:hover` via `page.hover()`.) |
+| 5  | welcome-restore-hover         | Hover on "Restore existing wallet" — text colour shifts to bitcoin orange.               |
 
-### 8.4 `04-disconnect.spec.ts` (4 tests / 4 shots)
+### 8.2 `02-create-seed.spec.ts` (12 tests / 11 shots, 1 no-shot)
 
-| # | Step               | Notes                                                                       |
-| - | ------------------ | --------------------------------------------------------------------------- |
-| 1 | settings-from-wallet | After clicking the settings link in the wallet.                          |
-| 2 | settings-page      | Full settings render.                                                       |
-| 3 | disconnect-confirm | After clicking Disconnect — confirm dialog (`window.confirm` stubbed via `page.on('dialog')`). |
-| 4 | post-disconnect    | After confirming — landed on `/`, landing visible.                          |
+Drives `Welcome → CREATE WALLET → PasskeyFlow (DEV) → OTHER LOGIN OPTIONS → SeedFlow` through every stage. Resets IDB+localStorage in `beforeEach`.
 
-### 8.5 `05-balance.spec.ts` (3 tests / 3 shots)
+| #  | Step                          | Notes                                                                                                |
+| -- | ----------------------------- | ---------------------------------------------------------------------------------------------------- |
+| 1  | passkey-intro                 | After CREATE WALLET click (DEV-bundle artefact, see §8.0). `OTHER LOGIN OPTIONS` link visible.       |
+| 2  | seed-generating               | After OTHER LOGIN OPTIONS — `stage='generating'`, "Generating seed phrase…" text. Race the WASM with a small artificial slowdown (`page.route('**/zkcoins_wasm_bg.wasm', delay 800ms)`). |
+| 3  | seed-reveal-hidden            | `stage='reveal'`, `revealed=false`. 12-word grid blurred + "Tap to reveal" overlay button.           |
+| 4  | seed-reveal-shown             | `stage='reveal'`, `revealed=true`. Mnemonic grid revealed (masked), "Important" warning box, "I've written it down" button. |
+| 5  | seed-acknowledged             | `stage='confirm'`. Word grid still revealed, warning box + I've-written-it-down gone, "Continue" button alone. |
+| 6  | password-empty                | `stage='password'`. Both inputs empty, "Create wallet" button disabled.                              |
+| 7  | password-filled               | Both inputs filled. Button enabled.                                                                  |
+| 8  | password-too-short            | Confirm a < 8 char password — error "Password must be at least 8 characters", `stage` reverts.       |
+| 9  | password-mismatch             | Mismatched confirms — error "Passwords do not match".                                                 |
+| 10 | creating                      | After Create wallet — `stage='creating'`, button "Creating…" disabled. Capture before the wallet renders (`waitForResponse('**/api/balance**')` interceptor). |
+| 11 | wallet-after-create           | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, no-balance banner shown. |
+| 12 | back-from-reveal (no shot)    | At `stage='reveal'`, click StepHeader Back → returns to Welcome. Asserts URL only.                   |
 
-| # | Step             | Notes                                                       |
-| - | ---------------- | ----------------------------------------------------------- |
-| 1 | balance-funded   | Alice (has sats). Balance + USD value masked.               |
-| 2 | balance-hidden   | After eye toggle. Balance area shows dots/hidden marker.    |
-| 3 | balance-zero     | Bob (no sats). Empty-wallet banner.                          |
+### 8.3 `03-restore-seed.spec.ts` (11 tests / 10 shots, 1 no-shot)
 
-Plus one mobile shot: `05-wallet-mobile.png` (Alice).
+Drives `Welcome → Restore existing wallet → SeedImportFlow` through every stage. Reuses Alice's mnemonic from `_global-setup.ts`.
 
-### 8.6 `06-transactions.spec.ts` (3 tests / 3 shots)
+| #  | Step                          | Notes                                                                                          |
+| -- | ----------------------------- | ---------------------------------------------------------------------------------------------- |
+| 1  | restore-entry-empty           | `stage='input'`. Textarea empty, "Continue" disabled.                                          |
+| 2  | restore-input-typed-valid     | Alice's mnemonic typed, Continue enabled.                                                       |
+| 3  | restore-input-wrong-count     | 5 random words pasted — error "Enter exactly 12 words".                                        |
+| 4  | restore-input-bad-bip39       | 12 words but not all in BIP-39 list — error "Invalid seed phrase — check your words and try again". |
+| 5  | restore-password-empty        | After Continue — `stage='password'` with empty inputs.                                          |
+| 6  | restore-password-filled       | Both inputs filled, "Restore wallet" enabled.                                                  |
+| 7  | restore-password-too-short    | Confirm < 8 char password — error + stage stays.                                                |
+| 8  | restore-password-mismatch     | Mismatched confirms — error.                                                                   |
+| 9  | restoring                     | `stage='restoring'`, button "Restoring…" disabled.                                              |
+| 10 | wallet-after-restore          | Final WalletScreen with Alice's address (masked) and her seeded balance.                       |
+| 11 | back-from-input (no shot)     | StepHeader Back returns to Welcome.                                                             |
 
-| # | Step                | Notes                                                                                                      |
-| - | ------------------- | ---------------------------------------------------------------------------------------------------------- |
-| 1 | tx-list-empty       | Bob, "No transactions yet".                                                                                |
-| 2 | tx-list-after-send  | Bob, after Alice sent him 1000 sats earlier in the run (depends on `07-send`). Single row visible, masked. |
-| 3 | tx-row-types        | Alice, after a self-mint + outbound send. Verifies icon variants (in vs out vs faucet).                    |
+### 8.4 `04-unlock-password.spec.ts` (5 tests / 5 shots)
 
-This spec depends on `07-send` having run earlier. Playwright honours alphabetic ordering by file name, so `06 < 07` is fine **if** we restructure to run `07` first or split the tx-after-send assertion into `07`. **Decision**: move tx-after-send check into the end of `07-send.spec.ts`, keep `06` to empty + manual-fixture seeding via a server-side mint.
+Cold-start the app with Alice's encrypted blob in IndexedDB and Alice's `authMethod='seed'` in localStorage so `Home` renders `UnlockScreen`.
 
-### 8.7 `07-send.spec.ts` (10 tests / 9 shots, 1 no-shot)
+| # | Step                           | Notes                                                                            |
+| - | ------------------------------ | -------------------------------------------------------------------------------- |
+| 1 | unlock-empty                   | Cold start. Logo + "Welcome back" + empty password input + disabled Unlock.      |
+| 2 | unlock-typed                   | Password typed, Unlock enabled.                                                  |
+| 3 | unlock-unlocking               | After click — button text "Unlocking…" + disabled.                               |
+| 4 | unlock-wrong-error             | Wrong password attempted, error "Incorrect password" in red below button.        |
+| 5 | unlock-success-wallet          | Correct password unlocks → WalletScreen rendered with Alice's wallet.            |
 
-| #  | Step                       | Notes                                                                                    |
-| -- | -------------------------- | ---------------------------------------------------------------------------------------- |
-| 1  | send-empty                 | `/send` initial. Send button disabled.                                                   |
-| 2  | recipient-valid            | Address pasted. Send still disabled (no amount).                                         |
-| 3  | recipient-invalid          | Garbage in recipient. Error message visible.                                             |
-| 4  | amount-filled              | Both fields valid. Send enabled.                                                         |
-| 5  | amount-insufficient        | Amount > balance. Error visible.                                                         |
-| 6  | confirm-dialog             | After Send click. Dialog with recipient + amount.                                        |
-| 7  | confirm-dialog-mobile      | Mobile viewport screenshot of the dialog (small-screen layout often regresses).          |
-| 8  | sending                    | After confirm — loading state. Capture before the round-trip finishes (`waitForResponse`). |
-| 9  | success                    | After server confirms — wallet view with new TX row.                                     |
-| 10 | post-send-tx-row (no shot) | Assertion: Bob's tx list now shows the inbound row (set up via `loadBobInBrowser`).      |
+Closes the **MVP triage gap**.
 
-### 8.8 `08-receive.spec.ts` (3 tests / 3 shots)
+### 8.5 `05-disconnect.spec.ts` (8 tests / 8 shots)
 
-| # | Step               | Notes                                                                  |
-| - | ------------------ | ---------------------------------------------------------------------- |
-| 1 | receive-default    | `/receive` rendered. QR + address chip masked.                          |
-| 2 | receive-mobile     | Same, mobile viewport.                                                  |
-| 3 | receive-after-copy | After "Copy address" click. Toast visible (with copy-hash masked).      |
+Settings page from Alice's wallet, all sections + every interactive widget the user can touch.
 
-### 8.9 `09-network-badge.spec.ts` (2 tests / 2 shots)
+| # | Step                          | Notes                                                                                            |
+| - | ----------------------------- | ------------------------------------------------------------------------------------------------ |
+| 1 | wallet-to-settings-nav        | WalletScreen with the Settings tab in BottomNav highlighted on click (use `page.hover()` first). |
+| 2 | settings-desktop              | Full settings render on 1440 × 900. Header with badge, all 4 Sections expanded, Disconnect button. |
+| 3 | settings-mobile               | Same on 375 × 812.                                                                               |
+| 4 | settings-toggle-hover         | Hover on the Auto-lock toggle (disabled state — verifies the Planned badge tooltip styling).     |
+| 5 | settings-disconnect-hover     | Hover on the "Disconnect Wallet" button — border colour shifts to bitcoin/40.                    |
+| 6 | disconnect-confirm-dialog     | Click Disconnect → `window.confirm` dialog. Capture via `page.on('dialog', d => screenshot then d.accept())`. The dialog is browser-chrome; this row asserts the dialog's `.message()` text and screenshots the empty page underneath. |
+| 7 | post-disconnect-welcome       | After accepting — landed on `/`, Welcome screen visible (DEV bundle, so first time).             |
+| 8 | disconnect-cancel-noop        | Repeat from a fresh state, but `dialog.dismiss()` — assert the wallet is **still** there.        |
 
-| # | Step                   | Notes                                                                                                    |
-| - | ---------------------- | -------------------------------------------------------------------------------------------------------- |
-| 1 | badge-signet           | `E2E_NETWORK_EXPECTED=signet` (DEV default). Asserts badge text + screenshot of the badge component only. |
-| 2 | badge-loading          | Before `/api/info` resolves — intercept and delay 1 s. Asserts the placeholder state.                    |
+### 8.6 `06-balance.spec.ts` (6 tests / 6 shots)
 
-No mainnet shot here (we don't run E2E against PRD in CI by default; the assertion belongs in PRD smoke tests).
+WalletScreen balance area + copy chip + faucet banner under Alice and Bob.
 
-### 8.10 `10-pwa.spec.ts` (1 test / 1 shot)
+| # | Step                           | Notes                                                                                |
+| - | ------------------------------ | ------------------------------------------------------------------------------------ |
+| 1 | balance-funded-desktop         | Alice loaded. Balance $X + BTC value (masked), eye icon, address chip, Send/Receive enabled, no empty banner. |
+| 2 | balance-funded-mobile          | Same, 375 × 812.                                                                     |
+| 3 | balance-hidden                 | Eye toggle clicked → balance shows `••••`, EyeOff icon, BTC line also masked.        |
+| 4 | balance-zero-faucet-visible    | Bob loaded. Empty-wallet banner with "Wallet is empty" + Faucet button (`FEATURES.FAUCET` on, DEV is signet). |
+| 5 | balance-faucet-minting         | Faucet click — button shows "Minting…" disabled. Intercept `/api/mint` to delay 800 ms. |
+| 6 | balance-copied-feedback        | Click address chip — Check icon + "copied" text appear for 1.5 s (assert via `waitForFunction` immediately after click). |
 
-| # | Step                       | Notes                                                                                                                                                                  |
-| - | -------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1 | install-prompt-fired       | Dispatch a synthetic `beforeinstallprompt` event in the page, assert the app exposes/saves the deferred-prompt + the install button (if present in UI). Screenshot the install affordance. |
+### 8.7 `07-send.spec.ts` (17 tests / 16 shots, 1 no-shot)
 
-Real install prompt is browser-controlled and cannot be reliably triggered headless. This is the best automated coverage available; mark with a comment that closes the triage gap pragmatically rather than perfectly.
+The full Send pipeline plus every error branch. Alice → Bob, 1000 sats.
 
-### 8.11 Existing `visual.spec.ts` retirement
+| #  | Step                            | Notes                                                                                  |
+| -- | ------------------------------- | -------------------------------------------------------------------------------------- |
+| 1  | send-default                    | `/send`, both inputs empty, "Send privately" disabled.                                 |
+| 2  | send-no-funds-banner            | Same page reached as Bob — "No funds to send" banner visible.                          |
+| 3  | recipient-valid-hex             | Bob's hex address pasted. Amount still empty → button disabled.                        |
+| 4  | recipient-valid-username        | `bob@zkcoins.app` typed (DEV-bundle artefact, see §8.0).                               |
+| 5  | recipient-invalid-format        | "hello world" typed — visual state shows raw text; assert no resolver error yet.       |
+| 6  | amount-typed                    | Both fields valid, Send enabled.                                                       |
+| 7  | amount-with-suffix-render       | Amount input shows the right-aligned "BTC" suffix. Captures a known regression source. |
+| 8  | amount-set-max-clicked          | Click "Set max" → input value flips to formatted balance. Shot taken after click.      |
+| 9  | amount-invalid-text             | Type `abc` → click Send → error "Invalid amount".                                       |
+| 10 | amount-insufficient             | Amount > Alice's balance → click Send → error "Insufficient balance".                  |
+| 11 | confirm-dialog-desktop          | After Send with valid inputs — confirm card visible with amount + recipient + Cancel + Confirm Send. |
+| 12 | confirm-dialog-mobile           | Same on 375 × 812.                                                                     |
+| 13 | confirm-cancel-back             | Click Cancel → returns to the form with inputs preserved.                              |
+| 14 | sending-creating-proof          | Click Confirm Send → button "Creating proof…" disabled. Intercept `/api/send` with 1 s delay. |
+| 15 | send-success                    | Server confirms — success screen with Check icon, "Sent privately", amount, proof #N, Done. |
+| 16 | send-failure-network            | `route('**/api/send', r => r.abort())` → error message below button.                   |
+| 17 | recovering-banner (no shot)     | Seed an unfinished inflight commit in localStorage, reload, assert the orange "Recovering a previous in-flight transaction…" banner exists. (No shot — too transient under happy-path conditions.) |
 
-After steps 8.1–8.10 are in: delete `visual.spec.ts` and its `visual.spec.ts-snapshots/` directory in the same PR that introduces `01-create-seed.spec.ts`. The new spec is a superset of every shot the old one had.
+### 8.8 `08-receive.spec.ts` (4 tests / 4 shots)
 
-### 8.12 Totals
+`/receive` plus the copy affordance.
 
-| Bucket                       | Tests | Screenshots (linux only) |
-| ---------------------------- | ----- | ------------------------ |
-| 01 create-seed               | 10    | 9 + 1 mobile = 10        |
-| 02 restore-seed              | 7     | 6                        |
-| 03 unlock-password           | 4     | 4                        |
-| 04 disconnect                | 4     | 4                        |
-| 05 balance                   | 3     | 3 + 1 mobile = 4         |
-| 06 transactions              | 3     | 3                        |
-| 07 send                      | 10    | 9 + 1 mobile = 10        |
-| 08 receive                   | 3     | 2 + 1 mobile = 3         |
-| 09 network-badge             | 2     | 2                        |
-| 10 pwa                       | 1     | 1                        |
-| **Σ**                        | **47**| **49**                   |
+| # | Step                           | Notes                                                                            |
+| - | ------------------------------ | -------------------------------------------------------------------------------- |
+| 1 | receive-default-desktop        | QR + address card + Copy button + Tip card.                                      |
+| 2 | receive-default-mobile         | Same on 375 × 812.                                                               |
+| 3 | receive-after-copy             | Click Copy address → button text flips to "Copied" with Check icon.              |
+| 4 | receive-back-to-wallet         | Click Back → WalletScreen renders again.                                          |
 
-49 linux baselines total. If decision #3 ever flips to "linux + darwin", multiply by 2.
+### 8.9 `09-network-and-shell.spec.ts` (6 tests / 6 shots)
+
+AppShell + BottomNav + Network info badge. Two MVP-functions covered (Network badge from the original list, plus the navigation chrome that wraps every other screen).
+
+| # | Step                           | Notes                                                                                                  |
+| - | ------------------------------ | ------------------------------------------------------------------------------------------------------ |
+| 1 | shell-bottomnav-wallet-active  | WalletScreen rendered, Wallet tab orange, Apps + Settings inactive.                                    |
+| 2 | shell-bottomnav-settings-active | Navigate to Settings — Settings tab orange.                                                            |
+| 3 | shell-footerlinks-row          | Default row variant on Wallet screen — 7 entries dot-separated with dev-* hosts.                       |
+| 4 | shell-footerlinks-grid         | Grid variant on Settings — same entries as 2-col cards with → and ↗ arrows.                            |
+| 5 | network-badge-signet           | Settings header right side — signet badge text + dot indicator. Subset shot of the badge area only.    |
+| 6 | network-badge-loading          | Intercept `/api/info` with 1 s delay, screenshot Settings header before the badge appears.             |
+
+### 8.10 `10-pwa.spec.ts` (4 tests / 4 shots)
+
+PwaPrompt has 3 detection modes plus the install-in-progress branch.
+
+| # | Step                            | Notes                                                                                                                       |
+| - | ------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
+| 1 | pwa-native-mode                 | Mock UA = Chrome on Android-like desktop, dispatch synthetic `beforeinstallprompt` → "Install" button visible.              |
+| 2 | pwa-native-installing           | Click Install → mock `prompt()` to delay 1 s, button "Installing…" disabled.                                                |
+| 3 | pwa-ios-mode                    | Mock UA = Safari iOS → share-icon instructions card visible.                                                                |
+| 4 | pwa-manual-mode                 | Default desktop UA without BIP event → manual address-bar hint card visible.                                                |
+
+Dismissed and already-installed branches collapse the component to `null`; we test their **absence** in `06-balance.spec.ts:balance-funded-desktop` (Alice's screenshot has no PwaPrompt because `dismissed` is wired by the global setup).
+
+Closes the **MVP triage gap** noted in `README.md` for "Install as PWA".
+
+### 8.11 `11-cross-spec-redirects.spec.ts` (3 tests / 3 shots)
+
+Hard-to-locate routes the user can reach but the rest of the inventory doesn't normally visit.
+
+| # | Step                           | Notes                                                                       |
+| - | ------------------------------ | --------------------------------------------------------------------------- |
+| 1 | send-no-account-redirect       | Visit `/send` with no account in store — Wallet icon + "Redirecting to wallet…". |
+| 2 | receive-no-account-redirect    | Same for `/receive`.                                                         |
+| 3 | settings-no-account-redirect   | Same for `/settings`.                                                        |
+
+### 8.12 Existing `visual.spec.ts` retirement
+
+After §8.1 lands (`01-onboarding-welcome.spec.ts`), the new spec captures `welcome-desktop/mobile/tablet`, `02-create-seed:seed-reveal-hidden + seed-reveal-shown` covers the `seed-setup-generate + seed-mnemonic-display` baselines, and `03-restore-seed:restore-entry-empty` covers `seed-import`. **Delete** `e2e/visual.spec.ts` and `e2e/visual.spec.ts-snapshots/` in the PR that introduces `02-create-seed.spec.ts` (PR-3 in §11.3 below).
+
+### 8.13 Totals
+
+| Spec file                                  | Tests | Screenshots (linux only) |
+| ------------------------------------------ | ----- | ------------------------ |
+| `01-onboarding-welcome.spec.ts`            | 5     | 5                        |
+| `02-create-seed.spec.ts`                   | 12    | 11                       |
+| `03-restore-seed.spec.ts`                  | 11    | 10                       |
+| `04-unlock-password.spec.ts`               | 5     | 5                        |
+| `05-disconnect.spec.ts`                    | 8     | 8                        |
+| `06-balance.spec.ts`                       | 6     | 6                        |
+| `07-send.spec.ts`                          | 17    | 16                       |
+| `08-receive.spec.ts`                       | 4     | 4                        |
+| `09-network-and-shell.spec.ts`             | 6     | 6                        |
+| `10-pwa.spec.ts`                           | 4     | 4                        |
+| `11-cross-spec-redirects.spec.ts`          | 3     | 3                        |
+| **Σ**                                      | **81**| **78**                   |
+
+78 linux baselines, 81 tests. Approximately 1.6× the original draft's scope. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding.
 
 ## 9. CI integration
 
@@ -393,7 +465,7 @@ Branch protection on `develop` and `main` must allow this workflow's bot push.
 ### 11.1 Adding a new MVP feature
 
 1. Add the feature to `README.md § Features` (mvp row).
-2. Add a step to the relevant spec or a new spec file in this plan (update §8 and the totals in §8.12).
+2. Add a step to the relevant spec or a new spec file in this plan (update §8 and the totals in §8.13).
 3. Implement the test. Add `data-testid` to the component only if a screenshot can't otherwise be stable (see §7).
 4. Run the baseline regen workflow on the feature branch.
 5. PR with `e2e-visual` green.
@@ -410,23 +482,26 @@ Branch protection on `develop` and `main` must allow this workflow's bot push.
 The implementation order **matters** because later specs depend on earlier helpers:
 
 1. **PR-1**: §6 helpers (`_helpers/api.ts`, `_helpers/wallet.ts`, `_helpers/screenshot.ts`, `_helpers/fixtures.ts`), §5 global setup/teardown, `.gitignore` rule for `e2e/.fixtures/`. No specs yet. CI still green because the new files aren't picked up by `testDir` until they live under `e2e/*.spec.ts`.
-2. **PR-2**: §8.1 `01-create-seed.spec.ts`. Retires `visual.spec.ts` in the same PR. Adds `data-testid` for the masks in §7.
-3. **PR-3**: §8.2 `02-restore-seed.spec.ts`. Wires up `fixtures.aliceLogin` test reuse.
-4. **PR-4**: §8.3 `03-unlock-password.spec.ts` *(closes triage gap)*.
-5. **PR-5**: §8.4 `04-disconnect.spec.ts`.
-6. **PR-6**: §8.5 `05-balance.spec.ts` + mobile shot.
-7. **PR-7**: §8.7 `07-send.spec.ts` (note: before 06, because 06 depends on send having run).
-8. **PR-8**: §8.6 `06-transactions.spec.ts`. Reorders the tx-after-send check into 07 if necessary (see §8.6 decision).
+2. **PR-2**: §8.1 `01-onboarding-welcome.spec.ts`. Adds `data-testid` attributes the masks in §7 require. Does **not** retire `visual.spec.ts` yet — its `landing-*` shots still serve as a sanity diff while the new suite ramps.
+3. **PR-3**: §8.2 `02-create-seed.spec.ts`. Retires `visual.spec.ts` and its snapshots dir in the same PR (the new file is a superset).
+4. **PR-4**: §8.3 `03-restore-seed.spec.ts`. Wires up `fixtures.aliceLogin`.
+5. **PR-5**: §8.4 `04-unlock-password.spec.ts` *(closes MVP triage gap)*.
+6. **PR-6**: §8.5 `05-disconnect.spec.ts`.
+7. **PR-7**: §8.6 `06-balance.spec.ts`.
+8. **PR-8**: §8.7 `07-send.spec.ts` (this is the big one — Alice → Bob real on-chain send).
 9. **PR-9**: §8.8 `08-receive.spec.ts`.
-10. **PR-10**: §8.9 `09-network-badge.spec.ts`.
-11. **PR-11**: §8.10 `10-pwa.spec.ts` *(closes triage gap)*.
-12. **PR-12**: §9 CI integration — `e2e-visual` job + `regenerate-visual-baselines.yml`. Last so the gate only flips on a fully passing suite.
+10. **PR-10**: §8.9 `09-network-and-shell.spec.ts`.
+11. **PR-11**: §8.10 `10-pwa.spec.ts` *(closes MVP triage gap)*.
+12. **PR-12**: §8.11 `11-cross-spec-redirects.spec.ts`.
+13. **PR-13**: §9 CI integration — `e2e-visual` job + `regenerate-visual-baselines.yml`. Last so the gate only flips on a fully passing suite.
+
+**Transactions coverage** (the original "06 transactions" spec) lives inside `07-send.spec.ts`: every send produces a tx row, and the spec asserts both Alice's outbound row and Bob's inbound row at the end. The transaction icon variants (send/receive/mint) are exercised in `06-balance.spec.ts:balance-zero-faucet-visible` followed by the faucet-mint in `balance-faucet-minting`. No dedicated spec.
 
 Each PR:
 
 - Adds **only the spec it's labelled with** plus any unblocking helper change.
 - Runs `regenerate-visual-baselines.yml` once to commit the linux baselines.
-- Updates §8.12 totals in this file when the spec lands.
+- Updates §8.13 totals in this file when the spec lands.
 - Is reviewed for the screenshot diff in the auto-commit by a human (or, for autonomous Claude work, by the next reviewer).
 
 If a PR can't reach green inside 25 minutes of CI: don't merge, downgrade to focused work; do **not** raise the timeout.
@@ -435,37 +510,39 @@ If a PR can't reach green inside 25 minutes of CI: don't merge, downgrade to foc
 
 ```
 e2e/
-├── README.md                          # this document
-├── _global-setup.ts                   # §5
-├── _global-teardown.ts                # §5
+├── README.md                              # this document
+├── _global-setup.ts                       # §5
+├── _global-teardown.ts                    # §5
 ├── _helpers/
-│   ├── api.ts                         # §6.1
-│   ├── fixtures.ts                    # §6.4
-│   ├── screenshot.ts                  # §6.3
-│   └── wallet.ts                      # §6.2
-├── .fixtures/                         # gitignored — written by global setup
+│   ├── api.ts                             # §6.1
+│   ├── fixtures.ts                        # §6.4
+│   ├── screenshot.ts                      # §6.3
+│   └── wallet.ts                          # §6.2
+├── .fixtures/                             # gitignored — written by global setup
 │   └── accounts.json
-├── 01-create-seed.spec.ts             # §8.1
-├── 01-create-seed.spec.ts-snapshots/  # linux PNGs
-├── 02-restore-seed.spec.ts
-├── 02-restore-seed.spec.ts-snapshots/
-├── 03-unlock-password.spec.ts
-├── 03-unlock-password.spec.ts-snapshots/
-├── 04-disconnect.spec.ts
-├── 04-disconnect.spec.ts-snapshots/
-├── 05-balance.spec.ts
-├── 05-balance.spec.ts-snapshots/
-├── 06-transactions.spec.ts
-├── 06-transactions.spec.ts-snapshots/
-├── 07-send.spec.ts
+├── 01-onboarding-welcome.spec.ts          # §8.1
+├── 01-onboarding-welcome.spec.ts-snapshots/  # linux PNGs
+├── 02-create-seed.spec.ts                 # §8.2
+├── 02-create-seed.spec.ts-snapshots/
+├── 03-restore-seed.spec.ts                # §8.3
+├── 03-restore-seed.spec.ts-snapshots/
+├── 04-unlock-password.spec.ts             # §8.4
+├── 04-unlock-password.spec.ts-snapshots/
+├── 05-disconnect.spec.ts                  # §8.5
+├── 05-disconnect.spec.ts-snapshots/
+├── 06-balance.spec.ts                     # §8.6
+├── 06-balance.spec.ts-snapshots/
+├── 07-send.spec.ts                        # §8.7
 ├── 07-send.spec.ts-snapshots/
-├── 08-receive.spec.ts
+├── 08-receive.spec.ts                     # §8.8
 ├── 08-receive.spec.ts-snapshots/
-├── 09-network-badge.spec.ts
-├── 09-network-badge.spec.ts-snapshots/
-├── 10-pwa.spec.ts
+├── 09-network-and-shell.spec.ts           # §8.9
+├── 09-network-and-shell.spec.ts-snapshots/
+├── 10-pwa.spec.ts                         # §8.10
 ├── 10-pwa.spec.ts-snapshots/
-└── webauthn.spec.ts                   # unchanged — non-MVP DEV bundle coverage
+├── 11-cross-spec-redirects.spec.ts        # §8.11
+├── 11-cross-spec-redirects.spec.ts-snapshots/
+└── webauthn.spec.ts                       # unchanged — non-MVP DEV-bundle passkey coverage
 ```
 
 ### 12.1 `.gitignore` addition
@@ -480,4 +557,6 @@ Things that the plan **does not** yet pin down — surface them in PR-1's descri
 
 - **Confirm dialog** for Disconnect: today it's `window.confirm`. If the redesign replaces it with an in-app modal, the `04-disconnect.spec.ts` `disconnect-confirm` screenshot has to switch from `page.on('dialog')` to a real DOM screenshot. Track in PR-5.
 - **Mobile baselines for restore/unlock**: §7 doesn't list them. If a redesign breaks the small-viewport login flow, this plan won't catch it. Reviewer can opt to add them — that's +3 baselines.
-- **Toast component**: every "copied" toast in the app currently uses the same component. If §8.8.3 catches a regression, look at the component, not the spec.
+- **Toast component**: every "copied" toast in the app currently uses the same pattern. If §8.6:balance-copied-feedback **or** §8.8:receive-after-copy catches a regression, look at the shared logic in `WalletScreen.tsx` and `app/receive/page.tsx`, not the spec.
+- **Faucet button is non-MVP** but the empty-balance flow makes it the most ergonomic way to test the empty-state. §8.6:balance-zero-faucet-visible captures the DEV-bundle banner. The PRD-bundle variant of this same screen (no Faucet button) is **not** covered here — add a PRD smoke spec later.
+- **`set max` button** in `07-send` mutates the amount input. If the formatting changes (e.g., trailing zeros) the screenshot will catch it.
