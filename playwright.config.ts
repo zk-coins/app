@@ -8,15 +8,18 @@ export default defineConfig({
   // / `visual.spec.ts` / `webauthn.spec.ts`; underscore-prefixed files
   // (`_global-setup.ts`, `_helpers/*.ts`) are excluded by the glob.
   testMatch: ['*.spec.ts', '*.spec.mjs'],
-  // The new exhaustive suite (e2e/01-onboarding-welcome.spec.ts etc.) is
-  // ignored in the regular CI run until linux baselines have been
-  // generated for it via the regenerate-visual-baselines workflow. The
-  // regen workflow itself sets E2E_NEED_FIXTURES=true and therefore
-  // does see the new specs — that's how the baselines get created in
-  // the first place. Once a spec has its baseline snapshots directory
-  // committed, remove its prefix from this list. Tracked in
-  // e2e/README.md § 11.3.
-  testIgnore: process.env.E2E_NEED_FIXTURES === 'true' ? [] : ['01-onboarding-welcome.spec.ts'],
+  // New exhaustive-suite specs are listed here while their linux
+  // baselines are missing — the regular CI run ignores them so it
+  // doesn't fail on a `Snapshot doesn't exist` error. The regen
+  // workflow sets E2E_NEED_FIXTURES=true to opt every new spec back
+  // in so the workflow can produce the missing PNGs.
+  //
+  // Once a spec's snapshots directory is committed, remove its file
+  // name from this list. Tracked in e2e/README.md § 11.3.
+  //
+  // Active specs (baselines committed):
+  //   01-onboarding-welcome.spec.ts (PR #18)
+  testIgnore: process.env.E2E_NEED_FIXTURES === 'true' ? [] : [],
   // Seed Alice + Bob once before any worker starts; remove the fixture
   // file afterwards. See e2e/_global-setup.ts and e2e/_global-teardown.ts.
   globalSetup: require.resolve('./e2e/_global-setup.ts'),
