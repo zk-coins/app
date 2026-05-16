@@ -72,7 +72,7 @@ export default function ReceivePage() {
 
         {/* QR Code */}
         <div className="flex justify-center">
-          <div className="rounded-md border border-line2 bg-white p-4">
+          <div data-testid="qr-code" className="rounded-md border border-line2 bg-white p-4">
             <QRCodeSVG value={zkAddress} size={208} bgColor="#ffffff" fgColor="#000000" level="M" />
           </div>
         </div>
