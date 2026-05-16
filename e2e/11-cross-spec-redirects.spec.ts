@@ -14,6 +14,8 @@
  * surgical — production code does not schedule unrelated 100-ms timers
  * on these routes — but if collisions appear later, switch to a more
  * specific match (e.g. function-source inspection).
+ *
+ * Locators: testid-based.
  */
 
 import { expect, test } from '@playwright/test';
@@ -39,13 +41,13 @@ test.describe('Cross-route redirects — no account', () => {
 
   test('send-no-account-redirect', async ({ page }) => {
     await page.goto('/send');
-    await expect(page.getByText('Redirecting to wallet…')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('redirecting-placeholder')).toBeVisible({ timeout: 5_000 });
     await snap(page, '11-send-no-account-redirect');
   });
 
   test('receive-no-account-redirect', async ({ page }) => {
     await page.goto('/receive');
-    await expect(page.getByText('Redirecting to wallet…')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('redirecting-placeholder')).toBeVisible({ timeout: 5_000 });
     await snap(page, '11-receive-no-account-redirect');
   });
 
@@ -53,9 +55,9 @@ test.describe('Cross-route redirects — no account', () => {
     // Settings does NOT use the "Redirecting to wallet…" placeholder — it
     // renders the page with `{account && …}` sections suppressed and the
     // 100 ms redirect fires from useEffect. We baseline the empty-body
-    // state and assert on the "Settings" heading.
+    // state and assert on the Settings heading.
     await page.goto('/settings');
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 5_000 });
     await snap(page, '11-settings-no-account-redirect');
   });
 });

@@ -43,7 +43,9 @@ export default function ReceivePage() {
       <AppShell showNav={false}>
         <div className="flex min-h-[80vh] flex-col items-center justify-center text-center">
           <Wallet size={36} strokeWidth={1.75} className="text-ink4" />
-          <p className="mt-4 text-[14px] text-ink2">Redirecting to wallet…</p>
+          <p data-testid="redirecting-placeholder" className="mt-4 text-[14px] text-ink2">
+            Redirecting to wallet…
+          </p>
         </div>
       </AppShell>
     );
@@ -64,7 +66,12 @@ export default function ReceivePage() {
 
       <div className="mt-10 space-y-7">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight text-ink">Receive Bitcoin</h1>
+          <h1
+            data-testid="receive-heading"
+            className="text-[26px] font-bold tracking-tight text-ink"
+          >
+            Receive Bitcoin
+          </h1>
           <p className="mt-1 text-[13px] text-ink2">
             Share this address. Senders see only what they send to you — nothing else.
           </p>
@@ -84,6 +91,8 @@ export default function ReceivePage() {
             {zkAddress}
           </div>
           <button
+            data-testid="receive-copy-btn"
+            data-copied={copied || undefined}
             onClick={copy}
             className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-line2 py-3 text-[13px] font-semibold tracking-tight text-ink transition-colors hover:border-bitcoin hover:text-bitcoin"
           >

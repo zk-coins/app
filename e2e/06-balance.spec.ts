@@ -11,6 +11,11 @@
  *     Alice + Bob, both unclaimed
  *   - Faucet button on the empty-balance banner (Bob screenshots)
  *   - `dev-*` hostnames in the FooterLinks row
+ *
+ * Locators: testid-based throughout. The funded-vs-empty signal is
+ * `wallet-empty-banner` visibility; faucet minting state is detected
+ * via the `data-minting` attribute on the faucet button so the
+ * "Minting…" baseline doesn't depend on the literal text.
  */
 
 import { expect, test } from '@playwright/test';
@@ -22,35 +27,38 @@ test.describe('View balance', () => {
     await setViewport(page, 'desktop');
     await aliceLogin(page);
     // Wait for the balance polling tick to land; until then the
-    // "Wallet is empty" banner could briefly show.
-    await expect(page.getByText('Wallet is empty')).not.toBeVisible({ timeout: 30_000 });
+    // empty-banner could briefly show.
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
     await snap(page, '06-balance-funded-desktop');
   });
 
   test('balance-funded-mobile', async ({ page }) => {
     await setViewport(page, 'mobile');
     await aliceLogin(page);
-    await expect(page.getByText('Wallet is empty')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
     await snap(page, '06-balance-funded-mobile');
   });
 
   test('balance-hidden', async ({ page }) => {
     await setViewport(page, 'desktop');
     await aliceLogin(page);
-    await expect(page.getByText('Wallet is empty')).not.toBeVisible({ timeout: 30_000 });
-    await page.getByRole('button', { name: 'Hide balance' }).click();
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await page.getByTestId('balance-toggle-btn').click();
     // Hidden state shows the "••••" placeholder — the default mask
     // covers the balance-value testid wrapper, so this baseline
     // captures the surrounding chrome change (icon, BTC line, layout).
-    await expect(page.getByRole('button', { name: 'Show balance' })).toBeVisible();
+    // After click the aria-label toggles between Show/Hide — assert
+    // the button is still present and reachable rather than pinning
+    // the localised aria text.
+    await expect(page.getByTestId('balance-toggle-btn')).toBeVisible();
     await snap(page, '06-balance-hidden');
   });
 
   test('balance-zero-faucet-visible', async ({ page }) => {
     await setViewport(page, 'desktop');
     await bobLogin(page);
-    await expect(page.getByText('Wallet is empty')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByRole('button', { name: 'Faucet' })).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('wallet-empty-banner')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('faucet-btn')).toBeVisible({ timeout: 30_000 });
     await snap(page, '06-balance-zero-faucet-visible');
   });
 
@@ -63,24 +71,26 @@ test.describe('View balance', () => {
       await route.continue();
     });
     await bobLogin(page);
-    await expect(page.getByRole('button', { name: 'Faucet' })).toBeVisible({ timeout: 30_000 });
-    await page.getByRole('button', { name: 'Faucet' }).click();
-    await expect(page.getByText('Minting…')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('faucet-btn')).toBeVisible({ timeout: 30_000 });
+    await page.getByTestId('faucet-btn').click();
+    await expect(page.getByTestId('faucet-btn')).toHaveAttribute('data-minting', 'true', {
+      timeout: 5_000,
+    });
     await snap(page, '06-balance-faucet-minting');
   });
 
   test('balance-copied-feedback', async ({ page }) => {
     await setViewport(page, 'desktop');
     await aliceLogin(page);
-    await expect(page.getByText('Wallet is empty')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
     // Grant clipboard permission so navigator.clipboard.writeText
     // resolves rather than rejecting under Playwright's default deny.
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-    // Click the address chip button (contains "@zkcoins.app"). After
-    // click: `copied` state turns the chip's icon into Check + appends
-    // "copied" text for 1.5 s.
-    await page.locator('button:has-text("@zkcoins.app")').first().click();
-    await expect(page.getByText('copied').first()).toBeVisible({ timeout: 2_000 });
+    // Click the address chip button. After click: `copied` state turns
+    // the chip's icon into Check + appends a localisable "copied" hint
+    // for 1.5 s.
+    await page.getByTestId('address-copy-btn').click();
+    await expect(page.getByTestId('address-copied-feedback')).toBeVisible({ timeout: 2_000 });
     await snap(page, '06-balance-copied-feedback');
   });
 });

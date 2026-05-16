@@ -49,11 +49,12 @@ export function FooterLinks({ variant = 'row' }: { variant?: 'row' | 'grid' }) {
 
   if (variant === 'grid') {
     return (
-      <div className="grid grid-cols-2 gap-x-4 gap-y-2">
+      <div data-testid="footer-links-grid" className="grid grid-cols-2 gap-x-4 gap-y-2">
         {links.map((l) =>
           l.internal ? (
             <Link
               key={l.label}
+              data-testid={`footer-link-${l.label.toLowerCase()}`}
               href={l.href}
               className="flex items-center justify-between rounded-md border border-line2 bg-surface px-3 py-2 text-[13px] text-ink2 transition-colors hover:border-bitcoin hover:text-bitcoin"
             >
@@ -63,6 +64,7 @@ export function FooterLinks({ variant = 'row' }: { variant?: 'row' | 'grid' }) {
           ) : (
             <a
               key={l.label}
+              data-testid={`footer-link-${l.label.toLowerCase()}`}
               href={l.href}
               target="_blank"
               rel="noopener noreferrer"
@@ -79,17 +81,23 @@ export function FooterLinks({ variant = 'row' }: { variant?: 'row' | 'grid' }) {
 
   return (
     <nav
+      data-testid="footer-links-row"
       className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-[12px] text-ink3"
       aria-label="Resources"
     >
       {links.map((l, i) => (
         <span key={l.label} className="flex items-center gap-3">
           {l.internal ? (
-            <Link href={l.href} className="transition-colors hover:text-bitcoin">
+            <Link
+              data-testid={`footer-link-${l.label.toLowerCase()}`}
+              href={l.href}
+              className="transition-colors hover:text-bitcoin"
+            >
               {l.label}
             </Link>
           ) : (
             <a
+              data-testid={`footer-link-${l.label.toLowerCase()}`}
               href={l.href}
               target="_blank"
               rel="noopener noreferrer"

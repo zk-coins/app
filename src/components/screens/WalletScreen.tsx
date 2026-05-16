@@ -102,6 +102,7 @@ export function WalletScreen() {
             {hidden ? HIDDEN : `$${usd}`}
           </h1>
           <button
+            data-testid="balance-toggle-btn"
             onClick={() => setHidden((h) => !h)}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-line2 text-ink3 transition-colors hover:border-ink2 hover:text-ink"
             aria-label={hidden ? 'Show balance' : 'Hide balance'}
@@ -163,6 +164,8 @@ export function WalletScreen() {
               <p className="text-[11px] text-bad">{claimError}</p>
             )}
             <button
+              data-testid="address-copy-btn"
+              data-copied={copied || undefined}
               onClick={copyAddress}
               className="inline-flex items-center gap-1.5 mono text-[11px] text-ink3 transition-colors hover:text-ink"
               title={account.address}
@@ -173,7 +176,11 @@ export function WalletScreen() {
                 <Copy size={11} strokeWidth={2} />
               )}
               <span>{zkAddress}</span>
-              {copied && <span className="text-bitcoin">copied</span>}
+              {copied && (
+                <span data-testid="address-copied-feedback" className="text-bitcoin">
+                  copied
+                </span>
+              )}
             </button>
           </div>
         )}
@@ -187,7 +194,10 @@ export function WalletScreen() {
 
       {/* No-balance helper + faucet (faucet button only on testnet) */}
       {account && sats <= 0 && (
-        <div className="flex items-start gap-3 rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3">
+        <div
+          data-testid="wallet-empty-banner"
+          className="flex items-start gap-3 rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3"
+        >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-bitcoin/10 text-bitcoin">
             <CircleDollarSign size={14} strokeWidth={2} />
           </div>
@@ -226,6 +236,8 @@ export function WalletScreen() {
             </p>
             {showFaucet && (
               <button
+                data-testid="faucet-btn"
+                data-minting={minting || undefined}
                 onClick={async () => {
                   if (!account || minting) return;
                   setMinting(true);
@@ -278,6 +290,7 @@ function PrimaryButton({
   const Icon = icon === 'send' ? ArrowUpRight : ArrowDownLeft;
   return (
     <Link
+      data-testid={`wallet-${icon}-btn`}
       href={href}
       aria-disabled={disabled}
       tabIndex={disabled ? -1 : 0}

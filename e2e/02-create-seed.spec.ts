@@ -11,6 +11,12 @@
  *
  * `beforeEach` wipes IDB + localStorage so every test starts from a blank
  * slate (Onboarding renders, not WalletScreen / UnlockScreen).
+ *
+ * Locators are testid-based. The two password-validation error tests
+ * (too-short, mismatch) still assert on the literal English message
+ * because both errors share the `seed-error` container — distinguishing
+ * them by text is the only way today. Both lines are marked `i18n-todo`
+ * to be replaced with `data-error-kind` discriminators when i18n lands.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -22,11 +28,11 @@ const PASSWORD = 'TestPass123!';
 /** Walk Welcome → CREATE WALLET → OTHER LOGIN OPTIONS into SeedFlow. */
 async function enterSeedFlow(page: Page): Promise<void> {
   await page.goto('/');
-  await page.getByText('CREATE WALLET').click();
+  await page.getByTestId('onboarding-create-btn').click();
   // DEV-bundle artefact: passkey-intro screen. Click through without
   // taking a baseline (see § 8.0 (a) in e2e/README.md).
-  await page.getByText('OTHER LOGIN OPTIONS').click();
-  await expect(page.getByText('Your seed phrase')).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('passkey-other-options-btn').click();
+  await expect(page.getByTestId('seed-flow')).toBeVisible({ timeout: 15_000 });
 }
 
 test.describe('Create wallet — seed phrase', () => {
@@ -43,81 +49,81 @@ test.describe('Create wallet — seed phrase', () => {
       await route.continue();
     });
     await page.goto('/');
-    await page.getByText('CREATE WALLET').click();
-    await page.getByText('OTHER LOGIN OPTIONS').click();
-    await expect(page.getByText('Generating seed phrase…')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('onboarding-create-btn').click();
+    await page.getByTestId('passkey-other-options-btn').click();
+    await expect(page.getByTestId('seed-generating')).toBeVisible({ timeout: 5_000 });
     await snap(page, '02-seed-generating');
   });
 
   test('seed-reveal-hidden', async ({ page }) => {
     await enterSeedFlow(page);
-    await expect(page.getByText('Tap to reveal')).toBeVisible();
+    await expect(page.getByTestId('seed-reveal-btn')).toBeVisible();
     await snap(page, '02-seed-reveal-hidden');
   });
 
   test('seed-reveal-shown', async ({ page }) => {
     await enterSeedFlow(page);
-    await page.getByText('Tap to reveal').click();
-    await expect(page.getByText("I've written it down")).toBeVisible();
+    await page.getByTestId('seed-reveal-btn').click();
+    await expect(page.getByTestId('seed-written-btn')).toBeVisible();
     await snap(page, '02-seed-reveal-shown');
   });
 
   test('seed-acknowledged', async ({ page }) => {
     await enterSeedFlow(page);
-    await page.getByText('Tap to reveal').click();
-    await page.getByText("I've written it down").click();
-    await expect(page.getByText('Continue', { exact: true })).toBeVisible();
+    await page.getByTestId('seed-reveal-btn').click();
+    await page.getByTestId('seed-written-btn').click();
+    await expect(page.getByTestId('seed-confirm-btn')).toBeVisible();
     await snap(page, '02-seed-acknowledged');
   });
 
   test('password-empty', async ({ page }) => {
     await enterSeedFlow(page);
-    await page.getByText('Tap to reveal').click();
-    await page.getByText("I've written it down").click();
-    await page.getByText('Continue', { exact: true }).click();
-    await expect(page.getByText('Set an encryption password')).toBeVisible();
-    const createBtn = page.getByText('Create wallet', { exact: true });
-    await expect(createBtn).toBeDisabled();
+    await page.getByTestId('seed-reveal-btn').click();
+    await page.getByTestId('seed-written-btn').click();
+    await page.getByTestId('seed-confirm-btn').click();
+    await expect(page.getByTestId('seed-password-stage')).toBeVisible();
+    await expect(page.getByTestId('seed-create-btn')).toBeDisabled();
     await snap(page, '02-password-empty');
   });
 
   test('password-filled', async ({ page }) => {
     await enterSeedFlow(page);
-    await page.getByText('Tap to reveal').click();
-    await page.getByText("I've written it down").click();
-    await page.getByText('Continue', { exact: true }).click();
-    const pw = page.locator('input[type="password"]');
-    await pw.first().fill(PASSWORD);
-    await pw.last().fill(PASSWORD);
-    await expect(page.getByText('Create wallet', { exact: true })).toBeEnabled();
+    await page.getByTestId('seed-reveal-btn').click();
+    await page.getByTestId('seed-written-btn').click();
+    await page.getByTestId('seed-confirm-btn').click();
+    await page.getByTestId('seed-password-input').fill(PASSWORD);
+    await page.getByTestId('seed-password-confirm-input').fill(PASSWORD);
+    await expect(page.getByTestId('seed-create-btn')).toBeEnabled();
     await snap(page, '02-password-filled');
   });
 
   test('password-too-short', async ({ page }) => {
     await enterSeedFlow(page);
-    await page.getByText('Tap to reveal').click();
-    await page.getByText("I've written it down").click();
-    await page.getByText('Continue', { exact: true }).click();
-    const pw = page.locator('input[type="password"]');
-    await pw.first().fill('short');
-    await pw.last().fill('short');
-    await page.getByText('Create wallet', { exact: true }).click();
-    await expect(page.getByText('Password must be at least 8 characters')).toBeVisible({
-      timeout: 5_000,
-    });
+    await page.getByTestId('seed-reveal-btn').click();
+    await page.getByTestId('seed-written-btn').click();
+    await page.getByTestId('seed-confirm-btn').click();
+    await page.getByTestId('seed-password-input').fill('short');
+    await page.getByTestId('seed-password-confirm-input').fill('short');
+    await page.getByTestId('seed-create-btn').click();
+    await expect(page.getByTestId('seed-error')).toBeVisible({ timeout: 5_000 });
+    // i18n-todo: distinguish too-short vs mismatch via data-error-kind once i18n lands.
+    await expect(page.getByTestId('seed-error')).toHaveText(
+      /Password must be at least 8 characters/,
+    );
     await snap(page, '02-password-too-short');
   });
 
   test('password-mismatch', async ({ page }) => {
     await enterSeedFlow(page);
-    await page.getByText('Tap to reveal').click();
-    await page.getByText("I've written it down").click();
-    await page.getByText('Continue', { exact: true }).click();
-    const pw = page.locator('input[type="password"]');
-    await pw.first().fill(PASSWORD);
-    await pw.last().fill('DifferentPass456!');
-    await page.getByText('Create wallet', { exact: true }).click();
-    await expect(page.getByText('Passwords do not match')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('seed-reveal-btn').click();
+    await page.getByTestId('seed-written-btn').click();
+    await page.getByTestId('seed-confirm-btn').click();
+    await page.getByTestId('seed-password-input').fill(PASSWORD);
+    await page.getByTestId('seed-password-confirm-input').fill('DifferentPass456!');
+    await page.getByTestId('seed-create-btn').click();
+    await expect(page.getByTestId('seed-error')).toBeVisible({ timeout: 5_000 });
+    // i18n-todo: distinguish too-short vs mismatch via data-error-kind once i18n lands.
+    await expect(page.getByTestId('seed-error')).toHaveText(/Passwords do not match/);
     await snap(page, '02-password-mismatch');
   });
 
@@ -132,13 +138,12 @@ test.describe('Create wallet — seed phrase', () => {
 
   test('wallet-after-create', async ({ page }) => {
     await enterSeedFlow(page);
-    await page.getByText('Tap to reveal').click();
-    await page.getByText("I've written it down").click();
-    await page.getByText('Continue', { exact: true }).click();
-    const pw = page.locator('input[type="password"]');
-    await pw.first().fill(PASSWORD);
-    await pw.last().fill(PASSWORD);
-    await page.getByText('Create wallet', { exact: true }).click();
+    await page.getByTestId('seed-reveal-btn').click();
+    await page.getByTestId('seed-written-btn').click();
+    await page.getByTestId('seed-confirm-btn').click();
+    await page.getByTestId('seed-password-input').fill(PASSWORD);
+    await page.getByTestId('seed-password-confirm-input').fill(PASSWORD);
+    await page.getByTestId('seed-create-btn').click();
     // Wait for the wallet screen — the chip is the most reliable marker.
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 30_000,
@@ -156,12 +161,12 @@ test.describe('Create wallet — seed phrase', () => {
     await page.locator('button').first().click();
     if (
       await page
-        .getByText('OTHER LOGIN OPTIONS')
+        .getByTestId('passkey-other-options-btn')
         .isVisible()
         .catch(() => false)
     ) {
       await page.locator('button').first().click();
     }
-    await expect(page.getByText('Welcome to zkCoins')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('welcome-heading')).toBeVisible({ timeout: 10_000 });
   });
 });

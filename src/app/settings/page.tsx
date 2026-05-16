@@ -58,9 +58,15 @@ function Toggle({
 }
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  const testid = `settings-section-${title.toLowerCase()}`;
   return (
-    <div>
-      <p className="text-[10px] font-semibold tracking-[0.2em] text-ink3 uppercase">{title}</p>
+    <div data-testid={testid}>
+      <p
+        data-testid={`${testid}-title`}
+        className="text-[10px] font-semibold tracking-[0.2em] text-ink3 uppercase"
+      >
+        {title}
+      </p>
       <div className="mt-3 divide-y divide-line2 rounded-md border border-line2 bg-surface px-4">
         {children}
       </div>
@@ -98,7 +104,12 @@ export default function SettingsPage() {
     <AppShell>
       <header className="flex items-start justify-between gap-4">
         <div className="space-y-1">
-          <h1 className="text-[28px] font-bold tracking-tight text-ink">Settings</h1>
+          <h1
+            data-testid="settings-heading"
+            className="text-[28px] font-bold tracking-tight text-ink"
+          >
+            Settings
+          </h1>
           <p className="text-[14px] text-ink2">Wallet, network, and privacy preferences</p>
         </div>
         {networkName && (
@@ -192,6 +203,7 @@ export default function SettingsPage() {
 
         {account && (
           <button
+            data-testid="settings-disconnect-btn"
             onClick={onDisconnect}
             className="w-full rounded-md border border-line2 py-3 text-[13px] font-semibold tracking-wide text-ink2 transition-colors hover:border-bitcoin/40 hover:text-bitcoin"
           >

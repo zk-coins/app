@@ -7,6 +7,12 @@
  * DEV-only widgets visible in these baselines (per § 8.0 (b)):
  *   - Apps tab in BottomNav (FEATURES.APPS_DIRECTORY)
  *   - `dev-*` hostnames in the FooterLinks grid inside § Resources
+ *
+ * Locators: testid-based. The `disconnect-confirm-dialog` test still
+ * asserts on the dialog's literal message — the browser-native
+ * `window.confirm` text is not testid-addressable from the DOM. When
+ * i18n lands, that string moves into the translation bundle too and
+ * the assertion has to switch to the localised copy.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -21,8 +27,8 @@ import { snap, setViewport } from './_helpers/screenshot';
  * with the store intact.
  */
 async function goToSettings(page: Page): Promise<void> {
-  await page.getByRole('link', { name: 'Settings' }).click();
-  await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('nav-settings').click();
+  await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('Disconnect wallet', () => {
@@ -33,7 +39,7 @@ test.describe('Disconnect wallet', () => {
   test('wallet-to-settings-nav', async ({ page }) => {
     await setViewport(page, 'desktop');
     // Hover on the Settings tab so the link colour transition lands.
-    const settingsTab = page.getByRole('link', { name: 'Settings' });
+    const settingsTab = page.getByTestId('nav-settings');
     await settingsTab.hover();
     await page.waitForTimeout(200);
     await snap(page, '05-wallet-to-settings-nav');
@@ -42,21 +48,21 @@ test.describe('Disconnect wallet', () => {
   test('settings-desktop', async ({ page }) => {
     await setViewport(page, 'desktop');
     await goToSettings(page);
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    await expect(page.getByTestId('settings-heading')).toBeVisible();
     await snap(page, '05-settings-desktop', { fullPage: true });
   });
 
   test('settings-mobile', async ({ page }) => {
     await setViewport(page, 'mobile');
     await goToSettings(page);
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+    await expect(page.getByTestId('settings-heading')).toBeVisible();
     await snap(page, '05-settings-mobile', { fullPage: true });
   });
 
   test('settings-disconnect-hover', async ({ page }) => {
     await setViewport(page, 'desktop');
     await goToSettings(page);
-    const disconnect = page.getByRole('button', { name: 'Disconnect Wallet' });
+    const disconnect = page.getByTestId('settings-disconnect-btn');
     await expect(disconnect).toBeVisible();
     await disconnect.scrollIntoViewIfNeeded();
     await disconnect.hover();
@@ -76,8 +82,10 @@ test.describe('Disconnect wallet', () => {
       dialogMessage = dialog.message();
       await dialog.dismiss(); // keep wallet around for the screenshot
     });
-    await page.getByRole('button', { name: 'Disconnect Wallet' }).scrollIntoViewIfNeeded();
-    await page.getByRole('button', { name: 'Disconnect Wallet' }).click();
+    await page.getByTestId('settings-disconnect-btn').scrollIntoViewIfNeeded();
+    await page.getByTestId('settings-disconnect-btn').click();
+    // i18n-todo: native confirm() text comes from the app's source
+    // string — assertion needs to follow the localised copy.
     expect(dialogMessage).toContain('Disconnect this wallet');
     await snap(page, '05-disconnect-confirm-dialog');
   });
@@ -87,9 +95,9 @@ test.describe('Disconnect wallet', () => {
     await setViewport(page, 'desktop');
     await goToSettings(page);
     page.once('dialog', (dialog) => dialog.accept());
-    await page.getByRole('button', { name: 'Disconnect Wallet' }).scrollIntoViewIfNeeded();
-    await page.getByRole('button', { name: 'Disconnect Wallet' }).click();
-    await expect(page.getByText('Welcome to zkCoins')).toBeVisible({ timeout: 15_000 });
+    await page.getByTestId('settings-disconnect-btn').scrollIntoViewIfNeeded();
+    await page.getByTestId('settings-disconnect-btn').click();
+    await expect(page.getByTestId('welcome-heading')).toBeVisible({ timeout: 15_000 });
     await snap(page, '05-post-disconnect-welcome', { fullPage: true });
   });
 
@@ -97,15 +105,15 @@ test.describe('Disconnect wallet', () => {
     await setViewport(page, 'desktop');
     await goToSettings(page);
     page.once('dialog', (dialog) => dialog.dismiss());
-    await page.getByRole('button', { name: 'Disconnect Wallet' }).scrollIntoViewIfNeeded();
-    await page.getByRole('button', { name: 'Disconnect Wallet' }).click();
+    await page.getByTestId('settings-disconnect-btn').scrollIntoViewIfNeeded();
+    await page.getByTestId('settings-disconnect-btn').click();
     // Wallet still there — the heading + the Disconnect button still
     // render (both are `{account && (…)}`-gated, so their continued
     // presence proves the wallet wasn't cleared). Settings page shows
     // the full hex address rather than the `{8hex}@zkcoins.app` chip,
     // so don't match the chip regex here.
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Disconnect Wallet' })).toBeVisible();
+    await expect(page.getByTestId('settings-heading')).toBeVisible();
+    await expect(page.getByTestId('settings-disconnect-btn')).toBeVisible();
     await snap(page, '05-disconnect-cancel-noop', { fullPage: true });
   });
 });

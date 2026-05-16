@@ -22,6 +22,7 @@ export function BottomNav() {
           return (
             <li key={href}>
               <Link
+                data-testid={`nav-${label.toLowerCase()}`}
                 href={href}
                 className={`flex items-center gap-2 rounded-full px-4 py-2 transition-colors ${
                   isActive ? 'bg-bitcoin text-bg' : 'text-ink2 hover:bg-line hover:text-ink'

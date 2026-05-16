@@ -14,6 +14,11 @@
  *   - "Buy private BTC through DFX" link inside the No-funds banner
  *     (the Bob `send-no-funds-banner` shot)
  *   - `dev-*` hostnames in the FooterLinks row
+ *
+ * Locators: testid-based. The two amount-error paths (invalid text,
+ * insufficient balance) currently share the `send-error` container,
+ * so the discriminating assertions still use literal English text —
+ * marked `i18n-todo` for the data-error-kind migration.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -22,10 +27,8 @@ import { snap, setViewport } from './_helpers/screenshot';
 
 /** Navigate Wallet → /send via the in-app Send link (client-side nav). */
 async function goToSend(page: Page): Promise<void> {
-  await page.getByRole('link', { name: 'Send' }).first().click();
-  await expect(page.getByRole('heading', { name: 'Send Bitcoin' })).toBeVisible({
-    timeout: 10_000,
-  });
+  await page.getByTestId('wallet-send-btn').click();
+  await expect(page.getByTestId('send-heading')).toBeVisible({ timeout: 10_000 });
 }
 
 /**
@@ -33,19 +36,12 @@ async function goToSend(page: Page): Promise<void> {
  * balance reflects her on-chain funds. Without this, the Send-page
  * `handleConfirm` sees `account.balance === 0` and rejects every amount
  * with "Insufficient balance" — the confirm dialog never opens.
- *
- * Called from WalletScreen state: when balance > 0 the "Wallet is empty"
- * banner is removed by the polling tick.
  */
 async function waitForAliceBalanceLoaded(page: Page): Promise<void> {
-  await expect(page.getByText('Wallet is empty')).not.toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
 }
 
-/**
- * Common Alice setup for Send tests: log in, wait for balance, navigate
- * to /send via the in-app link. Every Send test that needs to enter a
- * valid amount calls this.
- */
+/** Common Alice setup: log in, wait for balance, navigate to /send. */
 async function aliceGoToSend(page: Page): Promise<void> {
   await aliceLogin(page);
   await waitForAliceBalanceLoaded(page);
@@ -56,7 +52,7 @@ test.describe('Send Bitcoin', () => {
   test('send-default', async ({ page }) => {
     await setViewport(page, 'desktop');
     await aliceGoToSend(page);
-    await expect(page.getByRole('button', { name: 'Send privately' })).toBeDisabled();
+    await expect(page.getByTestId('send-submit-btn')).toBeDisabled();
     await snap(page, '07-send-default');
   });
 
@@ -64,7 +60,7 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'desktop');
     await bobLogin(page);
     await goToSend(page);
-    await expect(page.getByText('No funds to send.')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('send-no-funds-banner')).toBeVisible({ timeout: 30_000 });
     await snap(page, '07-send-no-funds-banner');
   });
 
@@ -72,20 +68,20 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
-    await page.locator('input[placeholder]').first().fill(bob.address);
+    await page.getByTestId('send-recipient-input').fill(bob.address);
     // Amount still empty → button still disabled.
-    await expect(page.getByRole('button', { name: 'Send privately' })).toBeDisabled();
+    await expect(page.getByTestId('send-submit-btn')).toBeDisabled();
     await snap(page, '07-recipient-valid-hex', {
-      mask: [page.locator('input[placeholder]').first()],
+      mask: [page.getByTestId('send-recipient-input')],
     });
   });
 
   test('recipient-valid-username', async ({ page }) => {
     await setViewport(page, 'desktop');
     await aliceGoToSend(page);
-    await page.locator('input[placeholder]').first().fill('bob@zkcoins.app');
+    await page.getByTestId('send-recipient-input').fill('bob@zkcoins.app');
     await snap(page, '07-recipient-valid-username', {
-      mask: [page.locator('input[placeholder]').first()],
+      mask: [page.getByTestId('send-recipient-input')],
     });
   });
 
@@ -93,11 +89,11 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
-    await page.locator('input[placeholder]').first().fill(bob.address);
-    await page.locator('input[inputMode="decimal"]').fill('0.00001');
-    await expect(page.getByRole('button', { name: 'Send privately' })).toBeEnabled();
+    await page.getByTestId('send-recipient-input').fill(bob.address);
+    await page.getByTestId('send-amount-input').fill('0.00001');
+    await expect(page.getByTestId('send-submit-btn')).toBeEnabled();
     await snap(page, '07-amount-typed', {
-      mask: [page.locator('input[placeholder]').first()],
+      mask: [page.getByTestId('send-recipient-input')],
     });
   });
 
@@ -105,13 +101,10 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
-    await page.locator('input[placeholder]').first().fill(bob.address);
-    await page.getByText('Set max').click();
+    await page.getByTestId('send-recipient-input').fill(bob.address);
+    await page.getByTestId('send-setmax-btn').click();
     await snap(page, '07-amount-set-max-clicked', {
-      mask: [
-        page.locator('input[placeholder]').first(),
-        page.locator('input[inputMode="decimal"]'),
-      ],
+      mask: [page.getByTestId('send-recipient-input'), page.getByTestId('send-amount-input')],
     });
   });
 
@@ -119,12 +112,14 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
-    await page.locator('input[placeholder]').first().fill(bob.address);
-    await page.locator('input[inputMode="decimal"]').fill('abc');
-    await page.getByRole('button', { name: 'Send privately' }).click();
-    await expect(page.getByText('Invalid amount')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('send-recipient-input').fill(bob.address);
+    await page.getByTestId('send-amount-input').fill('abc');
+    await page.getByTestId('send-submit-btn').click();
+    await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 5_000 });
+    // i18n-todo: discriminate invalid vs insufficient via data-error-kind.
+    await expect(page.getByTestId('send-error')).toHaveText(/Invalid amount/);
     await snap(page, '07-amount-invalid-text', {
-      mask: [page.locator('input[placeholder]').first()],
+      mask: [page.getByTestId('send-recipient-input')],
     });
   });
 
@@ -132,12 +127,14 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
-    await page.locator('input[placeholder]').first().fill(bob.address);
-    await page.locator('input[inputMode="decimal"]').fill('999');
-    await page.getByRole('button', { name: 'Send privately' }).click();
-    await expect(page.getByText('Insufficient balance')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('send-recipient-input').fill(bob.address);
+    await page.getByTestId('send-amount-input').fill('999');
+    await page.getByTestId('send-submit-btn').click();
+    await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 5_000 });
+    // i18n-todo: discriminate invalid vs insufficient via data-error-kind.
+    await expect(page.getByTestId('send-error')).toHaveText(/Insufficient balance/);
     await snap(page, '07-amount-insufficient', {
-      mask: [page.locator('input[placeholder]').first()],
+      mask: [page.getByTestId('send-recipient-input')],
     });
   });
 
@@ -145,12 +142,12 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
-    await page.locator('input[placeholder]').first().fill(bob.address);
-    await page.locator('input[inputMode="decimal"]').fill('0.00001');
-    await page.getByRole('button', { name: 'Send privately' }).click();
-    await expect(page.getByText('This cannot be undone.')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('send-recipient-input').fill(bob.address);
+    await page.getByTestId('send-amount-input').fill('0.00001');
+    await page.getByTestId('send-submit-btn').click();
+    await expect(page.getByTestId('send-confirm-card')).toBeVisible({ timeout: 5_000 });
     await snap(page, '07-confirm-dialog-desktop', {
-      mask: [page.locator('input[placeholder]').first()],
+      mask: [page.getByTestId('send-recipient-input')],
     });
   });
 
@@ -158,12 +155,12 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
-    await page.locator('input[placeholder]').first().fill(bob.address);
-    await page.locator('input[inputMode="decimal"]').fill('0.00001');
-    await page.getByRole('button', { name: 'Send privately' }).click();
-    await expect(page.getByText('This cannot be undone.')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('send-recipient-input').fill(bob.address);
+    await page.getByTestId('send-amount-input').fill('0.00001');
+    await page.getByTestId('send-submit-btn').click();
+    await expect(page.getByTestId('send-confirm-card')).toBeVisible({ timeout: 5_000 });
     await snap(page, '07-confirm-dialog-mobile', {
-      mask: [page.locator('input[placeholder]').first()],
+      mask: [page.getByTestId('send-recipient-input')],
     });
   });
 
@@ -171,15 +168,13 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
-    await page.locator('input[placeholder]').first().fill(bob.address);
-    await page.locator('input[inputMode="decimal"]').fill('0.00001');
-    await page.getByRole('button', { name: 'Send privately' }).click();
-    await page.getByRole('button', { name: 'Cancel' }).click();
-    await expect(page.getByRole('button', { name: 'Send privately' })).toBeVisible({
-      timeout: 5_000,
-    });
+    await page.getByTestId('send-recipient-input').fill(bob.address);
+    await page.getByTestId('send-amount-input').fill('0.00001');
+    await page.getByTestId('send-submit-btn').click();
+    await page.getByTestId('send-cancel-btn').click();
+    await expect(page.getByTestId('send-submit-btn')).toBeVisible({ timeout: 5_000 });
     await snap(page, '07-confirm-cancel-back', {
-      mask: [page.locator('input[placeholder]').first()],
+      mask: [page.getByTestId('send-recipient-input')],
     });
   });
 
@@ -195,13 +190,11 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
-    await page.locator('input[placeholder]').first().fill(bob.address);
-    await page.locator('input[inputMode="decimal"]').fill('0.00001');
-    await page.getByRole('button', { name: 'Send privately' }).click();
-    await page.getByRole('button', { name: 'Confirm Send' }).click();
-    await expect(page.getByRole('heading', { name: 'Sent privately' })).toBeVisible({
-      timeout: 90_000,
-    });
+    await page.getByTestId('send-recipient-input').fill(bob.address);
+    await page.getByTestId('send-amount-input').fill('0.00001');
+    await page.getByTestId('send-submit-btn').click();
+    await page.getByTestId('send-confirm-btn').click();
+    await expect(page.getByTestId('send-success-heading')).toBeVisible({ timeout: 90_000 });
     await snap(page, '07-send-success');
   });
 
@@ -229,8 +222,6 @@ test.describe('Send Bitcoin', () => {
       );
     });
     await goToSend(page);
-    await expect(page.getByText('Recovering a previous in-flight transaction…')).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(page.getByTestId('send-recovering-banner')).toBeVisible({ timeout: 10_000 });
   });
 });

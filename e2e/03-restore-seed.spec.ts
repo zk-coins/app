@@ -14,6 +14,11 @@
  *
  * `beforeEach` wipes IDB + localStorage so the test starts on the Welcome
  * screen, not the wallet.
+ *
+ * Locators: testid-based. The three import-error paths (wrong-count,
+ * bad-bip39, password-validation) still assert on literal English text
+ * because they all share the `seed-import-error` container. Marked
+ * `i18n-todo` — discriminate via `data-error-kind` when i18n lands.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -26,12 +31,8 @@ const PASSWORD = 'TestPass123!';
 /** Walk Welcome → Restore existing wallet into SeedImportFlow. */
 async function enterImportFlow(page: Page): Promise<void> {
   await page.goto('/');
-  await page.getByText('Restore existing wallet').click();
-  // The textarea is the only stable marker on stage='input' — the
-  // "Restore wallet" text is reused by both the H1 and (later, on
-  // stage='password') the submit button, so locating by role/text
-  // here would be ambiguous.
-  await expect(page.locator('textarea')).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('onboarding-restore-btn').click();
+  await expect(page.getByTestId('seed-import-textarea')).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('Restore wallet — seed phrase', () => {
@@ -42,87 +43,92 @@ test.describe('Restore wallet — seed phrase', () => {
 
   test('restore-entry-empty', async ({ page }) => {
     await enterImportFlow(page);
-    await expect(page.locator('textarea')).toBeVisible();
-    await expect(page.getByText('Continue', { exact: true })).toBeDisabled();
+    await expect(page.getByTestId('seed-import-textarea')).toBeVisible();
+    await expect(page.getByTestId('seed-import-continue-btn')).toBeDisabled();
     await snap(page, '03-restore-entry-empty');
   });
 
   test('restore-input-typed-valid', async ({ page }) => {
     const { alice } = readAccounts();
     await enterImportFlow(page);
-    await page.locator('textarea').fill(alice.mnemonic.join(' '));
-    await expect(page.getByText('Continue', { exact: true })).toBeEnabled();
+    await page.getByTestId('seed-import-textarea').fill(alice.mnemonic.join(' '));
+    await expect(page.getByTestId('seed-import-continue-btn')).toBeEnabled();
     await snap(page, '03-restore-input-typed-valid', {
-      mask: [page.locator('textarea')],
+      mask: [page.getByTestId('seed-import-textarea')],
     });
   });
 
   test('restore-input-wrong-count', async ({ page }) => {
     await enterImportFlow(page);
-    await page.locator('textarea').fill('only five words pasted here');
-    await page.getByText('Continue', { exact: true }).click();
-    await expect(page.getByText('Enter exactly 12 words')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('seed-import-textarea').fill('only five words pasted here');
+    await page.getByTestId('seed-import-continue-btn').click();
+    await expect(page.getByTestId('seed-import-error')).toBeVisible({ timeout: 5_000 });
+    // i18n-todo: discriminate count vs bip39 via data-error-kind.
+    await expect(page.getByTestId('seed-import-error')).toHaveText(/Enter exactly 12 words/);
     await snap(page, '03-restore-input-wrong-count');
   });
 
   test('restore-input-bad-bip39', async ({ page }) => {
     await enterImportFlow(page);
     // 12 tokens, none of which are valid BIP-39 wordlist entries.
-    await page.locator('textarea').fill('zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz');
-    await page.getByText('Continue', { exact: true }).click();
-    await expect(
-      page.getByText('Invalid seed phrase — check your words and try again'),
-    ).toBeVisible({ timeout: 5_000 });
+    await page
+      .getByTestId('seed-import-textarea')
+      .fill('zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz');
+    await page.getByTestId('seed-import-continue-btn').click();
+    await expect(page.getByTestId('seed-import-error')).toBeVisible({ timeout: 5_000 });
+    // i18n-todo: discriminate count vs bip39 via data-error-kind.
+    await expect(page.getByTestId('seed-import-error')).toHaveText(/Invalid seed phrase/);
     await snap(page, '03-restore-input-bad-bip39');
   });
 
   test('restore-password-empty', async ({ page }) => {
     const { alice } = readAccounts();
     await enterImportFlow(page);
-    await page.locator('textarea').fill(alice.mnemonic.join(' '));
-    await page.getByText('Continue', { exact: true }).click();
-    await expect(page.getByText('Set an encryption password')).toBeVisible();
-    await expect(page.getByRole('button', { name: 'Restore wallet' })).toBeDisabled();
+    await page.getByTestId('seed-import-textarea').fill(alice.mnemonic.join(' '));
+    await page.getByTestId('seed-import-continue-btn').click();
+    await expect(page.getByTestId('seed-import-password-stage')).toBeVisible();
+    await expect(page.getByTestId('seed-import-submit-btn')).toBeDisabled();
     await snap(page, '03-restore-password-empty');
   });
 
   test('restore-password-filled', async ({ page }) => {
     const { alice } = readAccounts();
     await enterImportFlow(page);
-    await page.locator('textarea').fill(alice.mnemonic.join(' '));
-    await page.getByText('Continue', { exact: true }).click();
-    const pw = page.locator('input[type="password"]');
-    await pw.first().fill(PASSWORD);
-    await pw.last().fill(PASSWORD);
-    await expect(page.getByRole('button', { name: 'Restore wallet' })).toBeEnabled();
+    await page.getByTestId('seed-import-textarea').fill(alice.mnemonic.join(' '));
+    await page.getByTestId('seed-import-continue-btn').click();
+    await page.getByTestId('seed-import-password-input').fill(PASSWORD);
+    await page.getByTestId('seed-import-password-confirm-input').fill(PASSWORD);
+    await expect(page.getByTestId('seed-import-submit-btn')).toBeEnabled();
     await snap(page, '03-restore-password-filled');
   });
 
   test('restore-password-too-short', async ({ page }) => {
     const { alice } = readAccounts();
     await enterImportFlow(page);
-    await page.locator('textarea').fill(alice.mnemonic.join(' '));
-    await page.getByText('Continue', { exact: true }).click();
-    const pw = page.locator('input[type="password"]');
-    await pw.first().fill('short');
-    await pw.last().fill('short');
-    await page.getByRole('button', { name: 'Restore wallet' }).click();
-    await expect(page.getByText('Password must be at least 8 characters')).toBeVisible({
-      timeout: 5_000,
-    });
+    await page.getByTestId('seed-import-textarea').fill(alice.mnemonic.join(' '));
+    await page.getByTestId('seed-import-continue-btn').click();
+    await page.getByTestId('seed-import-password-input').fill('short');
+    await page.getByTestId('seed-import-password-confirm-input').fill('short');
+    await page.getByTestId('seed-import-submit-btn').click();
+    await expect(page.getByTestId('seed-import-error')).toBeVisible({ timeout: 5_000 });
+    // i18n-todo: discriminate too-short vs mismatch via data-error-kind.
+    await expect(page.getByTestId('seed-import-error')).toHaveText(
+      /Password must be at least 8 characters/,
+    );
     await snap(page, '03-restore-password-too-short');
   });
 
   test('restore-password-mismatch', async ({ page }) => {
     const { alice } = readAccounts();
     await enterImportFlow(page);
-    await page.locator('textarea').fill(alice.mnemonic.join(' '));
-    await page.getByText('Continue', { exact: true }).click();
-    const pw = page.locator('input[type="password"]');
-    await pw.first().fill(PASSWORD);
-    await pw.last().fill('DifferentPass456!');
-    await page.getByRole('button', { name: 'Restore wallet' }).click();
-    await expect(page.getByText('Passwords do not match')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('seed-import-textarea').fill(alice.mnemonic.join(' '));
+    await page.getByTestId('seed-import-continue-btn').click();
+    await page.getByTestId('seed-import-password-input').fill(PASSWORD);
+    await page.getByTestId('seed-import-password-confirm-input').fill('DifferentPass456!');
+    await page.getByTestId('seed-import-submit-btn').click();
+    await expect(page.getByTestId('seed-import-error')).toBeVisible({ timeout: 5_000 });
+    // i18n-todo: discriminate too-short vs mismatch via data-error-kind.
+    await expect(page.getByTestId('seed-import-error')).toHaveText(/Passwords do not match/);
     await snap(page, '03-restore-password-mismatch');
   });
 
@@ -143,12 +149,11 @@ test.describe('Restore wallet — seed phrase', () => {
     test.setTimeout(60_000);
     const { alice } = readAccounts();
     await enterImportFlow(page);
-    await page.locator('textarea').fill(alice.mnemonic.join(' '));
-    await page.getByText('Continue', { exact: true }).click();
-    const pw = page.locator('input[type="password"]');
-    await pw.first().fill(PASSWORD);
-    await pw.last().fill(PASSWORD);
-    await page.getByRole('button', { name: 'Restore wallet' }).click();
+    await page.getByTestId('seed-import-textarea').fill(alice.mnemonic.join(' '));
+    await page.getByTestId('seed-import-continue-btn').click();
+    await page.getByTestId('seed-import-password-input').fill(PASSWORD);
+    await page.getByTestId('seed-import-password-confirm-input').fill(PASSWORD);
+    await page.getByTestId('seed-import-submit-btn').click();
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 30_000,
     });
@@ -159,6 +164,6 @@ test.describe('Restore wallet — seed phrase', () => {
     await enterImportFlow(page);
     // StepHeader back is the only `<button>` before the textarea.
     await page.locator('button').first().click();
-    await expect(page.getByText('Welcome to zkCoins')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('welcome-heading')).toBeVisible({ timeout: 10_000 });
   });
 });

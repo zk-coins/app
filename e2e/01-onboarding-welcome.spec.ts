@@ -24,30 +24,30 @@ test.describe('Welcome', () => {
   test('welcome-desktop', async ({ page }) => {
     await setViewport(page, 'desktop');
     await page.goto('/');
-    await expect(page.getByText('Welcome to zkCoins')).toBeVisible();
-    await expect(page.getByText('CREATE WALLET')).toBeVisible();
-    await expect(page.getByText('Restore existing wallet')).toBeVisible();
+    await expect(page.getByTestId('welcome-heading')).toBeVisible();
+    await expect(page.getByTestId('onboarding-create-btn')).toBeVisible();
+    await expect(page.getByTestId('onboarding-restore-btn')).toBeVisible();
     await snap(page, '01-welcome-desktop', { fullPage: true });
   });
 
   test('welcome-mobile', async ({ page }) => {
     await setViewport(page, 'mobile');
     await page.goto('/');
-    await expect(page.getByText('Welcome to zkCoins')).toBeVisible();
+    await expect(page.getByTestId('welcome-heading')).toBeVisible();
     await snap(page, '01-welcome-mobile', { fullPage: true });
   });
 
   test('welcome-tablet', async ({ page }) => {
     await setViewport(page, 'tablet');
     await page.goto('/');
-    await expect(page.getByText('Welcome to zkCoins')).toBeVisible();
+    await expect(page.getByTestId('welcome-heading')).toBeVisible();
     await snap(page, '01-welcome-tablet', { fullPage: true });
   });
 
   test('welcome-create-hover', async ({ page }) => {
     await setViewport(page, 'desktop');
     await page.goto('/');
-    const createButton = page.getByText('CREATE WALLET');
+    const createButton = page.getByTestId('onboarding-create-btn');
     await expect(createButton).toBeVisible();
     await createButton.hover();
     // Give the colour transition time to land (Tailwind `transition-colors`
@@ -59,7 +59,7 @@ test.describe('Welcome', () => {
   test('welcome-restore-hover', async ({ page }) => {
     await setViewport(page, 'desktop');
     await page.goto('/');
-    const restoreLink = page.getByText('Restore existing wallet');
+    const restoreLink = page.getByTestId('onboarding-restore-btn');
     await expect(restoreLink).toBeVisible();
     await restoreLink.hover();
     await page.waitForTimeout(200);

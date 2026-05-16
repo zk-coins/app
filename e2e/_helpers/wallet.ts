@@ -11,6 +11,11 @@
  * The trade-off is speed — restoring Alice in a test takes ~3 s. Fixtures
  * (`e2e/_helpers/fixtures.ts`) cache Alice + Bob across the run so we pay
  * the UI cost once per test, not once per spec.
+ *
+ * Locators: everything that drives or asserts the UI uses `data-testid`
+ * via `page.getByTestId(...)`. Text-based locators were removed in the
+ * i18n-readiness pass — once we ship translations, the testids stay
+ * stable while the visible copy changes.
  */
 
 import type { Page } from '@playwright/test';
@@ -36,6 +41,9 @@ export async function clearWalletState(page: Page): Promise<void> {
       if (db.name) indexedDB.deleteDatabase(db.name);
     }
   });
+  // After deleting the wallet IDB the app has no account loaded, so
+  // the 5 s balance-polling tick is not running and networkidle is
+  // safe here (unlike inside `snap()`, which warns against it).
   await page.reload({ waitUntil: 'networkidle' });
 }
 
@@ -43,16 +51,12 @@ export async function clearWalletState(page: Page): Promise<void> {
  * Walk the SeedFlow from Welcome to a fully-loaded wallet, capturing the
  * generated mnemonic before the user "confirms it down".
  *
- * Returns the 12 BIP-39 words and the `{8hex}@zkcoins.app` chip text so
- * the caller can persist them as a fixture.
+ * Returns the 12 BIP-39 words and the full 64-hex address read off the
+ * copy-address button's `title` attribute (the visible chip is truncated
+ * to `{8hex}@zkcoins.app`).
  *
  * Assumes a blank-slate state (no wallet in IDB). Caller must `clearWalletState`
  * first.
- */
-/**
- * Returns the full 64-character hex address — not the `{8hex}@zkcoins.app`
- * chip text. `/api/mint` and `/api/balance` accept only the full address;
- * the chip is purely a display affordance.
  */
 export async function createSeedWallet(
   page: Page,
@@ -60,13 +64,13 @@ export async function createSeedWallet(
 ): Promise<{ mnemonic: string[]; address: string }> {
   await page.goto('/');
 
-  await page.getByText('CREATE WALLET').click();
+  await page.getByTestId('onboarding-create-btn').click();
   // DEV bundle: an extra PasskeyFlow intro screen sits between the
   // welcome and SeedFlow. Skip it. (See e2e/README.md § 8.0 (a).)
-  await page.getByText('OTHER LOGIN OPTIONS').click();
+  await page.getByTestId('passkey-other-options-btn').click();
 
-  await expect(page.getByText('Your seed phrase')).toBeVisible({ timeout: 15_000 });
-  await page.getByText('Tap to reveal').click();
+  await expect(page.getByTestId('seed-flow')).toBeVisible({ timeout: 15_000 });
+  await page.getByTestId('seed-reveal-btn').click();
 
   // Capture the mnemonic from the revealed grid. SeedFlow renders 12 cells
   // in a `grid-cols-3` container; each cell has a number span and a word
@@ -83,13 +87,12 @@ export async function createSeedWallet(
     );
   }
 
-  await page.getByText("I've written it down").click();
-  await page.getByText('Continue').click();
+  await page.getByTestId('seed-written-btn').click();
+  await page.getByTestId('seed-confirm-btn').click();
 
-  const pwInputs = page.locator('input[type="password"]');
-  await pwInputs.first().fill(password);
-  await pwInputs.last().fill(password);
-  await page.getByText('Create wallet').click();
+  await page.getByTestId('seed-password-input').fill(password);
+  await page.getByTestId('seed-password-confirm-input').fill(password);
+  await page.getByTestId('seed-create-btn').click();
 
   // The full 64-hex address is exposed via the `title` attribute on the
   // copy-address button in WalletScreen (the visible text is the truncated
@@ -121,21 +124,17 @@ export async function restoreSeedWallet(
   password: string = DEFAULT_PASSWORD,
 ): Promise<{ address: string }> {
   await page.goto('/');
-  await page.getByText('Restore existing wallet').click();
+  await page.getByTestId('onboarding-restore-btn').click();
 
-  // The textarea is the only stable marker on stage='input' — the
-  // "Restore wallet" text is reused by both the H1 and (later, on
-  // stage='password') the submit button. Locating by text would hit
-  // a strict-mode violation.
-  await expect(page.locator('textarea')).toBeVisible({ timeout: 10_000 });
-  await page.locator('textarea').fill(mnemonic.join(' '));
-  await page.getByText('Continue').click();
+  const textarea = page.getByTestId('seed-import-textarea');
+  await expect(textarea).toBeVisible({ timeout: 10_000 });
+  await textarea.fill(mnemonic.join(' '));
+  await page.getByTestId('seed-import-continue-btn').click();
 
-  await expect(page.getByText('Set an encryption password')).toBeVisible({ timeout: 10_000 });
-  const pwInputs = page.locator('input[type="password"]');
-  await pwInputs.first().fill(password);
-  await pwInputs.last().fill(password);
-  await page.getByRole('button', { name: 'Restore wallet' }).click();
+  await expect(page.getByTestId('seed-import-password-stage')).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('seed-import-password-input').fill(password);
+  await page.getByTestId('seed-import-password-confirm-input').fill(password);
+  await page.getByTestId('seed-import-submit-btn').click();
 
   const chip = page.locator(`text=${ZK_ADDRESS_RE}`).first();
   await expect(chip).toBeVisible({ timeout: 30_000 });
@@ -151,9 +150,9 @@ export async function unlockWithPassword(
   page: Page,
   password: string = DEFAULT_PASSWORD,
 ): Promise<void> {
-  await expect(page.getByText('Welcome back')).toBeVisible({ timeout: 10_000 });
-  await page.locator('input[type="password"]').fill(password);
-  await page.getByText('Unlock', { exact: true }).click();
+  await expect(page.getByTestId('unlock-heading')).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('unlock-password-input').fill(password);
+  await page.getByTestId('unlock-submit-btn').click();
   await expect(page.locator(`text=${ZK_ADDRESS_RE}`).first()).toBeVisible({ timeout: 15_000 });
 }
 
@@ -167,6 +166,8 @@ export async function unlockWithPassword(
 export async function disconnect(page: Page): Promise<void> {
   await page.goto('/settings');
   page.once('dialog', (d) => d.accept());
-  await page.getByText('Disconnect Wallet').click();
-  await expect(page.getByText('Welcome to zkCoins')).toBeVisible({ timeout: 10_000 });
+  await page.getByTestId('settings-disconnect-btn').click();
+  // After disconnect the app routes back to Welcome — the create-wallet
+  // CTA is the most stable anchor that the onboarding screen is rendered.
+  await expect(page.getByTestId('onboarding-create-btn')).toBeVisible({ timeout: 10_000 });
 }

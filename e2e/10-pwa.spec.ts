@@ -23,6 +23,10 @@
  *   - iOS / manual modes are pure UA branches — no BIP dispatch needed.
  *     The iOS UA is set via `test.use({ userAgent })` so PwaPrompt's
  *     mount-time `detectMode()` sees the override.
+ *
+ * Locators: testid-based. Mode detection asserts on the three Card
+ * variants (`pwa-prompt-ios`, `pwa-prompt-native`, `pwa-prompt-manual`)
+ * rather than literal copy.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -62,17 +66,17 @@ test.describe('PwaPrompt — native mode', () => {
 
   test('pwa-native-mode', async ({ page }) => {
     await dispatchBeforeInstallPrompt(page, 50);
-    await expect(page.getByRole('button', { name: 'Install' })).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('pwa-install-btn')).toBeVisible({ timeout: 5_000 });
     await snap(page, '10-pwa-native-mode', { fullPage: true });
   });
 
   test('pwa-native-installing', async ({ page }) => {
     // Long delay so we can baseline the "Installing…" disabled state.
     await dispatchBeforeInstallPrompt(page, 5_000);
-    await expect(page.getByRole('button', { name: 'Install' })).toBeVisible({ timeout: 5_000 });
-    await page.getByRole('button', { name: 'Install' }).click();
-    const btn = page.getByRole('button', { name: /Installing…/ });
-    await expect(btn).toBeVisible({ timeout: 2_000 });
+    await expect(page.getByTestId('pwa-install-btn')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('pwa-install-btn').click();
+    const btn = page.getByTestId('pwa-install-btn');
+    await expect(btn).toHaveAttribute('data-installing', 'true', { timeout: 2_000 });
     await expect(btn).toBeDisabled();
     await snap(page, '10-pwa-native-installing', { fullPage: true });
   });
@@ -88,9 +92,7 @@ test.describe('PwaPrompt — iOS Safari', () => {
   });
 
   test('pwa-ios-mode', async ({ page }) => {
-    await expect(page.getByText('Add zkCoins to your home screen')).toBeVisible({
-      timeout: 5_000,
-    });
+    await expect(page.getByTestId('pwa-prompt-ios')).toBeVisible({ timeout: 5_000 });
     await snap(page, '10-pwa-ios-mode', { fullPage: true });
   });
 });
@@ -104,11 +106,8 @@ test.describe('PwaPrompt — manual fallback', () => {
 
   test('pwa-manual-mode', async ({ page }) => {
     // Default Chromium UA + no BIP dispatch → desktop manual branch
-    // ("Click the install icon in your browser's address bar — keys
-    // stay on this device.").
-    await expect(
-      page.getByText(/Click the install icon in your browser's address bar/),
-    ).toBeVisible({ timeout: 5_000 });
+    // ("Click the install icon in your browser's address bar …").
+    await expect(page.getByTestId('pwa-prompt-manual')).toBeVisible({ timeout: 5_000 });
     await snap(page, '10-pwa-manual-mode', { fullPage: true });
   });
 });

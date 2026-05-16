@@ -135,7 +135,10 @@ function Welcome({ onNext, onRestore }: { onNext: () => void; onRestore: () => v
       </div>
 
       <div className="relative px-6 pt-[330px] pb-12">
-        <h1 className="flex items-center gap-3 text-[26px] font-semibold tracking-tight text-ink">
+        <h1
+          data-testid="welcome-heading"
+          className="flex items-center gap-3 text-[26px] font-semibold tracking-tight text-ink"
+        >
           Welcome to zkCoins
           <PixelIcon name="ghost" size={26} color="#f7931a" />
         </h1>
@@ -160,6 +163,7 @@ function Welcome({ onNext, onRestore }: { onNext: () => void; onRestore: () => v
 
         <div className="mt-10">
           <button
+            data-testid="onboarding-create-btn"
             onClick={onNext}
             className="flex w-full items-center justify-center gap-2 rounded-md bg-bitcoin py-4 text-[13px] font-semibold tracking-wider text-bg transition-colors hover:bg-bitcoin-hover"
           >
@@ -170,6 +174,7 @@ function Welcome({ onNext, onRestore }: { onNext: () => void; onRestore: () => v
 
         <div className="mt-6 text-center">
           <button
+            data-testid="onboarding-restore-btn"
             onClick={onRestore}
             className="text-[12px] font-medium text-ink2 transition-colors hover:text-bitcoin"
           >
@@ -287,7 +292,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
     <div className="space-y-6 py-2">
       <StepHeader onBack={onBack} />
 
-      <div>
+      <div data-testid="seed-flow">
         <h1 className="text-[24px] font-bold tracking-tight text-ink">Your seed phrase</h1>
         <p className="mt-2 text-[13px] leading-relaxed text-ink2">
           Write down these 12 words in order. You&apos;ll need them to restore the wallet. Anyone
@@ -295,7 +300,11 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
         </p>
       </div>
 
-      {stage === 'generating' && <p className="text-[13px] text-ink2">Generating seed phrase…</p>}
+      {stage === 'generating' && (
+        <p data-testid="seed-generating" className="text-[13px] text-ink2">
+          Generating seed phrase…
+        </p>
+      )}
 
       {/* Word grid */}
       {mnemonic.length > 0 && stage !== 'password' && stage !== 'creating' && (
@@ -320,6 +329,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
           </div>
           {!revealed && (
             <button
+              data-testid="seed-reveal-btn"
               onClick={() => setRevealed(true)}
               className="absolute inset-0 flex items-center justify-center rounded-md bg-bg/40 backdrop-blur-[2px] transition-colors hover:bg-bg/30"
             >
@@ -342,6 +352,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
             </p>
           </div>
           <button
+            data-testid="seed-written-btn"
             onClick={() => setStage('confirm')}
             className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover"
           >
@@ -352,6 +363,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
 
       {stage === 'confirm' && (
         <button
+          data-testid="seed-confirm-btn"
           onClick={() => setStage('password')}
           className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover"
         >
@@ -360,7 +372,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       )}
 
       {stage === 'password' && (
-        <div className="space-y-4">
+        <div data-testid="seed-password-stage" className="space-y-4">
           <div>
             <p className="text-[13px] font-semibold text-ink">Set an encryption password</p>
             <p className="mt-1 text-[12px] text-ink2">
@@ -369,6 +381,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
             </p>
           </div>
           <input
+            data-testid="seed-password-input"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -376,6 +389,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
           <input
+            data-testid="seed-password-confirm-input"
             type="password"
             value={passwordConfirm}
             onChange={(e) => setPasswordConfirm(e.target.value)}
@@ -383,6 +397,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
           <button
+            data-testid="seed-create-btn"
             onClick={create}
             disabled={!password || !passwordConfirm}
             className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
@@ -394,6 +409,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
 
       {stage === 'creating' && (
         <button
+          data-testid="seed-creating-btn"
           disabled
           className="w-full rounded-md bg-line py-3.5 text-[14px] font-semibold tracking-tight text-ink"
         >
@@ -402,7 +418,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       )}
 
       {error && (
-        <p className="text-[12px] text-bad">
+        <p data-testid="seed-error" className="text-[12px] text-bad">
           <span className="text-ink3">err:</span> {error}
         </p>
       )}
@@ -536,6 +552,7 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
 
       <div className="text-center">
         <button
+          data-testid="passkey-other-options-btn"
           onClick={onUseSeed}
           disabled={stage !== 'intro'}
           className="py-2 text-[12px] font-medium tracking-wider text-ink2 transition-colors hover:text-bitcoin disabled:opacity-50"
@@ -641,6 +658,7 @@ function SeedImportFlow({
       {stage === 'input' && (
         <>
           <textarea
+            data-testid="seed-import-textarea"
             value={phrase}
             onChange={(e) => {
               setPhrase(e.target.value);
@@ -653,6 +671,7 @@ function SeedImportFlow({
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[13px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
           <button
+            data-testid="seed-import-continue-btn"
             onClick={handleValidate}
             disabled={!phrase.trim()}
             className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
@@ -663,7 +682,7 @@ function SeedImportFlow({
       )}
 
       {stage === 'password' && (
-        <div className="space-y-4">
+        <div data-testid="seed-import-password-stage" className="space-y-4">
           <div>
             <p className="text-[13px] font-semibold text-ink">Set an encryption password</p>
             <p className="mt-1 text-[12px] text-ink2">
@@ -672,6 +691,7 @@ function SeedImportFlow({
             </p>
           </div>
           <input
+            data-testid="seed-import-password-input"
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -679,6 +699,7 @@ function SeedImportFlow({
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
           <input
+            data-testid="seed-import-password-confirm-input"
             type="password"
             value={passwordConfirm}
             onChange={(e) => setPasswordConfirm(e.target.value)}
@@ -687,6 +708,7 @@ function SeedImportFlow({
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
           <button
+            data-testid="seed-import-submit-btn"
             onClick={restore}
             disabled={!password || !passwordConfirm}
             className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
@@ -698,6 +720,7 @@ function SeedImportFlow({
 
       {stage === 'restoring' && (
         <button
+          data-testid="seed-import-restoring-btn"
           disabled
           className="w-full rounded-md bg-line py-3.5 text-[14px] font-semibold tracking-tight text-ink"
         >
@@ -706,7 +729,7 @@ function SeedImportFlow({
       )}
 
       {error && (
-        <p className="text-[12px] text-bad">
+        <p data-testid="seed-import-error" className="text-[12px] text-bad">
           <span className="text-ink3">err:</span> {error}
         </p>
       )}
@@ -714,6 +737,7 @@ function SeedImportFlow({
       {onPasskeyRestore && (
         <div className="text-center">
           <button
+            data-testid="passkey-restore-btn"
             onClick={onPasskeyRestore}
             disabled={stage === 'restoring'}
             className="py-2 text-[12px] font-medium tracking-wider text-ink2 transition-colors hover:text-bitcoin disabled:opacity-50"

@@ -10,6 +10,13 @@
  *
  * DEV-only widgets visible in these baselines: none — the unlock
  * screen has no gated UI.
+ *
+ * Locators: testid-based. The "unlocking…" intermediate state is
+ * detected via the button's `data-unlocking` attribute. The wrong-
+ * password test still asserts on the literal `Incorrect password`
+ * text — there is only one error on this screen, so a `data-error-kind`
+ * discriminator would be redundant, but i18n still requires updating
+ * the assertion to the localised string.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -30,7 +37,7 @@ async function arriveAtUnlock(page: Page): Promise<void> {
   // IDB intact. A reload achieves this — checkForStoredWallet on mount
   // sees the encrypted blob and sets hasStoredWallet=true, isLocked=true.
   await page.goto('/?reload=1');
-  await expect(page.getByText('Welcome back')).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByTestId('unlock-heading')).toBeVisible({ timeout: 15_000 });
 }
 
 test.describe('Unlock wallet — password', () => {
@@ -40,19 +47,19 @@ test.describe('Unlock wallet — password', () => {
 
   test('unlock-empty', async ({ page }) => {
     await arriveAtUnlock(page);
-    const pw = page.locator('input[type="password"]');
+    const pw = page.getByTestId('unlock-password-input');
     await expect(pw).toBeVisible();
     await expect(pw).toHaveValue('');
-    await expect(page.getByText('Unlock', { exact: true })).toBeDisabled();
+    await expect(page.getByTestId('unlock-submit-btn')).toBeDisabled();
     await snap(page, '04-unlock-empty');
   });
 
   test('unlock-typed', async ({ page }) => {
     await arriveAtUnlock(page);
-    await page.locator('input[type="password"]').fill(PASSWORD);
-    await expect(page.getByText('Unlock', { exact: true })).toBeEnabled();
+    await page.getByTestId('unlock-password-input').fill(PASSWORD);
+    await expect(page.getByTestId('unlock-submit-btn')).toBeEnabled();
     await snap(page, '04-unlock-typed', {
-      mask: [page.locator('input[type="password"]')],
+      mask: [page.getByTestId('unlock-password-input')],
     });
   });
 
@@ -65,27 +72,33 @@ test.describe('Unlock wallet — password', () => {
       await route.continue();
     });
     await arriveAtUnlock(page);
-    await page.locator('input[type="password"]').fill(PASSWORD);
-    await page.getByText('Unlock', { exact: true }).click();
-    await expect(page.getByText('Unlocking…')).toBeVisible({ timeout: 5_000 });
+    await page.getByTestId('unlock-password-input').fill(PASSWORD);
+    await page.getByTestId('unlock-submit-btn').click();
+    const submit = page.getByTestId('unlock-submit-btn');
+    await expect(submit).toHaveAttribute('data-unlocking', 'true', { timeout: 5_000 });
+    await expect(submit).toBeDisabled();
     await snap(page, '04-unlock-unlocking');
   });
 
   test('unlock-wrong-error', async ({ page }) => {
     await arriveAtUnlock(page);
-    await page.locator('input[type="password"]').fill('WrongPass987!');
-    await page.getByText('Unlock', { exact: true }).click();
-    await expect(page.getByText('Incorrect password')).toBeVisible({ timeout: 10_000 });
+    await page.getByTestId('unlock-password-input').fill('WrongPass987!');
+    await page.getByTestId('unlock-submit-btn').click();
+    await expect(page.getByTestId('unlock-error')).toBeVisible({ timeout: 10_000 });
+    // i18n-todo: text assertion drops out when copy is translated; only
+    // one error path on this screen, so visibility alone is sufficient
+    // for the regression signal.
+    await expect(page.getByTestId('unlock-error')).toHaveText(/Incorrect password/);
     await snap(page, '04-unlock-wrong-error', {
-      mask: [page.locator('input[type="password"]')],
+      mask: [page.getByTestId('unlock-password-input')],
     });
   });
 
   test('unlock-success-wallet', async ({ page }) => {
     test.setTimeout(60_000);
     await arriveAtUnlock(page);
-    await page.locator('input[type="password"]').fill(PASSWORD);
-    await page.getByText('Unlock', { exact: true }).click();
+    await page.getByTestId('unlock-password-input').fill(PASSWORD);
+    await page.getByTestId('unlock-submit-btn').click();
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 30_000,
     });

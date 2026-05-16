@@ -7,6 +7,11 @@
  * DEV-only widgets visible in these baselines (per § 8.0 (b)):
  *   - Apps tab in BottomNav (hidden via showNav=false on receive page)
  *   - none of the WalletScreen gated UI — receive page is sparse.
+ *
+ * Locators: testid-based. The Back link is the only non-testid locator
+ * left here — Receive renders it as the only top-bar link with text
+ * "Back"; once i18n lands, give it a `data-testid="receive-back-link"`
+ * and update the assertion.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -15,10 +20,8 @@ import { snap, setViewport } from './_helpers/screenshot';
 
 /** Navigate Wallet → /receive via the in-app Receive link. */
 async function goToReceive(page: Page): Promise<void> {
-  await page.getByRole('link', { name: 'Receive' }).first().click();
-  await expect(page.getByRole('heading', { name: 'Receive Bitcoin' })).toBeVisible({
-    timeout: 10_000,
-  });
+  await page.getByTestId('wallet-receive-btn').click();
+  await expect(page.getByTestId('receive-heading')).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('Receive Bitcoin', () => {
@@ -42,14 +45,19 @@ test.describe('Receive Bitcoin', () => {
     await setViewport(page, 'desktop');
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await goToReceive(page);
-    await page.getByRole('button', { name: 'Copy address' }).click();
-    await expect(page.getByText('Copied')).toBeVisible({ timeout: 2_000 });
+    await page.getByTestId('receive-copy-btn').click();
+    await expect(page.getByTestId('receive-copy-btn')).toHaveAttribute('data-copied', 'true', {
+      timeout: 2_000,
+    });
     await snap(page, '08-receive-after-copy');
   });
 
   test('receive-back-to-wallet', async ({ page }) => {
     await setViewport(page, 'desktop');
     await goToReceive(page);
+    // i18n-todo: the Back link is the only link on the top bar with
+    // text "Back"; give it a testid in a follow-up so this stops being
+    // translation-sensitive.
     await page.getByRole('link', { name: /^Back$/ }).click();
     // The chip is the most reliable marker for WalletScreen.
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({

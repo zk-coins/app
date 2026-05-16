@@ -8,6 +8,8 @@
  * DEV-only widgets visible in these baselines (per § 8.0 (b)):
  *   - Apps tab in BottomNav
  *   - `dev-*` hostnames in the FooterLinks (row + grid)
+ *
+ * Locators: testid-based.
  */
 
 import { expect, test } from '@playwright/test';
@@ -24,37 +26,33 @@ test.describe('Network badge + AppShell', () => {
     // Default — Alice landed on /, Wallet tab is active. Use the
     // BottomNav as the clip target so the surrounding (masked) balance
     // area doesn't dominate the baseline.
-    const nav = page.locator('nav[aria-label="Resources"], nav').last();
-    await expect(nav).toBeVisible();
+    await expect(page.getByTestId('nav-wallet')).toBeVisible();
     await snap(page, '09-shell-bottomnav-wallet-active');
   });
 
   test('shell-bottomnav-settings-active', async ({ page }) => {
-    await page.getByRole('link', { name: 'Settings' }).click();
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({
-      timeout: 10_000,
-    });
+    await page.getByTestId('nav-settings').click();
+    await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
     await snap(page, '09-shell-bottomnav-settings-active');
   });
 
   test('shell-footerlinks-row', async ({ page }) => {
     // The FooterLinks row variant lives under AppShell on every page.
     // Capture from the wallet (Alice is already there).
-    await expect(page.getByRole('link', { name: 'Network' })).toBeVisible();
+    await expect(page.getByTestId('footer-links-row')).toBeVisible();
     await snap(page, '09-shell-footerlinks-row');
   });
 
   test('shell-footerlinks-grid', async ({ page }) => {
-    // Grid variant is inside Settings § Resources. The section title is
-    // a `<p>` not an `<h*>` heading; locate by text instead.
-    await page.getByRole('link', { name: 'Settings' }).click();
-    await expect(page.getByText('RESOURCES')).toBeVisible({ timeout: 10_000 });
+    // Grid variant is inside Settings § Resources.
+    await page.getByTestId('nav-settings').click();
+    await expect(page.getByTestId('footer-links-grid')).toBeVisible({ timeout: 10_000 });
     await snap(page, '09-shell-footerlinks-grid', { fullPage: true });
   });
 
   test('network-badge-signet', async ({ page }) => {
     // Network badge is rendered on the Settings header — go there.
-    await page.getByRole('link', { name: 'Settings' }).click();
+    await page.getByTestId('nav-settings').click();
     // The badge text is whatever `network` /api/info returned. We
     // assert the badge is visible without pinning the exact label.
     await expect(page.locator('header').last()).toBeVisible({ timeout: 10_000 });
@@ -68,10 +66,8 @@ test.describe('Network badge + AppShell', () => {
       await new Promise((r) => setTimeout(r, 8_000));
       await route.continue();
     });
-    await page.getByRole('link', { name: 'Settings' }).click();
-    await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible({
-      timeout: 10_000,
-    });
+    await page.getByTestId('nav-settings').click();
+    await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
     await snap(page, '09-network-badge-loading');
   });
 });
