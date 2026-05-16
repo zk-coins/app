@@ -3,10 +3,16 @@ import { defineConfig, devices } from '@playwright/test';
 export default defineConfig({
   testDir: './e2e',
   // Helpers and global-setup files live under e2e/ but should not be
-  // picked up as tests. Spec files are numerically prefixed (`0X-*.spec.ts`)
-  // plus the legacy `wallet.spec.ts` / `send-flow.spec.ts` / `settings.spec.ts`
-  // / `visual.spec.ts` / `webauthn.spec.ts`; underscore-prefixed files
+  // picked up as tests. Spec files are numerically prefixed
+  // (`{01..11}-*.spec.ts`) plus the still-active legacy `webauthn.spec.ts`
+  // (non-MVP DEV-bundle passkey coverage). Underscore-prefixed files
   // (`_global-setup.ts`, `_helpers/*.ts`) are excluded by the glob.
+  //
+  // Retired legacy specs (replaced by the exhaustive 01..11 suite):
+  //   visual.spec.ts        — replaced in PR-3 (02-create-seed)
+  //   wallet.spec.ts        — replaced by 01-onboarding + 02-create-seed + 03-restore-seed + 06-balance + 09-network-and-shell
+  //   send-flow.spec.ts     — replaced by 06-balance + 07-send + 08-receive
+  //   settings.spec.ts      — replaced by 05-disconnect + 09-network-and-shell
   testMatch: ['*.spec.ts', '*.spec.mjs'],
   // New exhaustive-suite specs are listed here while their linux
   // baselines are missing — the regular CI run ignores them so it
