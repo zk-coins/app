@@ -332,7 +332,7 @@ function TransactionsList({ transactions }: { transactions: Transaction[] }) {
               </div>
               <div>
                 <p className="text-[13px] font-medium text-ink">{label}</p>
-                <p className="mono text-[11px] text-ink3 tabular-nums">
+                <p data-testid="tx-row-time" className="mono text-[11px] text-ink3 tabular-nums">
                   {new Date(tx.timestamp).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -341,6 +341,7 @@ function TransactionsList({ transactions }: { transactions: Transaction[] }) {
               </div>
             </div>
             <span
+              data-testid="tx-row-amount"
               className={`mono text-[13px] font-medium tabular-nums ${
                 positive ? 'text-ink' : 'text-bitcoin'
               }`}

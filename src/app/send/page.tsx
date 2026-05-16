@@ -220,7 +220,9 @@ export default function SendPage() {
             {formatBtcCompact(success.amount)} BTC
           </p>
           {success.proofId && (
-            <p className="mt-4 mono text-[11px] text-ink4">proof #{success.proofId}</p>
+            <p data-testid="proof-id" className="mt-4 mono text-[11px] text-ink4">
+              proof #{success.proofId}
+            </p>
           )}
           <button
             onClick={() => router.push('/')}
