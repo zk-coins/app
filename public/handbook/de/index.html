@@ -1,27 +1,16 @@
 <!doctype html>
-<html lang="en">
+<html lang="de">
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>zkCoins App — Handbook &amp; Test Documentation</title>
+    <title>zkCoins App — Handbuch &amp; Test-Dokumentation</title>
     <meta
       name="description"
-      content="zkCoins App — user handbook and test documentation. Every screen has a pixel-locked visual-regression baseline."
+      content="zkCoins App — Handbuch und Test-Dokumentation. Jeder Screen mit Visual-Regression-Baseline."
     />
     <link rel="alternate" hreflang="en" href="https://zkcoins.app/handbook" />
     <link rel="alternate" hreflang="de" href="https://zkcoins.app/handbook/de/" />
     <link rel="alternate" hreflang="x-default" href="https://zkcoins.app/handbook" />
-    <script>
-      (function () {
-        if (sessionStorage.getItem('lang-chosen')) return;
-        var lang = (navigator.language || '').toLowerCase().slice(0, 2);
-        var supported = { de: '/handbook/de/' };
-        if (supported[lang]) {
-          sessionStorage.setItem('lang-chosen', lang);
-          window.location.replace(supported[lang]);
-        }
-      })();
-    </script>
     <style>
       :root {
         --bg: #0a0a0a;
@@ -506,56 +495,56 @@
         <div class="brand">
           <span class="dot"></span><span class="name">zkCoins · Handbook</span>
         </div>
-        <p class="brand-sub">User Guide &amp; Test Docs in one</p>
+        <p class="brand-sub">User-Guide &amp; Test-Doku in einem</p>
 
         <div class="lang-switcher">
-          <a href="/handbook" hreflang="en" class="active">EN</a>
-          <a href="/handbook/de/" hreflang="de">DE</a>
+          <a href="/handbook" hreflang="en">EN</a>
+          <a href="/handbook/de/" hreflang="de" class="active">DE</a>
         </div>
 
-        <div class="toc-label">Overview</div>
+        <div class="toc-label">Übersicht</div>
         <nav class="toc">
           <ol>
-            <li><a href="#intro">What is this?</a></li>
-            <li><a href="#architecture">Test architecture</a></li>
+            <li><a href="#intro">Was ist das hier?</a></li>
+            <li><a href="#architecture">Test-Architektur</a></li>
           </ol>
         </nav>
 
-        <div class="toc-label">Specs (73 tests · 70 baselines)</div>
+        <div class="toc-label">Specs (73 Tests · 70 Baselines)</div>
         <nav class="toc">
           <ol>
             <li>
-              <a href="#spec-01"><span class="spec-num">01</span>Welcome &amp; onboarding</a>
+              <a href="#spec-01"><span class="spec-num">01</span>Welcome &amp; Onboarding</a>
             </li>
             <li>
-              <a href="#spec-02"><span class="spec-num">02</span>Create wallet — seed</a>
+              <a href="#spec-02"><span class="spec-num">02</span>Wallet erstellen — Seed</a>
             </li>
             <li>
-              <a href="#spec-03"><span class="spec-num">03</span>Restore wallet</a>
+              <a href="#spec-03"><span class="spec-num">03</span>Wallet wiederherstellen</a>
             </li>
             <li>
-              <a href="#spec-04"><span class="spec-num">04</span>Unlock — password</a>
+              <a href="#spec-04"><span class="spec-num">04</span>Entsperren — Passwort</a>
             </li>
             <li>
-              <a href="#spec-05"><span class="spec-num">05</span>Disconnect wallet</a>
+              <a href="#spec-05"><span class="spec-num">05</span>Disconnect Wallet</a>
             </li>
             <li>
-              <a href="#spec-06"><span class="spec-num">06</span>Balance &amp; wallet home</a>
+              <a href="#spec-06"><span class="spec-num">06</span>Balance &amp; Wallet-Übersicht</a>
             </li>
             <li>
-              <a href="#spec-07"><span class="spec-num">07</span>Send Bitcoin (2-phase)</a>
+              <a href="#spec-07"><span class="spec-num">07</span>Bitcoin senden (2-Phasen)</a>
             </li>
             <li>
-              <a href="#spec-08"><span class="spec-num">08</span>Receive Bitcoin</a>
+              <a href="#spec-08"><span class="spec-num">08</span>Bitcoin empfangen</a>
             </li>
             <li>
-              <a href="#spec-09"><span class="spec-num">09</span>Network badge &amp; app shell</a>
+              <a href="#spec-09"><span class="spec-num">09</span>Network-Badge &amp; AppShell</a>
             </li>
             <li>
-              <a href="#spec-10"><span class="spec-num">10</span>PWA install</a>
+              <a href="#spec-10"><span class="spec-num">10</span>PWA-Installation</a>
             </li>
             <li>
-              <a href="#spec-11"><span class="spec-num">11</span>Route guards</a>
+              <a href="#spec-11"><span class="spec-num">11</span>Route-Guards</a>
             </li>
           </ol>
         </nav>
@@ -563,7 +552,7 @@
         <div class="toc-label">Coverage</div>
         <nav class="toc">
           <ol>
-            <li><a href="#coverage">Coverage &amp; triage</a></li>
+            <li><a href="#coverage">Abdeckung &amp; Triage</a></li>
           </ol>
         </nav>
       </aside>
@@ -572,42 +561,42 @@
         <section class="hero" id="intro">
           <h1>zkCoins App — Handbook</h1>
           <p class="lede">
-            User docs and test docs in one. Every image on this page is also a visual-regression
-            baseline, pixel-compared in CI on every PR. If the handbook looks current, the live app
-            is too — and the other way around.
+            User-Doku und Test-Doku in einem. Jedes Bild auf dieser Seite ist gleichzeitig eine
+            Visual-Regression-Baseline, die in CI bei jedem PR pixelgenau verglichen wird. Wenn das
+            Handbook aktuell aussieht, ist die Live-App es auch — und umgekehrt.
           </p>
           <div class="meta">
             <span>🟢 <b>PRD:</b> <a href="https://zkcoins.app">zkcoins.app</a></span>
             <span>🟡 <b>DEV:</b> <a href="https://dev.zkcoins.app">dev.zkcoins.app</a></span>
             <span>📂 <b>Code:</b> <a href="https://github.com/zk-coins/app">zk-coins/app</a></span>
-            <span>🧪 <b>Specs:</b> 11 · 73 tests · 70 baselines</span>
+            <span>🧪 <b>Specs:</b> 11 · 73 Tests · 70 Baselines</span>
           </div>
         </section>
 
         <section id="architecture" style="margin-top: 40px">
-          <h3 style="margin-top: 0">Single source of truth</h3>
+          <h3 style="margin-top: 0">Single Source of Truth</h3>
           <p>
-            The canonical baseline images live under
-            <code>e2e/&lt;spec&gt;.spec.ts-snapshots/&lt;name&gt;-chromium-linux.png</code>. They
-            are the only committed asset and can only be refreshed via the
-            <em>Regenerate Visual Baselines</em> workflow. The images this handbook displays are
-            hardlinks placed by <code>scripts/sync-handbook-baselines.mjs</code> — no second copy,
-            no possible drift.
+            Die kanonischen Baseline-Bilder liegen unter
+            <code>e2e/&lt;spec&gt;.spec.ts-snapshots/&lt;name&gt;-chromium-linux.png</code>. Sie
+            sind das einzige committed Asset und werden ausschließlich über den
+            <em>Regenerate Visual Baselines</em>-Workflow erneuert. Die Bilder, die dieses Handbook
+            zeigt, sind Hardlinks (<code>scripts/sync-handbook-baselines.mjs</code>) — kein zweites
+            Original, kein Drift möglich.
           </p>
           <p>
-            Every test in every spec file maps to exactly one screen (or screen variant) the app can
-            render. If a test is green, that variant looks as specified. If a test goes red, either
-            the UI broke or it was intentionally changed — the latter requires a baseline regen.
+            Jeder Test in jedem Spec-File entspricht genau einem Screen (oder einer
+            Screen-Variante), den die App rendern kann. Wenn ein Test grün ist, ist die Variante
+            visuell wie spezifiziert. Wenn ein Test rot wird, ist entweder die UI gebrochen oder
+            absichtlich verändert — letzteres erfordert einen Baseline-Regen.
           </p>
 
           <div class="callout info">
             <p>
-              <b>DEV vs. PRD bundle:</b> the suite runs against <code>dev.zkcoins.app</code> (DEV)
-              because that's the only deployment where the faucet (<code>POST /api/mint</code>) is
-              available. The DEV bundle additionally shows the Apps tab in the bottom nav and the
-              faucet button in the wallet's empty state — both are build-time flags stripped from
-              the PRD bundle by dead-code elimination. The 10 MVP functions are identical in both
-              bundles.
+              <b>DEV- vs. PRD-Bundle:</b> die Suite läuft gegen <code>dev.zkcoins.app</code> (DEV),
+              weil nur dort der Faucet (<code>POST /api/mint</code>) verfügbar ist. Das DEV-Bundle
+              zeigt zusätzlich den Apps-Tab in der Bottom-Nav und den Faucet-Button im
+              Wallet-Empty-State — beides Build-Time-Flags, im PRD-Build per Dead-Code-Elimination
+              entfernt. Die 10 MVP-Funktionen sind in beiden Bundles identisch.
             </p>
           </div>
         </section>
@@ -622,7 +611,7 @@
               <div class="file">e2e/01-onboarding-welcome.spec.ts</div>
             </div>
             <div class="rhs">
-              <b>5 tests · 5 baselines</b>
+              <b>5 Tests · 5 Baselines</b>
               <div class="links">
                 <a
                   href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts"
@@ -636,10 +625,10 @@
             </div>
           </div>
           <p class="spec-intro">
-            The very first screen a new user sees. Two paths lead off it —
-            <em>CREATE WALLET</em> (generate a fresh seed phrase) and
-            <em>Restore existing wallet</em> (import an existing mnemonic). The spec covers the
-            layout at three viewport widths plus the two CTAs' hover states.
+            Der allererste Screen, den ein neuer User sieht. Zwei Wege gehen davon ab —
+            <em>CREATE WALLET</em> (Seed-Phrase generieren) und <em>Restore existing wallet</em>
+            (bestehende Mnemonic importieren). Die Spec deckt das Layout bei drei Viewports und die
+            beiden Hover-Zustände der CTAs ab.
           </p>
 
           <div class="tests cols-2">
@@ -657,9 +646,9 @@
                 <img src="/handbook/screenshots/01-welcome-desktop.png" alt="Welcome desktop" />
               </div>
               <div class="desc">
-                Welcome at 1440×900. Hero logo, "Welcome to zkCoins" headline, three feature
-                bullets, CREATE WALLET button, Restore link, footer with
-                Docs/API/Explorer/Blog/Status/GitHub/Network.
+                Welcome bei 1440×900. Hero-Logo, „Welcome to zkCoins"-Headline, drei
+                Feature-Bullets, CREATE-WALLET-Button, Restore-Link, Footer mit
+                Doku/API/Explorer/Blog/Status/GitHub/Network.
               </div>
             </div>
             <div class="test">
@@ -676,8 +665,8 @@
                 <img src="/handbook/screenshots/01-welcome-mobile.png" alt="Welcome mobile" />
               </div>
               <div class="desc">
-                Welcome at 375×812. Identical composition, vertically stacked. No bottom nav (no
-                account exists yet).
+                Welcome bei 375×812. Identische Komposition, vertikal gestapelt. Keine Bottom-Nav
+                (kein Account vorhanden).
               </div>
             </div>
             <div class="test">
@@ -694,7 +683,7 @@
                 <img src="/handbook/screenshots/01-welcome-tablet.png" alt="Welcome tablet" />
               </div>
               <div class="desc">
-                Welcome at 768×1024. Between desktop and mobile — preserves the hero card geometry.
+                Welcome bei 768×1024. Zwischen Desktop und Mobile — bewahrt die Hero-Card-Geometrie.
               </div>
             </div>
             <div class="test">
@@ -711,9 +700,9 @@
                 <img src="/handbook/screenshots/01-welcome-create-hover.png" alt="Create hover" />
               </div>
               <div class="desc">
-                Hover on CREATE WALLET — the button transitions from
-                <code>bg-bitcoin</code> (#f7931a) to <code>bg-bitcoin-hover</code> (#ffae40), a
-                barely-visible hue shift. The Restore link stays gray.
+                Hover auf CREATE WALLET — der Button wechselt von <code>bg-bitcoin</code> (#f7931a)
+                zu <code>bg-bitcoin-hover</code> (#ffae40), ein dezenter Hue-Shift. Restore-Link
+                bleibt grau.
               </div>
             </div>
             <div class="test">
@@ -730,9 +719,9 @@
                 <img src="/handbook/screenshots/01-welcome-restore-hover.png" alt="Restore hover" />
               </div>
               <div class="desc">
-                Hover on "Restore existing wallet" — the link transitions from
-                <code>text-ink2</code> (gray) to <code>text-bitcoin</code> (orange). A clearly
-                visible change.
+                Hover auf „Restore existing wallet" — der Link wechselt von
+                <code>text-ink2</code> (grau) zu <code>text-bitcoin</code> (Orange). Klar sichtbarer
+                Wechsel.
               </div>
             </div>
           </div>
@@ -742,11 +731,11 @@
         <section id="spec-02" class="spec">
           <div class="spec-head">
             <div class="lhs">
-              <h2><span class="num">02</span>Create wallet — Seed phrase</h2>
+              <h2><span class="num">02</span>Wallet erstellen — Seed Phrase</h2>
               <div class="file">e2e/02-create-seed.spec.ts</div>
             </div>
             <div class="rhs">
-              <b>10 tests · 9 baselines</b>
+              <b>10 Tests · 9 Baselines</b>
               <div class="links">
                 <a href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts"
                   >Spec ↗</a
@@ -759,9 +748,9 @@
             </div>
           </div>
           <p class="spec-intro">
-            The primary onboarding path. From WASM-generated 12-word mnemonic through the reveal
-            stage (hidden → shown → acknowledged) to local AES-256-GCM encryption with a user-chosen
-            password whose key is derived via PBKDF2 (600k iterations).
+            Der primäre Onboarding-Pfad. Vom WASM-generierten 12-Wort-Mnemonic über die Reveal-Stage
+            (versteckt → sichtbar → bestätigt) bis zur lokalen AES-256-GCM-Verschlüsselung mit einem
+            User-Passwort, das in PBKDF2 (600k Iterationen) den Schlüssel ableitet.
             <span class="tag mvp">MVP</span>
           </p>
 
@@ -780,8 +769,8 @@
                 <img src="/handbook/screenshots/02-seed-generating.png" alt="seed generating" />
               </div>
               <div class="desc">
-                Brief loading state while <code>generateMnemonic()</code> in WASM draws 128 bits of
-                entropy and encodes it as BIP-39.
+                Kurzer Lade-State während <code>generateMnemonic()</code> im WASM 128 Bit Entropie
+                zieht und BIP-39 enkodiert.
               </div>
             </div>
             <div class="test">
@@ -798,8 +787,8 @@
                 <img src="/handbook/screenshots/02-seed-reveal-hidden.png" alt="seed hidden" />
               </div>
               <div class="desc">
-                12 words generated but visually covered by a "Tap to reveal" overlay. Protects
-                against accidental exposure.
+                12 Wörter generiert, aber visuell verdeckt durch ein „Tap to reveal"-Overlay.
+                Schützt vor versehentlichem Vorzeigen.
               </div>
             </div>
             <div class="test">
@@ -816,8 +805,8 @@
                 <img src="/handbook/screenshots/02-seed-reveal-shown.png" alt="seed shown" />
               </div>
               <div class="desc">
-                Words revealed. 12 BIP-39 words in a 3-column grid, numbered. The test masks the
-                grid content for pixel-diff because the mnemonic is different on every run.
+                Wörter aufgedeckt. 12 BIP-39-Words im 3-Spalten-Grid, nummeriert. Der Test maskiert
+                den Grid-Inhalt für Pixel-Diff, weil die Mnemonic pro Run anders ist.
               </div>
             </div>
             <div class="test">
@@ -834,8 +823,8 @@
                 <img src="/handbook/screenshots/02-seed-acknowledged.png" alt="seed acknowledged" />
               </div>
               <div class="desc">
-                User clicked "I've written it down" — the acknowledge button changes visually and
-                "Continue" becomes enabled.
+                User hat „I've written it down" geklickt — der Bestätigungs-Button wechselt visuell,
+                „Continue" wird freigeschaltet.
               </div>
             </div>
             <div class="test">
@@ -851,7 +840,7 @@
               <div class="img">
                 <img src="/handbook/screenshots/02-password-empty.png" alt="password empty" />
               </div>
-              <div class="desc">Password setup stage. Two empty fields, submit disabled.</div>
+              <div class="desc">Passwort-Setup-Stage. Zwei leere Eingaben, Submit disabled.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -867,8 +856,8 @@
                 <img src="/handbook/screenshots/02-password-filled.png" alt="password filled" />
               </div>
               <div class="desc">
-                Both fields valid, minimum length met, no mismatch — "Create wallet" goes Bitcoin
-                orange and active.
+                Beide Felder OK, Mindestlänge erfüllt, Mismatch passt — „Create wallet" wird
+                Bitcoin-Orange aktiv.
               </div>
             </div>
             <div class="test">
@@ -887,7 +876,7 @@
                   alt="password too short"
                 />
               </div>
-              <div class="desc">Live feedback at &lt; 8 characters. Submit stays disabled.</div>
+              <div class="desc">Live-Feedback bei &lt; 8 Zeichen. Submit bleibt disabled.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -902,7 +891,9 @@
               <div class="img">
                 <img src="/handbook/screenshots/02-password-mismatch.png" alt="password mismatch" />
               </div>
-              <div class="desc">Confirm field differs → red error. Protects against typos.</div>
+              <div class="desc">
+                Confirm-Feld weicht ab → Fehlermeldung in Rot. Schützt vor Vertippen.
+              </div>
             </div>
             <div class="test">
               <div class="head">
@@ -921,8 +912,8 @@
                 />
               </div>
               <div class="desc">
-                Fresh wallet with balance 0, unique <code>{8hex}@zkcoins.app</code> address, bottom
-                nav, "No transactions yet".
+                Frische Wallet mit Balance 0, eindeutiger <code>{8hex}@zkcoins.app</code>-Adresse,
+                Bottom-Nav, „No transactions yet".
               </div>
             </div>
             <div class="test">
@@ -937,11 +928,13 @@
               </div>
               <div class="img no-shot">
                 <p>
-                  Functional test with no screenshot — only confirms the Back button navigates from
-                  the reveal stage back to the welcome page.
+                  Funktionaler Test ohne Screenshot — bestätigt nur, dass der Back-Button von der
+                  Reveal-Stage zurück zur Welcome-Page navigiert.
                 </p>
               </div>
-              <div class="desc">No-shot: state validation only, no new screen variant.</div>
+              <div class="desc">
+                No-Shot: lediglich State-Validation, keine neue Screen-Variante.
+              </div>
             </div>
           </div>
         </section>
@@ -950,11 +943,11 @@
         <section id="spec-03" class="spec">
           <div class="spec-head">
             <div class="lhs">
-              <h2><span class="num">03</span>Restore wallet — Seed phrase</h2>
+              <h2><span class="num">03</span>Wallet wiederherstellen — Seed Phrase</h2>
               <div class="file">e2e/03-restore-seed.spec.ts</div>
             </div>
             <div class="rhs">
-              <b>10 tests · 9 baselines</b>
+              <b>10 Tests · 9 Baselines</b>
               <div class="links">
                 <a href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts"
                   >Spec ↗</a
@@ -967,9 +960,9 @@
             </div>
           </div>
           <p class="spec-intro">
-            The second onboarding path — importing an existing 12-word mnemonic. Live validation
-            checks word count, BIP-39 wordlist membership and checksum before "Continue" is enabled.
-            A new local password is set here too.
+            Der zweite Onboarding-Pfad — eine bestehende 12-Wort-Mnemonic importieren.
+            Live-Validation prüft Wortzahl, BIP-39-Listenmitgliedschaft und Checksum, bevor
+            „Continue" freigegeben wird. Auch hier wird ein neues lokales Passwort gesetzt.
             <span class="tag mvp">MVP</span>
           </p>
 
@@ -988,7 +981,8 @@
                 <img src="/handbook/screenshots/03-restore-entry-empty.png" alt="restore empty" />
               </div>
               <div class="desc">
-                Initial: empty textarea, submit disabled. Words separated by spaces or line breaks.
+                Initial: leere Textarea, Submit disabled. Wörter durch Leerzeichen oder
+                Zeilenumbruch trennen.
               </div>
             </div>
             <div class="test">
@@ -1007,7 +1001,7 @@
                   alt="restore valid"
                 />
               </div>
-              <div class="desc">Valid mnemonic entered — submit turns Bitcoin orange.</div>
+              <div class="desc">Gültige Mnemonic eingegeben — Submit wird Bitcoin-Orange.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -1026,8 +1020,8 @@
                 />
               </div>
               <div class="desc">
-                11 or 13 words → error. Only 12-word mnemonics are accepted (BIP-39 with 128 bits of
-                entropy).
+                11 oder 13 Wörter → Fehler. Nur 12-Wort-Mnemonics werden akzeptiert (BIP-39 mit 128
+                Bit Entropie).
               </div>
             </div>
             <div class="test">
@@ -1044,7 +1038,7 @@
                 <img src="/handbook/screenshots/03-restore-input-bad-bip39.png" alt="bad bip39" />
               </div>
               <div class="desc">
-                At least one word is not in the BIP-39 wordlist, or the checksum does not match.
+                Mindestens ein Wort ist nicht im BIP-39-Wordlist oder die Checksum stimmt nicht.
               </div>
             </div>
             <div class="test">
@@ -1064,7 +1058,8 @@
                 />
               </div>
               <div class="desc">
-                Password setup after successful mnemonic validation — same rules as the create flow.
+                Passwort-Setup nach erfolgreicher Mnemonic-Validierung — identische Regeln wie beim
+                Create-Flow.
               </div>
             </div>
             <div class="test">
@@ -1083,7 +1078,7 @@
                   alt="restore pw filled"
                 />
               </div>
-              <div class="desc">Both fields valid — "Restore wallet" goes active.</div>
+              <div class="desc">Beide Felder OK — „Restore wallet" wird aktiv.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -1101,7 +1096,7 @@
                   alt="restore pw short"
                 />
               </div>
-              <div class="desc">&lt; 8 characters → error.</div>
+              <div class="desc">&lt; 8 Zeichen → Fehler.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -1119,7 +1114,7 @@
                   alt="restore pw mismatch"
                 />
               </div>
-              <div class="desc">Confirm field differs.</div>
+              <div class="desc">Confirm-Feld weicht ab.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -1138,8 +1133,8 @@
                 />
               </div>
               <div class="desc">
-                Wallet restored. Address deterministically derived from the mnemonic — identical to
-                the original wallet.
+                Wallet wiederhergestellt. Adresse deterministisch aus der Mnemonic abgeleitet —
+                identisch zur ursprünglichen Wallet.
               </div>
             </div>
             <div class="test">
@@ -1154,11 +1149,11 @@
               </div>
               <div class="img no-shot">
                 <p>
-                  Functional test with no screenshot — back navigation from the restore input stage
-                  back to the welcome page.
+                  Funktionaler Test ohne Screenshot — Back-Navigation von der Restore-Input-Stage
+                  zurück zur Welcome-Page.
                 </p>
               </div>
-              <div class="desc">No-shot: state test, no new variant.</div>
+              <div class="desc">No-Shot: State-Test, keine neue Variante.</div>
             </div>
           </div>
         </section>
@@ -1167,11 +1162,11 @@
         <section id="spec-04" class="spec">
           <div class="spec-head">
             <div class="lhs">
-              <h2><span class="num">04</span>Unlock wallet — Password</h2>
+              <h2><span class="num">04</span>Wallet entsperren — Passwort</h2>
               <div class="file">e2e/04-unlock-password.spec.ts</div>
             </div>
             <div class="rhs">
-              <b>5 tests · 5 baselines</b>
+              <b>5 Tests · 5 Baselines</b>
               <div class="links">
                 <a
                   href="https://github.com/zk-coins/app/blob/develop/e2e/04-unlock-password.spec.ts"
@@ -1185,10 +1180,10 @@
             </div>
           </div>
           <p class="spec-intro">
-            On every app start with an encrypted wallet already on the device, the app shows the
-            unlock screen. PBKDF2 derives an AES key from the password; AES-GCM throws an
-            authentication-tag mismatch on a wrong password, which the app surfaces as "Wrong
-            password". Closes the former MVP triage gap.
+            Bei jedem App-Start mit bereits liegender verschlüsselter Wallet zeigt die App den
+            Unlock-Screen. PBKDF2 leitet aus dem Passwort einen AES-Schlüssel ab; AES-GCM wirft bei
+            falschem Passwort einen Authentication-Tag-Mismatch, was die App als „Wrong password"
+            anzeigt. Schließt das frühere MVP-Triage-Gap.
             <span class="tag mvp">MVP</span>
             <span class="tag gap-closed">Gap closed</span>
           </p>
@@ -1208,7 +1203,7 @@
                 <img src="/handbook/screenshots/04-unlock-empty.png" alt="unlock empty" />
               </div>
               <div class="desc">
-                "Welcome back" hero, empty password field, "Unlock" button disabled.
+                „Welcome back"-Hero, leeres Passwort-Feld, „Unlock"-Button disabled.
               </div>
             </div>
             <div class="test">
@@ -1225,8 +1220,8 @@
                 <img src="/handbook/screenshots/04-unlock-typed.png" alt="unlock typed" />
               </div>
               <div class="desc">
-                Password entered — "Unlock" becomes active. No length validation; the hardness of
-                the password is the entire security.
+                Passwort eingegeben — „Unlock" wird aktiv. Kein Validation auf Länge etc.; die Härte
+                des Passworts ist die ganze Sicherheit.
               </div>
             </div>
             <div class="test">
@@ -1243,8 +1238,8 @@
                 <img src="/handbook/screenshots/04-unlock-unlocking.png" alt="unlocking" />
               </div>
               <div class="desc">
-                Loading state while PBKDF2 runs (200–400 ms depending on device). The delay is
-                intentional and makes brute force expensive.
+                Lade-State während PBKDF2 läuft (200–400 ms je nach Gerät). Die Verzögerung ist
+                beabsichtigt und macht Brute-Force teuer.
               </div>
             </div>
             <div class="test">
@@ -1261,8 +1256,8 @@
                 <img src="/handbook/screenshots/04-unlock-wrong-error.png" alt="wrong password" />
               </div>
               <div class="desc">
-                AES-GCM tag mismatch → red error directly under the field. No rate limit, no
-                cooldown.
+                AES-GCM-Tag-Mismatch → rote Fehlermeldung direkt unter dem Feld. Kein Rate-Limit,
+                kein Cooldown.
               </div>
             </div>
             <div class="test">
@@ -1278,7 +1273,9 @@
               <div class="img">
                 <img src="/handbook/screenshots/04-unlock-success-wallet.png" alt="unlocked" />
               </div>
-              <div class="desc">Successfully unlocked — wallet opens with current state.</div>
+              <div class="desc">
+                Erfolgreich entsperrt — Wallet öffnet sich mit aktuellem Stand.
+              </div>
             </div>
           </div>
         </section>
@@ -1287,11 +1284,11 @@
         <section id="spec-05" class="spec">
           <div class="spec-head">
             <div class="lhs">
-              <h2><span class="num">05</span>Disconnect wallet</h2>
+              <h2><span class="num">05</span>Disconnect Wallet</h2>
               <div class="file">e2e/05-disconnect.spec.ts</div>
             </div>
             <div class="rhs">
-              <b>7 tests · 7 baselines</b>
+              <b>7 Tests · 7 Baselines</b>
               <div class="links">
                 <a href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts"
                   >Spec ↗</a
@@ -1304,9 +1301,9 @@
             </div>
           </div>
           <p class="spec-intro">
-            Disconnect the wallet from this device. <strong>Irreversible</strong> without the seed
-            phrase. A browser-native <code>window.confirm</code> dialog serves as a last-chance
-            check. On OK, the IndexedDB wallet, credentials and auth state are wiped.
+            Wallet vom Gerät trennen. <strong>Irreversibel</strong> ohne Seed-Phrase. Eine
+            Browser-Native <code>window.confirm</code>-Dialog dient als Last-Chance-Check. Nach OK
+            werden IndexedDB-Wallet, Credentials und Auth-State gelöscht.
             <span class="tag mvp">MVP</span>
           </p>
 
@@ -1325,7 +1322,8 @@
                 <img src="/handbook/screenshots/05-wallet-to-settings-nav.png" alt="settings nav" />
               </div>
               <div class="desc">
-                From the wallet, click the Settings icon in the bottom nav — client-side navigation.
+                Von der Wallet auf das Settings-Icon der Bottom-Nav klicken — clientseitige
+                Navigation.
               </div>
             </div>
             <div class="test">
@@ -1342,7 +1340,7 @@
                 <img src="/handbook/screenshots/05-settings-desktop.png" alt="settings desktop" />
               </div>
               <div class="desc">
-                Settings at 1440×900: Network-Badge oben, Account-Sektion mit Adresse +
+                Settings bei 1440×900: Network-Badge oben, Account-Sektion mit Adresse +
                 Auth-Methode, Preferences (planned toggles disabled), Resources, Disconnect-Button.
               </div>
             </div>
@@ -1359,7 +1357,7 @@
               <div class="img">
                 <img src="/handbook/screenshots/05-settings-mobile.png" alt="settings mobile" />
               </div>
-              <div class="desc">Settings at 375×812 — vertikal gestapelt.</div>
+              <div class="desc">Settings bei 375×812 — vertikal gestapelt.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -1378,7 +1376,7 @@
                 />
               </div>
               <div class="desc">
-                Hover on Disconnect — visual cue for destructiveness (red accent).
+                Hover auf Disconnect — visueller Hinweis auf die Destruktivität (Rot-Akzent).
               </div>
             </div>
             <div class="test">
@@ -1398,8 +1396,8 @@
                 />
               </div>
               <div class="desc">
-                Browser-native <code>confirm()</code>: "Disconnect this wallet? Make sure you have
-                your seed phrase saved." with OK/Cancel.
+                Browser-natives <code>confirm()</code>: „Disconnect this wallet? Make sure you have
+                your seed phrase saved." mit OK/Cancel.
               </div>
             </div>
             <div class="test">
@@ -1415,7 +1413,9 @@
               <div class="img">
                 <img src="/handbook/screenshots/05-disconnect-cancel-noop.png" alt="cancel noop" />
               </div>
-              <div class="desc">Cancel → no action. Wallet stays active, Settings unchanged.</div>
+              <div class="desc">
+                Cancel → keine Aktion. Wallet bleibt aktiv, Settings unverändert.
+              </div>
             </div>
             <div class="test">
               <div class="head">
@@ -1434,8 +1434,8 @@
                 />
               </div>
               <div class="desc">
-                OK → IndexedDB wiped, Zustand stores reset, welcome page. A new onboarding path
-                begins.
+                OK → IndexedDB gewiped, Zustand-Stores reset, Welcome-Page. Neuer Onboarding-Pfad
+                beginnt.
               </div>
             </div>
           </div>
@@ -1445,11 +1445,11 @@
         <section id="spec-06" class="spec">
           <div class="spec-head">
             <div class="lhs">
-              <h2><span class="num">06</span>Balance &amp; wallet home</h2>
+              <h2><span class="num">06</span>Balance &amp; Wallet-Übersicht</h2>
               <div class="file">e2e/06-balance.spec.ts</div>
             </div>
             <div class="rhs">
-              <b>6 tests · 6 baselines</b>
+              <b>6 Tests · 6 Baselines</b>
               <div class="links">
                 <a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts"
                   >Spec ↗</a
@@ -1462,9 +1462,10 @@
             </div>
           </div>
           <p class="spec-intro">
-            The wallet home screen after login. Balance polled every 5 s from
-            <code>GET /api/balance</code>. The eye toggle hides the amount for screen-sharing. On an
-            empty wallet, the DEV bundle exposes a faucet button for 100k test sats.
+            Der Wallet-Hauptscreen nach dem Login. Balance via 5-Sekunden-Polling von
+            <code>GET /api/balance</code>. Eye-Toggle versteckt den Betrag für
+            Streaming/Screenshots. Auf der leeren Wallet erscheint im DEV-Bundle der Faucet-Button
+            für 100k Test-Sats.
             <span class="tag mvp">MVP · View balance</span>
             <span class="tag mvp">MVP · Tx history</span>
           </p>
@@ -1486,7 +1487,7 @@
                 />
               </div>
               <div class="desc">
-                Fully funded wallet at 1440×900: balance in BTC + USD, address chip,
+                Voll befüllte Wallet bei 1440×900: Balance in BTC + USD, Adress-Chip,
                 Send/Receive-CTAs, Username-Claim-Input (DEV), Tx-Liste, Network-Chart, Footer.
               </div>
             </div>
@@ -1503,7 +1504,7 @@
                 <img src="/handbook/screenshots/06-balance-funded-mobile.png" alt="funded mobile" />
               </div>
               <div class="desc">
-                Funded Wallet at 375×812 — vertikal gestapelt, Bottom-Nav unten.
+                Funded Wallet bei 375×812 — vertikal gestapelt, Bottom-Nav unten.
               </div>
             </div>
             <div class="test">
@@ -1519,7 +1520,7 @@
                 <img src="/handbook/screenshots/06-balance-hidden.png" alt="balance hidden" />
               </div>
               <div class="desc">
-                Clicking the eye icon replaces amounts with "••••••" — ideal for screen sharing.
+                Klick aufs Auge-Icon ersetzt Beträge durch „••••••" — ideal für Screensharing.
               </div>
             </div>
             <div class="test">
@@ -1538,8 +1539,8 @@
                 />
               </div>
               <div class="desc">
-                Balance 0 → "Wallet is empty" banner replaces the tx list. DEV/Signet: faucet button
-                for 100,000 sats. Automatically hidden on mainnet.
+                Balance 0 → „Wallet is empty"-Banner ersetzt die Tx-Liste. DEV/Signet: Faucet-Button
+                für 100 000 sats. Auf Mainnet automatisch versteckt.
               </div>
             </div>
             <div class="test">
@@ -1558,8 +1559,8 @@
                 />
               </div>
               <div class="desc">
-                Faucet clicked — button shows loading state while <code>POST /api/mint</code> issues
-                the test coins.
+                Faucet geklickt — Button zeigt Lade-State während <code>POST /api/mint</code> die
+                Test-Coins ausgibt.
               </div>
             </div>
             <div class="test">
@@ -1575,7 +1576,7 @@
                 <img src="/handbook/screenshots/06-balance-copied-feedback.png" alt="copied" />
               </div>
               <div class="desc">
-                Clicking the address chip copies the full address + shows a brief "Copied" feedback.
+                Klick auf den Adress-Chip kopiert die volle Adresse + zeigt kurz „Copied"-Feedback.
               </div>
             </div>
           </div>
@@ -1585,11 +1586,11 @@
         <section id="spec-07" class="spec">
           <div class="spec-head">
             <div class="lhs">
-              <h2><span class="num">07</span>Send Bitcoin — 2-phase proof</h2>
+              <h2><span class="num">07</span>Bitcoin senden — 2-Phasen-Proof</h2>
               <div class="file">e2e/07-send.spec.ts</div>
             </div>
             <div class="rhs">
-              <b>13 tests · 12 baselines</b>
+              <b>13 Tests · 12 Baselines</b>
               <div class="links">
                 <a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts"
                   >Spec ↗</a
@@ -1601,11 +1602,11 @@
             </div>
           </div>
           <p class="spec-intro">
-            The most central and complex spec. Real Alice → Bob transaction:
-            <code>signSendRequest</code> produces a Schnorr signature →
-            <code>POST /api/send</code> reserves output coins → the client computes
+            Die zentralste und komplexeste Spec. Echte Alice → Bob Transaktion:
+            <code>signSendRequest</code> erzeugt Schnorr-Signatur →
+            <code>POST /api/send</code> reserviert Output-Coins → Client berechnet Commitment
             <code>Schnorr(hash(state || coins))</code> → <code>POST /api/commit</code>
-            confirms. Recipient as 64-hex or via username resolver.
+            bestätigt. Empfänger als 64-Hex oder via Username-Resolver.
             <span class="tag mvp">MVP · Send</span>
           </p>
 
@@ -1623,8 +1624,8 @@
                 <img src="/handbook/screenshots/07-send-default.png" alt="send default" />
               </div>
               <div class="desc">
-                Initial: empty recipient + amount, "Set MAX" link, disabled submit. Placeholder
-                "Address or @username".
+                Initial: leere Recipient + Amount, „Set MAX"-Link, disabled Submit. Placeholder
+                „Address or @username".
               </div>
             </div>
             <div class="test">
@@ -1640,7 +1641,7 @@
                 <img src="/handbook/screenshots/07-send-no-funds-banner.png" alt="no funds" />
               </div>
               <div class="desc">
-                Send at balance 0: top banner "Wallet is empty", faucet hint (DEV), DFX buy link
+                Send bei Balance 0: Top-Banner „Wallet is empty", Faucet-Hinweis (DEV), DFX-Buy-Link
                 (DEV).
               </div>
             </div>
@@ -1656,7 +1657,7 @@
               <div class="img">
                 <img src="/handbook/screenshots/07-recipient-valid-hex.png" alt="valid hex" />
               </div>
-              <div class="desc">64-hex string accepted, no resolve needed, "Continue" enabled.</div>
+              <div class="desc">64-Hex-String akzeptiert, kein Resolve nötig, „Continue" frei.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -1674,8 +1675,8 @@
                 />
               </div>
               <div class="desc">
-                @user or $user → resolved via <code>/api/username/resolve</code> on Continue
-                (DEV-gated).
+                @user oder $user → wird via <code>/api/username/resolve</code> beim Continue
+                aufgelöst (DEV-gated).
               </div>
             </div>
             <div class="test">
@@ -1690,7 +1691,7 @@
               <div class="img">
                 <img src="/handbook/screenshots/07-amount-typed.png" alt="amount typed" />
               </div>
-              <div class="desc">Valid sats input. Live BTC + USD equivalent.</div>
+              <div class="desc">Gültige sats-Eingabe. Live BTC + USD Gegenwert.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -1705,7 +1706,7 @@
                 <img src="/handbook/screenshots/07-amount-set-max-clicked.png" alt="set max" />
               </div>
               <div class="desc">
-                "Set MAX" fills the field with the full balance minus the minimum fee.
+                „Set MAX" füllt das Feld mit der vollen Balance abzüglich minimaler Fee.
               </div>
             </div>
             <div class="test">
@@ -1720,7 +1721,9 @@
               <div class="img">
                 <img src="/handbook/screenshots/07-amount-invalid-text.png" alt="amount invalid" />
               </div>
-              <div class="desc">Letters/special characters → immediate error, submit blocked.</div>
+              <div class="desc">
+                Buchstaben/Sonderzeichen → sofortiger Fehler, Submit blockiert.
+              </div>
             </div>
             <div class="test">
               <div class="head">
@@ -1734,7 +1737,7 @@
               <div class="img">
                 <img src="/handbook/screenshots/07-amount-insufficient.png" alt="insufficient" />
               </div>
-              <div class="desc">More than balance → "Exceeds available balance".</div>
+              <div class="desc">Mehr als Balance → „Exceeds available balance".</div>
             </div>
             <div class="test">
               <div class="head">
@@ -1752,8 +1755,8 @@
                 />
               </div>
               <div class="desc">
-                Confirmation dialog at 1440×900. Recipient + amount + fee shown one more time.
-                Cancel + "Send now".
+                Bestätigungs-Dialog bei 1440×900. Empfänger + Betrag + Fee nochmal sichtbar. Cancel
+                + „Send now".
               </div>
             </div>
             <div class="test">
@@ -1771,7 +1774,7 @@
                   alt="confirm mobile"
                 />
               </div>
-              <div class="desc">Bottom-sheet variant at 375×812.</div>
+              <div class="desc">Bottom-Sheet-Variante auf 375×812.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -1785,7 +1788,7 @@
               <div class="img">
                 <img src="/handbook/screenshots/07-confirm-cancel-back.png" alt="cancel back" />
               </div>
-              <div class="desc">Cancel closes the dialog, form stays pre-filled.</div>
+              <div class="desc">Cancel schließt Dialog, Formular bleibt vorbefüllt.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -1800,8 +1803,8 @@
                 <img src="/handbook/screenshots/07-send-success.png" alt="send success" />
               </div>
               <div class="desc">
-                After a successful 2-phase commit: proof ID + link back to the wallet. Tx row
-                appears in the local list immediately.
+                Nach erfolgreichem 2-Phasen-Commit: Proof-ID + Link zurück zur Wallet. Tx-Row in der
+                lokalen Liste sofort sichtbar.
               </div>
             </div>
             <div class="test">
@@ -1815,11 +1818,11 @@
               </div>
               <div class="img no-shot">
                 <p>
-                  Functional test with no screenshot — confirms that an aborted commit is retried on
-                  the next app start (in-flight recovery, 3 attempts).
+                  Funktionaler Test ohne Screenshot — bestätigt, dass ein abgebrochener Commit beim
+                  nächsten App-Start automatisch nachgereicht wird (in-flight Recovery, 3 Versuche).
                 </p>
               </div>
-              <div class="desc">No-shot: in-flight recovery logic, no new screen.</div>
+              <div class="desc">No-Shot: in-flight Recovery-Logik, kein neuer Screen.</div>
             </div>
           </div>
         </section>
@@ -1828,11 +1831,11 @@
         <section id="spec-08" class="spec">
           <div class="spec-head">
             <div class="lhs">
-              <h2><span class="num">08</span>Receive Bitcoin</h2>
+              <h2><span class="num">08</span>Bitcoin empfangen</h2>
               <div class="file">e2e/08-receive.spec.ts</div>
             </div>
             <div class="rhs">
-              <b>4 tests · 4 baselines</b>
+              <b>4 Tests · 4 Baselines</b>
               <div class="links">
                 <a href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts"
                   >Spec ↗</a
@@ -1845,9 +1848,9 @@
             </div>
           </div>
           <p class="spec-intro">
-            The <code>{8hex}@zkcoins.app</code> address as QR + text. Senders see only the output
-            they ship to you — no address, no amount, no link. Auto-rotate after each receive is
-            marked "planned".
+            Die <code>{8hex}@zkcoins.app</code>-Adresse als QR + Text. Sender sehen ausschließlich
+            das Output, das sie an dich schicken — keine Adresse, kein Betrag, keine Verbindung.
+            Auto-Rotate nach jedem Receive ist als „planned" markiert.
             <span class="tag mvp">MVP</span>
           </p>
 
@@ -1868,8 +1871,8 @@
                 />
               </div>
               <div class="desc">
-                QR code centered, address monospace below, "Copy address" button, privacy hint. No
-                bottom nav (this is a sub-page).
+                QR-Code mittig, Adresse monospace darunter, „Copy address"-Button, Privacy-Hinweis.
+                Kein Bottom-Nav (zeigt sub-page).
               </div>
             </div>
             <div class="test">
@@ -1887,7 +1890,7 @@
                   alt="receive mobile"
                 />
               </div>
-              <div class="desc">Mobile layout: QR large, copy button full width.</div>
+              <div class="desc">Mobile-Layout: QR groß, Copy-Button volle Breite.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -1902,8 +1905,8 @@
                 <img src="/handbook/screenshots/08-receive-after-copy.png" alt="after copy" />
               </div>
               <div class="desc">
-                After "Copy address": button switches to "Copied" with checkmark, address in
-                clipboard.
+                Nach „Copy address": Button wechselt zu „Copied" mit Checkmark, Adresse in
+                Zwischenablage.
               </div>
             </div>
             <div class="test">
@@ -1922,7 +1925,7 @@
                 />
               </div>
               <div class="desc">
-                "Back" returns to the wallet — no state loss, the receive page has no edit state.
+                „Back" zurück zur Wallet — kein State-Verlust, Receive-Page hat keinen Edit-State.
               </div>
             </div>
           </div>
@@ -1932,11 +1935,11 @@
         <section id="spec-09" class="spec">
           <div class="spec-head">
             <div class="lhs">
-              <h2><span class="num">09</span>Network badge &amp; app shell</h2>
+              <h2><span class="num">09</span>Network-Badge &amp; AppShell</h2>
               <div class="file">e2e/09-network-and-shell.spec.ts</div>
             </div>
             <div class="rhs">
-              <b>6 tests · 6 baselines</b>
+              <b>6 Tests · 6 Baselines</b>
               <div class="links">
                 <a
                   href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts"
@@ -1950,10 +1953,10 @@
             </div>
           </div>
           <p class="spec-intro">
-            Global app shell: bottom nav for the three main areas, footer links (row + grid),
-            network badge with live status from <code>/api/info</code>. The network badge is an MVP
-            function; the other tests cover the surrounding chrome.
-            <span class="tag mvp">MVP · Network badge</span>
+            Globale App-Shell: Bottom-Nav für die drei Hauptbereiche, Footer-Links (Row + Grid),
+            Network-Badge mit Live-Status aus <code>/api/info</code>. Network-Badge ist eine
+            MVP-Funktion; die anderen Tests covern den umgebenden Chrome.
+            <span class="tag mvp">MVP · Network Badge</span>
           </p>
 
           <div class="tests cols-2">
@@ -1974,7 +1977,7 @@
                 />
               </div>
               <div class="desc">
-                Wallet tab active (default). Apps tab visible (DEV-gated), Settings tab inactive.
+                Wallet-Tab aktiv (Default). Apps-Tab sichtbar (DEV-gated), Settings-Tab inaktiv.
               </div>
             </div>
             <div class="test">
@@ -1994,7 +1997,7 @@
                 />
               </div>
               <div class="desc">
-                Settings tab active — Bitcoin-orange highlight, client-side route.
+                Settings-Tab aktiv — Bitcoin-Orange-Highlight, clientseitige Route.
               </div>
             </div>
             <div class="test">
@@ -2011,8 +2014,8 @@
                 <img src="/handbook/screenshots/09-shell-footerlinks-row.png" alt="footer row" />
               </div>
               <div class="desc">
-                Row variant of the footer under the wallet: Docs, API, Explorer, Blog, Status,
-                GitHub, Network.
+                Row-Variante des Footer unter Wallet: Docs, API, Explorer, Blog, Status, GitHub,
+                Network.
               </div>
             </div>
             <div class="test">
@@ -2029,7 +2032,7 @@
                 <img src="/handbook/screenshots/09-shell-footerlinks-grid.png" alt="footer grid" />
               </div>
               <div class="desc">
-                Grid variant as the "Resources" section in Settings. Full width, clearer hierarchy.
+                Grid-Variante als „Resources"-Sektion in Settings. Volle Breite, klarere Hierarchie.
               </div>
             </div>
             <div class="test">
@@ -2046,7 +2049,7 @@
                 <img src="/handbook/screenshots/09-network-badge-signet.png" alt="badge signet" />
               </div>
               <div class="desc">
-                DEV connected to Bitcoin Signet — "signet" label + colored dot.
+                DEV verbunden mit Bitcoin Signet — „signet"-Label + farbiger Dot.
               </div>
             </div>
             <div class="test">
@@ -2063,8 +2066,8 @@
                 <img src="/handbook/screenshots/09-network-badge-loading.png" alt="badge loading" />
               </div>
               <div class="desc">
-                Spec intercepts <code>/api/info</code> with an 8 s delay → loading state of the
-                badge is visible.
+                Spec interceptet <code>/api/info</code> mit 8 s Delay → Loading-State des Badges
+                sichtbar.
               </div>
             </div>
           </div>
@@ -2074,11 +2077,11 @@
         <section id="spec-10" class="spec">
           <div class="spec-head">
             <div class="lhs">
-              <h2><span class="num">10</span>PWA install</h2>
+              <h2><span class="num">10</span>PWA-Installation</h2>
               <div class="file">e2e/10-pwa.spec.ts</div>
             </div>
             <div class="rhs">
-              <b>4 tests · 4 baselines</b>
+              <b>4 Tests · 4 Baselines</b>
               <div class="links">
                 <a href="https://github.com/zk-coins/app/blob/develop/e2e/10-pwa.spec.ts">Spec ↗</a>
                 <a href="https://github.com/zk-coins/app/tree/develop/e2e/10-pwa.spec.ts-snapshots"
@@ -2088,10 +2091,10 @@
             </div>
           </div>
           <p class="spec-intro">
-            <code>PwaPrompt</code> covers three detection modes — native (Chrome/Edge/Android), iOS
-            Safari (share icon), manual desktop fallback — plus the installing sub-state. Closes the
-            second former MVP triage gap. The native browser install dialog itself is not
-            headless-exercisable and stays a documented accepted gap.
+            <code>PwaPrompt</code> deckt drei Detection-Modes ab — native (Chrome/Edge/Android), iOS
+            Safari (Share-Icon), manueller Desktop-Fallback — plus den Installing-Sub-State.
+            Schließt das zweite frühere MVP-Triage-Gap. Der native Browser-Install-Dialog selbst ist
+            nicht headless-exercisable und bleibt ein dokumentierter Accept-Gap.
             <span class="tag mvp">MVP</span>
             <span class="tag gap-closed">Gap closed</span>
           </p>
@@ -2110,8 +2113,8 @@
                 <img src="/handbook/screenshots/10-pwa-native-mode.png" alt="native mode" />
               </div>
               <div class="desc">
-                Synthetic <code>beforeinstallprompt</code> event dispatched after login → banner
-                shows "Install" button. Click opens the native dialog.
+                Synthetisches <code>beforeinstallprompt</code>-Event nach Login dispatcht → Banner
+                zeigt „Install"-Button. Klick öffnet den nativen Dialog.
               </div>
             </div>
             <div class="test">
@@ -2127,8 +2130,8 @@
                 <img src="/handbook/screenshots/10-pwa-native-installing.png" alt="installing" />
               </div>
               <div class="desc">
-                While <code>event.prompt()</code> runs with a 5 s delay, the button shows
-                "Installing…" and is disabled.
+                Während <code>event.prompt()</code> mit 5 s Delay läuft, ist der Button
+                „Installing…" + disabled.
               </div>
             </div>
             <div class="test">
@@ -2144,8 +2147,8 @@
                 <img src="/handbook/screenshots/10-pwa-ios-mode.png" alt="ios mode" />
               </div>
               <div class="desc">
-                UA set to Safari iOS → share-icon instructions instead of button ("Tap the [Share]
-                icon…").
+                UA als Safari iOS gesetzt → Share-Icon-Anleitung statt Button („Tap the [Share] icon
+                …").
               </div>
             </div>
             <div class="test">
@@ -2161,8 +2164,8 @@
                 <img src="/handbook/screenshots/10-pwa-manual-mode.png" alt="manual mode" />
               </div>
               <div class="desc">
-                Default Chromium UA without BIP event → address-bar icon hint ("Click the install
-                icon in your browser's address bar…").
+                Default Chromium UA ohne BIP-Event → Adressleisten-Icon-Hint („Click the install
+                icon in your browser's address bar …").
               </div>
             </div>
           </div>
@@ -2172,11 +2175,11 @@
         <section id="spec-11" class="spec">
           <div class="spec-head">
             <div class="lhs">
-              <h2><span class="num">11</span>Route guards</h2>
+              <h2><span class="num">11</span>Route-Guards</h2>
               <div class="file">e2e/11-cross-spec-redirects.spec.ts</div>
             </div>
             <div class="rhs">
-              <b>3 tests · 3 baselines</b>
+              <b>3 Tests · 3 Baselines</b>
               <div class="links">
                 <a
                   href="https://github.com/zk-coins/app/blob/develop/e2e/11-cross-spec-redirects.spec.ts"
@@ -2190,10 +2193,10 @@
             </div>
           </div>
           <p class="spec-intro">
-            When the user navigates to <code>/send</code>, <code>/receive</code> or
-            <code>/settings</code> directly without an active wallet, the app checks the store 100
-            ms after mount and calls <code>router.replace('/')</code>. The spec stretches that 100
-            ms timeout to 30 s to baseline the placeholder.
+            Wenn der User <code>/send</code>, <code>/receive</code> oder <code>/settings</code>
+            direkt aufruft ohne aktive Wallet, prüft die App 100 ms nach Mount den Store und ruft
+            <code>router.replace('/')</code>. Die Spec stretcht das 100-ms-Timeout zu 30 s, um den
+            Placeholder zu baselinen.
           </p>
 
           <div class="tests cols-2">
@@ -2214,7 +2217,7 @@
                 />
               </div>
               <div class="desc">
-                /send without an account: wallet icon + "Redirecting to wallet…" placeholder.
+                /send ohne Account: Wallet-Icon + „Redirecting to wallet…" Placeholder.
               </div>
             </div>
             <div class="test">
@@ -2233,7 +2236,7 @@
                   alt="receive redirect"
                 />
               </div>
-              <div class="desc">/receive without an account: identical placeholder.</div>
+              <div class="desc">/receive ohne Account: identischer Placeholder.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -2252,8 +2255,8 @@
                 />
               </div>
               <div class="desc">
-                /settings without an account: Settings header stays, conditional sections are
-                hidden.
+                /settings ohne Account: Settings-Header bleibt, conditional Sektionen sind
+                versteckt.
               </div>
             </div>
           </div>
@@ -2263,19 +2266,19 @@
 
         <!-- COVERAGE -->
         <section id="coverage">
-          <h2 style="margin-top: 48px">Coverage &amp; triage</h2>
+          <h2 style="margin-top: 48px">Abdeckung &amp; Triage</h2>
           <p>
-            Each of the 10 MVP functions from
+            Jede der 10 MVP-Funktionen aus
             <a href="https://github.com/zk-coins/app/blob/develop/README.md"
               >README.md § Features</a
             >
-            is covered by at least one test with a visual baseline.
+            ist durch mindestens einen Test mit Visual-Baseline abgedeckt.
           </p>
 
           <table>
             <thead>
               <tr>
-                <th>MVP function</th>
+                <th>MVP-Funktion</th>
                 <th>Spec</th>
                 <th>Tests</th>
                 <th>Baselines</th>
@@ -2348,71 +2351,72 @@
                 <td><strong class="ok">62</strong></td>
               </tr>
               <tr>
-                <td>+ Welcome / onboarding</td>
+                <td>+ Welcome / Onboarding</td>
                 <td><code>01-onboarding-welcome</code></td>
                 <td>5</td>
                 <td><span class="ok">5</span></td>
               </tr>
               <tr>
-                <td>+ Route guards</td>
+                <td>+ Route-Guards</td>
                 <td><code>11-cross-spec-redirects</code></td>
                 <td>3</td>
                 <td><span class="ok">3</span></td>
               </tr>
               <tr>
-                <td colspan="2"><strong>Σ total</strong></td>
+                <td colspan="2"><strong>Σ gesamt</strong></td>
                 <td><strong>73</strong></td>
                 <td><strong class="ok">70</strong></td>
               </tr>
             </tbody>
           </table>
 
-          <h3>Unit coverage</h3>
+          <h3>Unit-Coverage</h3>
           <p>
-            On the MVP surface (<code>src/lib/**</code> + <code>src/stores/**</code>):
-            <strong>100 % lines · 100 % statements · 100 % functions · 100 % branches</strong>. CI
-            fails on any drop.
+            Auf der MVP-Surface (<code>src/lib/**</code> + <code>src/stores/**</code>):
+            <strong>100 % Lines · 100 % Statements · 100 % Functions · 100 % Branches</strong>. CI
+            failt bei jedem Drop.
           </p>
 
-          <h3>Required CI checks on <code>develop</code></h3>
+          <h3>Required CI-Checks auf <code>develop</code></h3>
           <ul>
             <li><code>Lint &amp; Build</code></li>
             <li><code>Unit Tests</code></li>
             <li><code>Rust Crypto Tests</code></li>
-            <li><code>E2E Tests</code> — all 73 tests including 70 visual-baseline comparisons</li>
+            <li><code>E2E Tests</code> — alle 73 Tests inkl. 70 Visual-Baseline-Vergleiche</li>
           </ul>
 
-          <h3>Baseline regeneration</h3>
+          <h3>Baselines-Regeneration</h3>
           <p>
-            When the UI is intentionally changed, regenerate baselines via
+            Wenn UI absichtlich verändert wird, regeneriert man die Baselines via
             <code
               >gh workflow run "Regenerate Visual Baselines" --ref develop -f branch=develop</code
-            >. The workflow opens a side-branch PR with the new PNGs, merged via
-            <code>gh pr merge --admin --squash</code> . Never edit baseline PNGs manually. Full plan
-            in
+            >. Der Workflow öffnet einen Side-Branch-PR mit den neuen PNGs, der per
+            <code>gh pr merge --admin --squash</code> gemergt wird. Niemals Baseline-PNGs manuell
+            editieren. Vollständiger Plan in
             <a href="https://github.com/zk-coins/app/blob/develop/e2e/README.md">e2e/README.md</a>.
           </p>
 
-          <h3>Triage gaps (explicitly not covered)</h3>
+          <h3>Triage-Gaps (explizit nicht abgedeckt)</h3>
           <ul>
             <li>
-              <strong>Passkey flows</strong> (gated) — covered functionally via
-              <code>webauthn.spec.ts</code>, no visual baseline.
+              <strong>Passkey-Flows</strong> (gated) — funktional via
+              <code>webauthn.spec.ts</code> getestet, keine Visual-Baseline.
             </li>
             <li>
-              <strong>Network activity chart</strong> (keep) — simulated data breaks pixel diff, no
-              dedicated test.
+              <strong>Network Activity Chart</strong> (keep) — simulierte Daten brechen Pixel-Diff,
+              kein dedizierter Test.
             </li>
-            <li><strong>Native browser install dialog</strong> — not headless-exercisable.</li>
+            <li><strong>Nativer Browser-Install-Dialog</strong> — nicht headless exerzierbar.</li>
             <li>
-              <strong>Dev routes</strong> (<code>/reset</code>, <code>/simulate</code>) — DEV-only.
+              <strong>Dev-Routes</strong> (<code>/reset</code>, <code>/simulate</code>) — Dev-only.
             </li>
           </ul>
 
           <div class="callout">
             <p>
-              <b>Status:</b> 2026-05-16. Live at <a href="https://zkcoins.app">zkcoins.app</a> (PRD)
-              and <a href="https://dev.zkcoins.app">dev.zkcoins.app</a> (DEV).
+              <b>Stand:</b> 2026-05-16. Live unter
+              <a href="https://zkcoins.app">zkcoins.app</a> (PRD) und
+              <a href="https://dev.zkcoins.app">dev.zkcoins.app</a> (DEV).
             </p>
           </div>
         </section>

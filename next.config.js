@@ -12,7 +12,10 @@ const nextConfig = {
   // clean URL /handbook. The screenshots subfolder is reached normally
   // via /handbook/screenshots/*.
   async rewrites() {
-    return [{ source: '/handbook', destination: '/handbook/index.html' }];
+    return [
+      { source: '/handbook', destination: '/handbook/index.html' },
+      { source: '/handbook/de', destination: '/handbook/de/index.html' },
+    ];
   },
 };
 
