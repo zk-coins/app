@@ -1,0 +1,1856 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>zkCoins App — Benutzerhandbuch</title>
+    <style>
+      :root {
+        --bg: #0a0a0a;
+        --surface: #131313;
+        --surface-2: #1c1c1c;
+        --line: #2a2a2a;
+        --line-2: #353535;
+        --ink: #f5f5f5;
+        --ink-2: #c8c8c8;
+        --ink-3: #8a8a8a;
+        --ink-4: #5a5a5a;
+        --bitcoin: #f7931a;
+        --bitcoin-hover: #ffae40;
+        --ok: #4ade80;
+        --warn: #fbbf24;
+        --err: #f87171;
+        --content-width: 920px;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        scroll-behavior: smooth;
+      }
+      body {
+        margin: 0;
+        background: var(--bg);
+        color: var(--ink);
+        font-family:
+          -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell,
+          sans-serif;
+        font-size: 16px;
+        line-height: 1.65;
+        -webkit-font-smoothing: antialiased;
+      }
+      .mono {
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+      }
+
+      /* Layout */
+      .wrap {
+        display: grid;
+        grid-template-columns: 260px 1fr;
+        max-width: 1280px;
+        margin: 0 auto;
+      }
+      aside {
+        position: sticky;
+        top: 0;
+        align-self: start;
+        height: 100vh;
+        overflow-y: auto;
+        padding: 32px 20px 32px 28px;
+        border-right: 1px solid var(--line);
+        background: var(--surface);
+      }
+      main {
+        padding: 56px 56px 96px;
+        max-width: var(--content-width);
+      }
+      @media (max-width: 980px) {
+        .wrap {
+          grid-template-columns: 1fr;
+        }
+        aside {
+          position: static;
+          height: auto;
+          border-right: none;
+          border-bottom: 1px solid var(--line);
+        }
+        main {
+          padding: 32px 24px 64px;
+        }
+      }
+
+      /* Sidebar */
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin: 0 0 28px;
+      }
+      .brand .dot {
+        width: 14px;
+        height: 14px;
+        border-radius: 4px;
+        background: var(--bitcoin);
+      }
+      .brand .name {
+        font-size: 15px;
+        font-weight: 700;
+        letter-spacing: -0.01em;
+      }
+      .toc-label {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.08em;
+        color: var(--ink-4);
+        text-transform: uppercase;
+        margin: 18px 0 8px;
+      }
+      nav.toc ol {
+        list-style: none;
+        padding: 0;
+        margin: 0;
+        counter-reset: section;
+      }
+      nav.toc li {
+        margin: 0;
+      }
+      nav.toc a {
+        display: block;
+        padding: 4px 0;
+        font-size: 13px;
+        color: var(--ink-2);
+        text-decoration: none;
+        line-height: 1.4;
+        transition: color 0.15s;
+      }
+      nav.toc a:hover {
+        color: var(--bitcoin);
+      }
+      nav.toc li.depth-2 a {
+        padding-left: 14px;
+        font-size: 12px;
+        color: var(--ink-3);
+      }
+      nav.toc li.depth-2 a:hover {
+        color: var(--bitcoin);
+      }
+
+      /* Headings & prose */
+      h1 {
+        font-size: 32px;
+        font-weight: 800;
+        letter-spacing: -0.02em;
+        margin: 0 0 6px;
+      }
+      h2 {
+        font-size: 24px;
+        font-weight: 700;
+        letter-spacing: -0.015em;
+        margin: 56px 0 6px;
+        scroll-margin-top: 20px;
+      }
+      h2::before {
+        content: counter(h2-counter) '.';
+        color: var(--bitcoin);
+        margin-right: 12px;
+        counter-increment: h2-counter;
+      }
+      h3 {
+        font-size: 17px;
+        font-weight: 600;
+        margin: 36px 0 6px;
+        scroll-margin-top: 20px;
+      }
+      main {
+        counter-reset: h2-counter;
+      }
+      p {
+        margin: 0 0 14px;
+        color: var(--ink-2);
+      }
+      .lede {
+        font-size: 18px;
+        color: var(--ink-2);
+        max-width: 780px;
+      }
+      hr.sep {
+        border: none;
+        border-top: 1px solid var(--line);
+        margin: 56px 0 0;
+      }
+      ul,
+      ol {
+        color: var(--ink-2);
+        padding-left: 22px;
+      }
+      ul li,
+      ol li {
+        margin: 4px 0;
+      }
+      strong {
+        color: var(--ink);
+      }
+      code {
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 0.9em;
+        background: var(--surface-2);
+        padding: 2px 6px;
+        border-radius: 3px;
+        color: var(--bitcoin);
+      }
+
+      /* Hero */
+      .hero {
+        padding: 16px 0 12px;
+        border-bottom: 1px solid var(--line);
+      }
+      .hero h1 {
+        margin-bottom: 10px;
+      }
+      .hero .lede {
+        margin-top: 0;
+        margin-bottom: 16px;
+      }
+      .meta {
+        display: flex;
+        gap: 18px;
+        font-size: 12px;
+        color: var(--ink-3);
+        flex-wrap: wrap;
+      }
+      .meta span {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .meta b {
+        color: var(--ink);
+      }
+
+      /* Tags */
+      .tag-row {
+        display: flex;
+        gap: 8px;
+        flex-wrap: wrap;
+        margin: 6px 0 8px;
+      }
+      .tag {
+        display: inline-block;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.04em;
+        padding: 2px 8px;
+        border-radius: 3px;
+        text-transform: uppercase;
+        border: 1px solid var(--line-2);
+        color: var(--ink-3);
+      }
+      .tag.mvp {
+        color: var(--bitcoin);
+        border-color: var(--bitcoin);
+      }
+      .tag.gate {
+        color: var(--warn);
+        border-color: rgba(251, 191, 36, 0.4);
+      }
+      .tag.planned {
+        color: var(--ink-4);
+      }
+
+      /* Screen card grid */
+      .screens {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+        gap: 28px;
+        margin: 28px 0 8px;
+      }
+      .screens.cols-2 {
+        grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+      }
+      .screens.cols-1 {
+        grid-template-columns: 1fr;
+        max-width: 760px;
+      }
+      .screen {
+        background: var(--surface);
+        border: 1px solid var(--line);
+        border-radius: 8px;
+        overflow: hidden;
+      }
+      .screen .img {
+        display: block;
+        background: #fff;
+        border-bottom: 1px solid var(--line);
+        position: relative;
+      }
+      .screen .img img {
+        display: block;
+        width: 100%;
+        height: auto;
+        max-height: 480px;
+        object-fit: contain;
+        background: #fff;
+      }
+      .screen.dark .img,
+      .screen.dark .img img {
+        background: var(--bg);
+      }
+      .screen .cap {
+        padding: 14px 16px 16px;
+      }
+      .screen .cap .title {
+        font-size: 14px;
+        font-weight: 600;
+        color: var(--ink);
+        margin: 0 0 4px;
+      }
+      .screen .cap .desc {
+        font-size: 12.5px;
+        color: var(--ink-3);
+        line-height: 1.55;
+        margin: 0;
+      }
+      .screen .badge {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        background: rgba(0, 0, 0, 0.65);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        padding: 3px 8px;
+        border-radius: 3px;
+        text-transform: uppercase;
+        backdrop-filter: blur(4px);
+      }
+
+      /* Step list with numbers */
+      ol.flow {
+        list-style: none;
+        padding: 0;
+        margin: 16px 0 0;
+        counter-reset: step;
+      }
+      ol.flow li {
+        position: relative;
+        padding: 0 0 16px 36px;
+        counter-increment: step;
+      }
+      ol.flow li::before {
+        content: counter(step);
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 24px;
+        height: 24px;
+        border-radius: 50%;
+        background: var(--bitcoin);
+        color: var(--bg);
+        font-size: 12px;
+        font-weight: 700;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+      }
+      ol.flow li b {
+        display: block;
+        color: var(--ink);
+        margin-bottom: 2px;
+      }
+
+      /* Callouts */
+      .callout {
+        border-left: 3px solid var(--bitcoin);
+        background: rgba(247, 147, 26, 0.05);
+        padding: 14px 18px;
+        margin: 22px 0;
+        border-radius: 0 4px 4px 0;
+      }
+      .callout.warn {
+        border-color: var(--warn);
+        background: rgba(251, 191, 36, 0.05);
+      }
+      .callout.info {
+        border-color: var(--ink-3);
+        background: var(--surface);
+      }
+      .callout p {
+        margin: 0;
+        color: var(--ink-2);
+        font-size: 13.5px;
+      }
+      .callout b {
+        color: var(--ink);
+      }
+
+      /* Coverage Table */
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin: 20px 0;
+        font-size: 13px;
+      }
+      th,
+      td {
+        text-align: left;
+        padding: 10px 14px;
+        border-bottom: 1px solid var(--line);
+      }
+      th {
+        font-size: 11px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--ink-4);
+        background: var(--surface);
+      }
+      td {
+        color: var(--ink-2);
+      }
+      td .ok {
+        color: var(--ok);
+      }
+      td .err {
+        color: var(--err);
+      }
+    </style>
+  </head>
+
+  <body>
+    <div class="wrap">
+      <aside>
+        <div class="brand">
+          <span class="dot"></span><span class="name">zkCoins · User Guide</span>
+        </div>
+
+        <div class="toc-label">Inhalt</div>
+        <nav class="toc">
+          <ol>
+            <li><a href="#intro">Einführung</a></li>
+            <li><a href="#welcome">Willkommen &amp; Onboarding</a></li>
+            <li><a href="#create">Wallet erstellen</a></li>
+            <li><a href="#restore">Wallet wiederherstellen</a></li>
+            <li><a href="#unlock">Wallet entsperren</a></li>
+            <li><a href="#balance">Wallet-Übersicht &amp; Balance</a></li>
+            <li><a href="#send">Bitcoin senden</a></li>
+            <li><a href="#receive">Bitcoin empfangen</a></li>
+            <li><a href="#settings">Einstellungen &amp; Disconnect</a></li>
+            <li><a href="#shell">Navigation &amp; Netzwerk-Status</a></li>
+            <li><a href="#pwa">Als App installieren (PWA)</a></li>
+            <li><a href="#guards">Sicherheits-Routing</a></li>
+            <li><a href="#coverage">Test-Abdeckung</a></li>
+          </ol>
+        </nav>
+      </aside>
+
+      <main>
+        <section class="hero" id="intro">
+          <h1>zkCoins App — Benutzerhandbuch</h1>
+          <p class="lede">
+            Privater Bitcoin-Wallet mit
+            <a href="https://shieldedcsv.org" style="color: var(--bitcoin); text-decoration: none">
+              Shielded CSV
+            </a>
+            . Keine Adressen on-chain, keine Beträge, keine Verbindungen — nur
+            Zero-Knowledge-Beweise. Diese Doku führt dich durch jeden Screen, den die App heute hat,
+            exakt so wie er in der echten App aussieht.
+          </p>
+          <div class="meta">
+            <span>🟢 <b>PRD:</b> zkcoins.app</span>
+            <span>🟡 <b>DEV:</b> dev.zkcoins.app</span>
+            <span>📦 <b>Image:</b> <code>zkcoin/app</code></span>
+            <span>📐 <b>Screens:</b> 70 / 10 MVP-Funktionen</span>
+          </div>
+        </section>
+
+        <p style="margin-top: 32px">
+          Alle Screenshots stammen aus den automatisch generierten E2E-Baselines (Linux, Chromium,
+          1440×900 Desktop / 375×812 Mobile / 768×1024 Tablet). Jede Baseline wird bei jedem PR
+          pixelgenau verglichen — wenn dieser Guide aktuell ist, ist es die App auch.
+        </p>
+
+        <div class="callout info">
+          <p>
+            <b>DEV-Bundle vs. PRD-Bundle:</b> Die DEV-Variante (in diesem Guide gezeigt) hat
+            zusätzlich den <em>Apps</em>-Tab in der Bottom-Navigation und den
+            <em>Mint test BTC</em>-Faucet-Button auf der leeren Wallet — beides via Build-Time-Flags
+            gesteuert und im PRD-Build per Dead-Code-Elimination entfernt. Die 10 MVP-Funktionen
+            sind identisch.
+          </p>
+        </div>
+
+        <hr class="sep" />
+
+        <!-- 1. WELCOME -->
+        <section id="welcome">
+          <h2>Willkommen &amp; Onboarding</h2>
+          <p class="lede">
+            Der erste Screen. Hier entscheidest du, ob du eine neue Wallet erstellen oder eine
+            bestehende wiederherstellen willst.
+          </p>
+          <div class="tag-row">
+            <span class="tag">Always-on</span><span class="tag">Eintrittspunkt</span>
+          </div>
+
+          <p>
+            Beim ersten Aufruf der App siehst du den Welcome-Screen. Zwei Aktionen stehen zur Wahl:
+            <strong>CREATE WALLET</strong> generiert lokal eine neue 12-Wort-Seed-Phrase und legt
+            damit eine frische zkCoins-Adresse an; <strong>Restore existing wallet</strong> erlaubt
+            das Importieren einer bestehenden Seed-Phrase. Beide Wege führen am Ende zur
+            passwortgeschützten Wallet.
+          </p>
+
+          <p>
+            <strong>Wichtig:</strong> Keine der Aktionen erzeugt eine On-Chain-Transaktion oder
+            kostet etwas. Die Wallet existiert anfangs nur auf deinem Gerät, verschlüsselt in
+            IndexedDB.
+          </p>
+
+          <h3>Drei Viewports — gleiches Layout</h3>
+          <p>
+            Die Welcome-Page ist responsiv. Desktop, Tablet und Mobile zeigen exakt denselben
+            Inhalt, nur das Layout passt sich an.
+          </p>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <span class="badge">Desktop · 1440×900</span
+                ><img src="screenshots/01-welcome-desktop.png" alt="Welcome Screen Desktop" />
+              </div>
+              <div class="cap">
+                <p class="title">Welcome — Desktop</p>
+                <p class="desc">
+                  Volle Breite mit Logo links oben, Hero-Headline, zwei Action-Buttons und
+                  Footer-Links.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <span class="badge">Tablet · 768×1024</span
+                ><img src="screenshots/01-welcome-tablet.png" alt="Welcome Screen Tablet" />
+              </div>
+              <div class="cap">
+                <p class="title">Welcome — Tablet</p>
+                <p class="desc">Identische Komposition, an Tablet-Auflösung angepasst.</p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <span class="badge">Mobile · 375×812</span
+                ><img src="screenshots/01-welcome-mobile.png" alt="Welcome Screen Mobile" />
+              </div>
+              <div class="cap">
+                <p class="title">Welcome — Mobile</p>
+                <p class="desc">
+                  Vertikal gestapelt, Bottom-Nav nicht sichtbar (kein Account vorhanden).
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Hover-Zustände der Action-Buttons</h3>
+          <p>
+            Beim Überfahren mit der Maus heben sich die beiden Aktionen visuell hervor — der
+            Bitcoin-Orange-Akzent macht klar, welche der beiden gerade aktiv ist.
+          </p>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/01-welcome-create-hover.png" alt="CREATE WALLET hover" />
+              </div>
+              <div class="cap">
+                <p class="title">CREATE WALLET (Hover)</p>
+                <p class="desc">
+                  Der primäre CTA bekommt einen Bitcoin-Orange-Outline und füllt sich gleichzeitig
+                  dezent. Der sekundäre Restore-Link tritt visuell zurück.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/01-welcome-restore-hover.png" alt="Restore hover" />
+              </div>
+              <div class="cap">
+                <p class="title">Restore existing wallet (Hover)</p>
+                <p class="desc">
+                  Der sekundäre Link unterstreicht sich beim Hover. Funktional gleichwertig — keine
+                  Eile, eine bewusste Entscheidung zu treffen.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="sep" />
+
+        <!-- 2. CREATE -->
+        <section id="create">
+          <h2>Wallet erstellen mit Seed Phrase</h2>
+          <p class="lede">
+            Der primäre Onboarding-Pfad. 12 BIP-39-Wörter werden lokal generiert, du schreibst sie
+            ab, bestätigst und legst danach ein Verschlüsselungs-Passwort fest.
+          </p>
+          <div class="tag-row">
+            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
+          </div>
+
+          <p>
+            Nach Klick auf <strong>CREATE WALLET</strong> führt dich die App durch fünf Stationen:
+            Seed wird generiert → Seed wird angezeigt → du bestätigst, dass du sie aufgeschrieben
+            hast → du setzt ein Passwort → die Wallet öffnet sich.
+          </p>
+
+          <ol class="flow">
+            <li>
+              <b>Schritt 1 — Seed generieren</b>Die App ruft <code>generateMnemonic()</code> im
+              WASM-Modul auf. Das passiert clientseitig, kein Server sieht je deine Mnemonic.
+              Während der Generierung siehst du eine kurze Ladeanimation.
+            </li>
+            <li>
+              <b>Schritt 2 — Seed anzeigen</b>Die 12 Wörter werden zunächst hinter einem
+              Klick-Overlay versteckt — das schützt vor versehentlichem Vorzeigen. Nach einem Tap
+              erscheinen sie nummeriert in einem Grid.
+            </li>
+            <li>
+              <b>Schritt 3 — Aufschreiben bestätigen</b>Du klickst „I've written it down" um zu
+              bestätigen, dass die Wörter sicher offline gespeichert sind.
+            </li>
+            <li>
+              <b>Schritt 4 — Passwort setzen</b>Du wählst ein lokales Verschlüsselungs-Passwort. Die
+              Mnemonic wird damit AES-256-GCM-verschlüsselt in IndexedDB abgelegt. Mindestens 8
+              Zeichen; identische Wiederholung Pflicht.
+            </li>
+            <li>
+              <b>Schritt 5 — Wallet öffnet sich</b>Du landest auf der Wallet-Screen mit Balance 0
+              und deiner ersten <code>{8hex}@zkcoins.app</code>-Adresse.
+            </li>
+          </ol>
+
+          <h3>Seed generieren &amp; anzeigen</h3>
+          <div class="screens">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/02-seed-generating.png" alt="Seed wird generiert" />
+              </div>
+              <div class="cap">
+                <p class="title">Generating mnemonic…</p>
+                <p class="desc">
+                  Kurzer Lade-State während die WASM-Library 128 Bit Entropie zieht und in BIP-39
+                  enkodiert.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/02-seed-reveal-hidden.png" alt="Seed versteckt" />
+              </div>
+              <div class="cap">
+                <p class="title">Seed versteckt (Tap to reveal)</p>
+                <p class="desc">
+                  Die 12 Wörter sind als unkenntliche Blöcke dargestellt — ein expliziter Klick ist
+                  nötig, um sie freizugeben.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/02-seed-reveal-shown.png" alt="Seed sichtbar" />
+              </div>
+              <div class="cap">
+                <p class="title">Seed sichtbar</p>
+                <p class="desc">
+                  12 BIP-39-Wörter im 3-Spalten-Grid, nummeriert. Schreibe sie ab — du wirst sie zur
+                  Wiederherstellung brauchen.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/02-seed-acknowledged.png" alt="Aufgeschrieben bestätigt" />
+              </div>
+              <div class="cap">
+                <p class="title">"I've written it down" geklickt</p>
+                <p class="desc">
+                  Der Bestätigungs-Button wechselt visuell, der „Continue"-Button wird freigegeben.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout warn">
+            <p>
+              <b>Sicherheits-Hinweis:</b> Die Seed-Phrase ist
+              <strong>die einzige</strong> Sicherheits-Kopie deiner Wallet. Wenn du dein Gerät
+              verlierst und die 12 Wörter nicht hast, sind deine Coins für immer verloren. Es gibt
+              keinen Recovery-Service. Bewahre sie offline auf — Papier oder Metallplatte, nicht in
+              der Cloud.
+            </p>
+          </div>
+
+          <h3>Passwort setzen</h3>
+          <p>
+            Vier Zustände auf dem Passwort-Setup-Bildschirm — die App gibt sofortiges Feedback bei
+            Eingabefehlern.
+          </p>
+          <div class="screens">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/02-password-empty.png" alt="Passwort leer" />
+              </div>
+              <div class="cap">
+                <p class="title">Initial — leer</p>
+                <p class="desc">
+                  „Create wallet"-Button ist disabled bis beide Felder ausgefüllt und identisch
+                  sind.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/02-password-too-short.png" alt="Zu kurz" />
+              </div>
+              <div class="cap">
+                <p class="title">Zu kurz</p>
+                <p class="desc">
+                  Mindestens 8 Zeichen werden verlangt. Fehlertext erscheint live unter dem Feld.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/02-password-mismatch.png" alt="Mismatch" />
+              </div>
+              <div class="cap">
+                <p class="title">Mismatch</p>
+                <p class="desc">
+                  Die beiden Eingaben stimmen nicht überein. Fehlermeldung in Rot direkt unter dem
+                  Confirm-Feld.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/02-password-filled.png" alt="Filled valid" />
+              </div>
+              <div class="cap">
+                <p class="title">Gültig</p>
+                <p class="desc">Beide Felder OK — der Submit-Button wird Bitcoin-Orange aktiv.</p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Wallet nach der Erstellung</h3>
+          <div class="screens cols-1">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/02-wallet-after-create.png" alt="Wallet nach Erstellung" />
+              </div>
+              <div class="cap">
+                <p class="title">Wallet — frisch erstellt, 0 sats</p>
+                <p class="desc">
+                  Du landest auf der Wallet-Screen. Sichtbar: Balance 0, deine eindeutige
+                  <code>@zkcoins.app</code>-Adresse (oben rechts), Action-Buttons Send/Receive,
+                  Username-Claim-Input (gated), Faucet-Button (DEV) und „No transactions yet".
+                  Bottom-Nav unten mit Wallet/Apps/Settings.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="sep" />
+
+        <!-- 3. RESTORE -->
+        <section id="restore">
+          <h2>Wallet wiederherstellen aus Seed Phrase</h2>
+          <p class="lede">
+            Der zweite Onboarding-Pfad. Du gibst eine bestehende 12-Wort-BIP-39-Mnemonic ein, setzt
+            ein neues lokales Passwort und kannst sofort weiterarbeiten.
+          </p>
+          <div class="tag-row">
+            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
+          </div>
+
+          <p>
+            Die App validiert die Eingabe in Echtzeit: Wortzahl prüfen, alle Wörter müssen aus dem
+            BIP-39-Wordlist stammen, Checksum muss aufgehen. Erst dann geht der „Continue"-Button
+            frei.
+          </p>
+
+          <h3>Eingabe der Seed-Phrase</h3>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/03-restore-entry-empty.png" alt="Empty entry" />
+              </div>
+              <div class="cap">
+                <p class="title">Leer — Initialzustand</p>
+                <p class="desc">
+                  Ein Textarea zum Einfügen, „Continue" disabled. Wörter durch Leerzeichen oder
+                  Zeilenumbruch getrennt.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/03-restore-input-wrong-count.png" alt="Wrong count" />
+              </div>
+              <div class="cap">
+                <p class="title">Falsche Anzahl Wörter</p>
+                <p class="desc">
+                  Nur 12-Wort-Mnemonics werden akzeptiert. Bei 11 oder 13 zeigt die App den Fehler
+                  unter dem Eingabefeld.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/03-restore-input-bad-bip39.png" alt="Bad BIP-39" />
+              </div>
+              <div class="cap">
+                <p class="title">Ungültiges BIP-39-Wort</p>
+                <p class="desc">
+                  Mindestens ein Wort ist nicht im BIP-39-Wordlist enthalten oder die Checksum
+                  stimmt nicht. Fehlermeldung in Rot.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/03-restore-input-typed-valid.png" alt="Valid" />
+              </div>
+              <div class="cap">
+                <p class="title">Gültige Mnemonic eingegeben</p>
+                <p class="desc">Wenn alles passt, wird „Continue" freigeschaltet.</p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Neues Passwort für dieses Gerät</h3>
+          <p>
+            Das Passwort, das du jetzt setzt, gilt nur für die lokale Verschlüsselung auf
+            <em>diesem</em> Gerät. Es ist nicht in der Seed-Phrase enthalten und wird nirgendwo
+            synchronisiert.
+          </p>
+          <div class="screens">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/03-restore-password-empty.png" alt="Password empty" />
+              </div>
+              <div class="cap">
+                <p class="title">Leer</p>
+                <p class="desc">
+                  Identisch zum Create-Flow: Mindestens 8 Zeichen, beide Felder müssen
+                  übereinstimmen.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/03-restore-password-too-short.png" alt="Too short" />
+              </div>
+              <div class="cap">
+                <p class="title">Zu kurz</p>
+                <p class="desc">Sofortiges Feedback bei &lt; 8 Zeichen.</p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/03-restore-password-mismatch.png" alt="Mismatch" />
+              </div>
+              <div class="cap">
+                <p class="title">Mismatch</p>
+                <p class="desc">Confirm-Feld weicht ab.</p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/03-restore-password-filled.png" alt="Filled" />
+              </div>
+              <div class="cap">
+                <p class="title">Gültig — Submit aktiv</p>
+                <p class="desc">„Restore wallet" wird Bitcoin-Orange.</p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Wallet nach Restore</h3>
+          <div class="screens cols-1">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/03-wallet-after-restore.png" alt="Wallet after restore" />
+              </div>
+              <div class="cap">
+                <p class="title">Wallet — wiederhergestellt</p>
+                <p class="desc">
+                  Identisch zur frisch erstellten Wallet, nur dass die Adresse aus der
+                  wiederhergestellten Mnemonic deterministisch abgeleitet wurde.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="sep" />
+
+        <!-- 4. UNLOCK -->
+        <section id="unlock">
+          <h2>Wallet entsperren mit Passwort</h2>
+          <p class="lede">
+            Bei jedem App-Start, wenn bereits eine Wallet auf dem Gerät liegt, fragt die App nach
+            dem lokalen Passwort, um die verschlüsselte Mnemonic zu öffnen.
+          </p>
+          <div class="tag-row">
+            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
+          </div>
+
+          <p>
+            Die Entschlüsselung läuft komplett lokal: das Passwort wird via PBKDF2 mit 600 000
+            Iterationen zu einem AES-Schlüssel abgeleitet, der die in IndexedDB liegende Mnemonic
+            öffnet. Bei falschem Passwort wirft AES-GCM einen Authentication-Tag-Mismatch — die App
+            zeigt das als „Wrong password" an.
+          </p>
+
+          <div class="screens">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/04-unlock-empty.png" alt="Unlock empty" />
+              </div>
+              <div class="cap">
+                <p class="title">Initial — Welcome back</p>
+                <p class="desc">
+                  Großer „Welcome back"-Header, Passwort-Feld, disabled „Unlock"-Button.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/04-unlock-typed.png" alt="Unlock typed" />
+              </div>
+              <div class="cap">
+                <p class="title">Passwort eingegeben</p>
+                <p class="desc">„Unlock"-Button wird aktiv, sobald das Feld nicht leer ist.</p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/04-unlock-wrong-error.png" alt="Wrong password" />
+              </div>
+              <div class="cap">
+                <p class="title">Falsches Passwort</p>
+                <p class="desc">
+                  Direkt unter dem Feld: rote Fehlermeldung. Kein Cooldown, kein Rate-Limit — die
+                  ganze Härte des Passworts bildet die Sicherheit.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/04-unlock-unlocking.png" alt="Unlocking" />
+              </div>
+              <div class="cap">
+                <p class="title">Unlocking…</p>
+                <p class="desc">
+                  Während PBKDF2 läuft (ca. 200–400 ms je Gerät), zeigt der Button den Lade-Spinner.
+                  Die Verzögerung ist beabsichtigt und macht Brute-Force teuer.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/04-unlock-success-wallet.png" alt="Unlocked wallet" />
+              </div>
+              <div class="cap">
+                <p class="title">Erfolgreich entsperrt</p>
+                <p class="desc">Du landest in der Wallet mit deinem aktuellen Stand.</p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="sep" />
+
+        <!-- 5. BALANCE -->
+        <section id="balance">
+          <h2>Wallet-Übersicht &amp; Balance</h2>
+          <p class="lede">
+            Der Haupt-Screen nach dem Login. Hier siehst du dein Guthaben, deine Adresse, deine
+            letzten Transaktionen — und kannst Send/Receive starten.
+          </p>
+          <div class="tag-row">
+            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
+          </div>
+
+          <p>
+            Der Balance-Wert wird alle 5 Sekunden über <code>GET /api/balance</code> mit dem Server
+            abgeglichen. Beträge werden in BTC und USD angezeigt; das Auge-Icon rechts vom Betrag
+            erlaubt Verbergen für Streaming-Sessions oder Bildschirmaufnahmen.
+          </p>
+
+          <h3>Zero-Balance &amp; Faucet (nur DEV)</h3>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img
+                  src="screenshots/06-balance-zero-faucet-visible.png"
+                  alt="Zero balance with faucet"
+                />
+              </div>
+              <div class="cap">
+                <p class="title">Wallet leer · Faucet sichtbar</p>
+                <p class="desc">
+                  Wenn die Balance 0 ist, ersetzt ein Banner die Tx-Liste. Auf DEV (Signet) zeigt es
+                  zusätzlich einen „Faucet"-Button, der 100 000 sats Test-BTC schickt. Auf Mainnet
+                  wird der Button automatisch versteckt.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/06-balance-faucet-minting.png" alt="Faucet minting" />
+              </div>
+              <div class="cap">
+                <p class="title">Faucet — Minting…</p>
+                <p class="desc">
+                  Nach Klick: der Button zeigt einen Lade-State während
+                  <code>POST /api/mint</code> die Test-Coins ausgibt. Sobald der Server bestätigt,
+                  fließt die Balance ins UI.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Gefundete Wallet — Desktop &amp; Mobile</h3>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/06-balance-funded-desktop.png" alt="Funded desktop" />
+              </div>
+              <div class="cap">
+                <p class="title">Funded — Desktop</p>
+                <p class="desc">
+                  Vollständig befüllt: Adress-Chip, Balance in BTC und USD, Send/Receive-CTAs,
+                  Username-Claim-Input (DEV/gated), Tx-Liste, Network-Activity-Chart, Footer-Links.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/06-balance-funded-mobile.png" alt="Funded mobile" />
+              </div>
+              <div class="cap">
+                <p class="title">Funded — Mobile</p>
+                <p class="desc">
+                  Vertikal gestapelt. Bottom-Nav unten. Sticky Header mit Adress-Chip.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Balance-Sichtbarkeit &amp; Adress-Kopieren</h3>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/06-balance-hidden.png" alt="Balance hidden" />
+              </div>
+              <div class="cap">
+                <p class="title">Balance versteckt</p>
+                <p class="desc">
+                  Klick auf das Auge-Icon ersetzt den Betrag durch „••••••" — ideal für
+                  Screensharing.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/06-balance-copied-feedback.png" alt="Address copied" />
+              </div>
+              <div class="cap">
+                <p class="title">Adresse kopiert</p>
+                <p class="desc">
+                  Klick auf den Adress-Chip kopiert die volle Adresse in die Zwischenablage und
+                  zeigt kurz ein „Copied"-Feedback.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="sep" />
+
+        <!-- 6. SEND -->
+        <section id="send">
+          <h2>Bitcoin senden (2-Phasen-Proof)</h2>
+          <p class="lede">
+            Der zentrale Vorgang: Coins an eine andere zkCoins-Adresse senden. Kryptografisch ein
+            zweiphasiger Schnorr-Signature + Commitment-Prozess; aus User-Sicht eine
+            Recipient-Amount-Confirm-Send-Sequenz.
+          </p>
+          <div class="tag-row">
+            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
+          </div>
+
+          <p>
+            Hinter den Kulissen passiert: <code>signSendRequest</code> erzeugt eine Schnorr-Signatur
+            über den Send-Request → <code>POST /api/send</code> reserviert die Output-Coins
+            serverseitig → der Client berechnet ein lokales Commitment
+            <code>Schnorr(hash(state || output_coins))</code> →
+            <code>POST /api/commit</code> bestätigt den Send. Bei Netzwerkfehlern wird das laufende
+            Commit in localStorage geparkt und beim nächsten App-Start automatisch nachgereicht (3
+            Versuche mit Exponential-Backoff).
+          </p>
+
+          <h3>Empfänger-Eingabe</h3>
+          <p>
+            Die App akzeptiert zwei Formate als Empfänger:
+            <strong>volle 64-Hex-Adresse</strong> (kanonisch) oder <strong>@username</strong> bzw.
+            <strong>$username</strong> (in DEV/gated, wird via
+            <code>/api/username/resolve</code> aufgelöst). Validierung passiert live beim Tippen.
+          </p>
+          <div class="screens">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-send-default.png" alt="Send default" />
+              </div>
+              <div class="cap">
+                <p class="title">Send — Initialzustand</p>
+                <p class="desc">
+                  Leeres Recipient-Feld mit Placeholder „Address or @username", leeres Amount-Feld,
+                  „Set MAX"-Link, disabled Submit.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-send-no-funds-banner.png" alt="No funds" />
+              </div>
+              <div class="cap">
+                <p class="title">Send ohne Guthaben</p>
+                <p class="desc">
+                  Wenn die Balance 0 ist: Top-Banner „Wallet is empty", Faucet-Hinweis (DEV),
+                  DFX-Link zum Coin-Kauf (DEV/gated).
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-recipient-valid-hex.png" alt="Valid hex" />
+              </div>
+              <div class="cap">
+                <p class="title">Empfänger — gültige Hex-Adresse</p>
+                <p class="desc">
+                  64-Hex-String akzeptiert, kein Resolve nötig, „Continue" wird freigegeben.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-recipient-valid-username.png" alt="Valid username" />
+              </div>
+              <div class="cap">
+                <p class="title">Empfänger — Username (DEV)</p>
+                <p class="desc">
+                  @user oder $user wird über die Server-API aufgelöst. Resolve passiert beim
+                  Continue, nicht beim Tippen.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Betrag-Eingabe</h3>
+          <div class="screens">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-amount-typed.png" alt="Amount typed" />
+              </div>
+              <div class="cap">
+                <p class="title">Gültiger Betrag</p>
+                <p class="desc">
+                  Numerische Eingabe in sats. Live-Feedback unter dem Feld zeigt den BTC- und
+                  USD-Gegenwert. „Continue" wird Bitcoin-Orange.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-amount-invalid-text.png" alt="Invalid text" />
+              </div>
+              <div class="cap">
+                <p class="title">Ungültiger Text</p>
+                <p class="desc">
+                  Buchstaben oder Sonderzeichen → sofortiges Feedback, „Continue" bleibt disabled.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-amount-insufficient.png" alt="Insufficient" />
+              </div>
+              <div class="cap">
+                <p class="title">Mehr als verfügbar</p>
+                <p class="desc">
+                  Wenn der Betrag deine Balance übersteigt, erscheint „Exceeds available balance".
+                  Der Submit bleibt blockiert.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-amount-set-max-clicked.png" alt="Set MAX" />
+              </div>
+              <div class="cap">
+                <p class="title">Set MAX angeklickt</p>
+                <p class="desc">
+                  „Set MAX" füllt das Feld mit deiner gesamten Balance — abzüglich der minimalen
+                  Server-Fee.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Bestätigungs-Dialog</h3>
+          <p>
+            Bevor der Send tatsächlich ausgelöst wird, muss du die Aktion in einem dedizierten
+            Confirm-Dialog absegnen. Der Dialog zeigt Empfänger, Betrag und Fee nochmal —
+            wichtigster Moment, sich nicht zu vertippen.
+          </p>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-confirm-dialog-desktop.png" alt="Confirm dialog desktop" />
+              </div>
+              <div class="cap">
+                <p class="title">Confirm — Desktop</p>
+                <p class="desc">
+                  Volles Confirm-Layout: Empfänger gehighlightet, Betrag gross, Fee transparent.
+                  Cancel + „Send now".
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-confirm-dialog-mobile.png" alt="Confirm dialog mobile" />
+              </div>
+              <div class="cap">
+                <p class="title">Confirm — Mobile</p>
+                <p class="desc">Bottom-Sheet-Variante, identische Informationen.</p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-confirm-cancel-back.png" alt="Cancel" />
+              </div>
+              <div class="cap">
+                <p class="title">Cancel → zurück zum Formular</p>
+                <p class="desc">
+                  Klick auf „Cancel" schliesst den Dialog ohne Aktion. Die Felder bleiben
+                  vorbefüllt.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/07-send-success.png" alt="Send success" />
+              </div>
+              <div class="cap">
+                <p class="title">Send erfolgreich</p>
+                <p class="desc">
+                  Nach erfolgreichem 2-Phasen-Commit zeigt die App den Proof-Identifier und einen
+                  Link zurück zur Wallet. Die Transaktion erscheint sofort in der lokalen Tx-Liste.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="sep" />
+
+        <!-- 7. RECEIVE -->
+        <section id="receive">
+          <h2>Bitcoin empfangen (Adresse + QR)</h2>
+          <p class="lede">
+            Wenn dir jemand Bitcoin schicken soll, gibst du ihm deine zkCoins-Adresse. Die App zeigt
+            sie als QR-Code und als Text — beides aus deinem Public Key abgeleitet.
+          </p>
+          <div class="tag-row">
+            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
+          </div>
+
+          <p>
+            Die Adresse hat das Format <code>{8-hex-prefix}@zkcoins.app</code> für die
+            UI-Darstellung. Senders sehen ausschließlich das Output, das sie an dich schicken —
+            keine Adresse, kein Betrag, keine Verbindung. Privatsphäre by design.
+          </p>
+
+          <p>
+            Die App rotiert nach jedem Receive automatisch zu einem frischen Public-Key — du musst
+            nichts manuell tun, um Receiver-Adressen pro Sender zu trennen.
+          </p>
+
+          <h3>Receive-Screen</h3>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/08-receive-default-desktop.png" alt="Receive desktop" />
+              </div>
+              <div class="cap">
+                <p class="title">Receive — Desktop</p>
+                <p class="desc">
+                  QR-Code mittig, Adresse darunter monospace, „Copy address"-Button,
+                  Privacy-Hinweis.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/08-receive-default-mobile.png" alt="Receive mobile" />
+              </div>
+              <div class="cap">
+                <p class="title">Receive — Mobile</p>
+                <p class="desc">
+                  Mobile-optimiert: QR groß, Adresse darunter, Copy-Button volle Breite.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/08-receive-after-copy.png" alt="Copied" />
+              </div>
+              <div class="cap">
+                <p class="title">Adresse kopiert</p>
+                <p class="desc">
+                  Nach Klick auf „Copy address" wechselt der Button zu „Copied" mit Checkmark — die
+                  volle Adresse liegt in der Zwischenablage.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/08-receive-back-to-wallet.png" alt="Back to wallet" />
+              </div>
+              <div class="cap">
+                <p class="title">„Back" zurück zur Wallet</p>
+                <p class="desc">
+                  Link oben links bringt dich zurück. Kein Verlust von Eingaben — die Receive-Page
+                  hat keinen Edit-State.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="sep" />
+
+        <!-- 8. SETTINGS / DISCONNECT -->
+        <section id="settings">
+          <h2>Einstellungen &amp; Disconnect</h2>
+          <p class="lede">
+            Wallet-Verwaltung. Hier siehst du Auth-Methode, Netzwerk, App-Version — und kannst die
+            Wallet vom Gerät trennen.
+          </p>
+          <div class="tag-row">
+            <span class="tag mvp">MVP · Disconnect</span
+            ><span class="tag mvp">MVP · Network Badge</span>
+          </div>
+
+          <p>
+            Erreicht über die Bottom-Navigation rechts (Settings-Icon) oder via Direkt-URL
+            <code>/settings</code>. Der Disconnect-Button löscht die verschlüsselte Wallet aus
+            IndexedDB und führt zurück zum Welcome-Screen.
+          </p>
+
+          <h3>Settings-Screen</h3>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/05-wallet-to-settings-nav.png" alt="Settings via nav" />
+              </div>
+              <div class="cap">
+                <p class="title">Settings via Bottom-Nav</p>
+                <p class="desc">
+                  Aus der Wallet auf das Settings-Icon klicken — Cliend-side Navigation, kein
+                  Reload.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/05-settings-desktop.png" alt="Settings desktop" />
+              </div>
+              <div class="cap">
+                <p class="title">Settings — Desktop</p>
+                <p class="desc">
+                  Header mit Network-Badge oben rechts. Sektionen: Account (Adresse + Auth-Methode),
+                  Preferences (planned Toggles disabled), Resources (Links). Disconnect-Button am
+                  Ende.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/05-settings-mobile.png" alt="Settings mobile" />
+              </div>
+              <div class="cap">
+                <p class="title">Settings — Mobile</p>
+                <p class="desc">Identische Information, vertikal gestapelt.</p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/05-settings-disconnect-hover.png" alt="Disconnect hover" />
+              </div>
+              <div class="cap">
+                <p class="title">Disconnect-Button (Hover)</p>
+                <p class="desc">
+                  Der Disconnect-Button hebt sich rot ab beim Hover — visueller Hinweis auf die
+                  Destruktivität der Aktion.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Disconnect-Bestätigung</h3>
+          <p>
+            Disconnect ist <strong>irreversibel</strong> auf diesem Gerät. Ohne Seed-Phrase kannst
+            du nichts wiederherstellen. Deshalb fragt die App noch einmal explizit nach.
+          </p>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/05-disconnect-confirm-dialog.png" alt="Confirm dialog" />
+              </div>
+              <div class="cap">
+                <p class="title">Confirm-Dialog (window.confirm)</p>
+                <p class="desc">
+                  Browser-natives „Disconnect this wallet? Make sure you have your seed phrase
+                  saved." mit OK/Cancel.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/05-disconnect-cancel-noop.png" alt="Cancel noop" />
+              </div>
+              <div class="cap">
+                <p class="title">Cancel — nichts passiert</p>
+                <p class="desc">
+                  Du landest unverändert auf der Settings-Seite. Wallet bleibt aktiv.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/05-post-disconnect-welcome.png" alt="Post disconnect" />
+              </div>
+              <div class="cap">
+                <p class="title">Nach „OK" — zurück zum Welcome</p>
+                <p class="desc">
+                  Die App löscht IndexedDB, resettet die Zustand-Stores und navigiert zur
+                  Welcome-Page. Ein neuer Onboarding-Pfad startet.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="sep" />
+
+        <!-- 9. NAV / NETWORK -->
+        <section id="shell">
+          <h2>Navigation &amp; Netzwerk-Status</h2>
+          <p class="lede">
+            Die globale App-Shell — Bottom-Nav für die drei Hauptbereiche, Footer-Links zu
+            zusätzlichen Ressourcen, Network-Badge mit Live-Status.
+          </p>
+          <div class="tag-row"><span class="tag mvp">MVP · Network Badge</span></div>
+
+          <h3>Bottom-Navigation</h3>
+          <p>
+            Die Bottom-Nav ist auf allen Hauptseiten sichtbar (außer Onboarding und Sub-Pages wie
+            /send /receive). Der aktive Tab ist Bitcoin-Orange hervorgehoben.
+          </p>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img
+                  src="screenshots/09-shell-bottomnav-wallet-active.png"
+                  alt="Bottom nav wallet"
+                />
+              </div>
+              <div class="cap">
+                <p class="title">Wallet-Tab aktiv</p>
+                <p class="desc">
+                  Standardansicht: Wallet ist der Default-Tab. Apps-Tab und Settings-Tab sichtbar
+                  (Apps gated via DEV-Flag).
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img
+                  src="screenshots/09-shell-bottomnav-settings-active.png"
+                  alt="Bottom nav settings"
+                />
+              </div>
+              <div class="cap">
+                <p class="title">Settings-Tab aktiv</p>
+                <p class="desc">
+                  Beim Wechsel hebt sich der Settings-Tab ab. Client-side Routing — kein Vollreload.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Footer-Links</h3>
+          <p>
+            Zwei Layouts: eine kompakte Row-Variante unter der Wallet und ein Grid-Variant in den
+            Settings § Resources.
+          </p>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/09-shell-footerlinks-row.png" alt="Footer row" />
+              </div>
+              <div class="cap">
+                <p class="title">Footer — Row</p>
+                <p class="desc">
+                  Eine Reihe von Links: Docs, Network, Status, Privacy, X. Unter Wallet/Send/Receive
+                  sichtbar.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/09-shell-footerlinks-grid.png" alt="Footer grid" />
+              </div>
+              <div class="cap">
+                <p class="title">Footer — Grid (in Settings)</p>
+                <p class="desc">
+                  In den Settings als „Resources"-Sektion. Volle Breite, Grid-Layout für bessere
+                  Lesbarkeit.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <h3>Netzwerk-Badge</h3>
+          <p>
+            Das kleine Badge oben rechts in den Settings zeigt auf einen Blick, mit welchem Netz die
+            App verbunden ist — Mainnet, Signet, Regtest, oder Loading.
+          </p>
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/09-network-badge-signet.png" alt="Signet badge" />
+              </div>
+              <div class="cap">
+                <p class="title">Verbunden mit Signet (DEV)</p>
+                <p class="desc">
+                  DEV-Bundle: das Badge zeigt „signet" — der DEV-Server läuft gegen Bitcoin Signet.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/09-network-badge-loading.png" alt="Loading badge" />
+              </div>
+              <div class="cap">
+                <p class="title">Loading-State</p>
+                <p class="desc">
+                  Solange <code>/api/info</code> noch keine Antwort gegeben hat, zeigt das Badge
+                  einen neutralen Lade-State (kein farbiger Dot).
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="sep" />
+
+        <!-- 10. PWA -->
+        <section id="pwa">
+          <h2>Als App installieren (PWA)</h2>
+          <p class="lede">
+            zkCoins läuft im Browser, kann aber als Progressive Web App installiert werden — eigenes
+            Icon, eigenes Fenster, schnellerer Start, Offline-Caching.
+          </p>
+          <div class="tag-row">
+            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
+          </div>
+
+          <p>
+            Je nach Browser/OS unterstützt die App drei Modi, die das <code>PwaPrompt</code>-Banner
+            automatisch erkennt:
+          </p>
+          <ul>
+            <li>
+              <strong>Native (Chrome, Edge, Android)</strong> — die App fängt das
+              <code>beforeinstallprompt</code>-Event ab und zeigt einen eigenen „Install"-Button.
+              Klick öffnet den nativen Install-Dialog des Browsers.
+            </li>
+            <li>
+              <strong>iOS Safari</strong> — kein deferred-Prompt-Event verfügbar. Statt eines
+              Buttons zeigt die App eine Schritt-für-Schritt-Anleitung mit dem Safari-Share-Icon.
+            </li>
+            <li>
+              <strong>Desktop ohne BIP-Event</strong> — Firefox, alte Chromium-Versionen etc.:
+              manuelles Fallback mit Hinweis auf das Install-Icon in der Adress-Leiste.
+            </li>
+          </ul>
+
+          <div class="screens cols-2">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/10-pwa-native-mode.png" alt="Native mode" />
+              </div>
+              <div class="cap">
+                <p class="title">Native — „Install"-Button sichtbar</p>
+                <p class="desc">
+                  Chrome/Edge/Android: Das Banner zeigt einen Bitcoin-Orange „Install"-Button. Klick
+                  → nativer Dialog des Browsers.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/10-pwa-native-installing.png" alt="Native installing" />
+              </div>
+              <div class="cap">
+                <p class="title">Native — „Installing…"</p>
+                <p class="desc">
+                  Während der Browser den Install-Dialog zeigt, wechselt der Button zu „Installing…"
+                  und wird disabled.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img"><img src="screenshots/10-pwa-ios-mode.png" alt="iOS mode" /></div>
+              <div class="cap">
+                <p class="title">iOS Safari — Share-Icon-Anleitung</p>
+                <p class="desc">
+                  „Tap the [Share] icon in Safari's toolbar, then 'Add to Home Screen'." — visueller
+                  Hinweis aufs Share-Icon inline.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/10-pwa-manual-mode.png" alt="Manual mode" />
+              </div>
+              <div class="cap">
+                <p class="title">Manueller Fallback</p>
+                <p class="desc">
+                  „Click the install icon in your browser's address bar — keys stay on this device."
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div class="callout info">
+            <p>
+              <b>Schlüssel bleiben lokal:</b> PWA-Installation ändert nichts an der
+              Sicherheits-Architektur. Die Wallet liegt weiterhin AES-256-GCM-verschlüsselt in
+              IndexedDB der gleichen Origin — egal ob du die App im Browser-Tab oder als
+              installierte PWA öffnest.
+            </p>
+          </div>
+        </section>
+
+        <hr class="sep" />
+
+        <!-- 11. ROUTE GUARDS -->
+        <section id="guards">
+          <h2>Sicherheits-Routing — was passiert ohne Wallet?</h2>
+          <p class="lede">
+            Wenn du eine geschützte Route direkt aufrufst (<code>/send</code>,
+            <code>/receive</code>, <code>/settings</code>) ohne aktive Wallet im Store, sichert die
+            App die Route ab und leitet dich kontrolliert weg.
+          </p>
+          <div class="tag-row"><span class="tag">Routing-Integrität</span></div>
+
+          <p>
+            Die Guards funktionieren clientseitig: 100 ms nach Mount prüft jede der drei Routen
+            <code>useWalletStore.getState().account</code>; wenn leer, dann
+            <code>router.replace('/')</code>. In der kurzen Übergangsphase zeigt die App einen
+            Redirect-Placeholder, statt einen Flash leerer Komponenten.
+          </p>
+
+          <div class="screens">
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/11-send-no-account-redirect.png" alt="Send redirect" />
+              </div>
+              <div class="cap">
+                <p class="title">/send — kein Account</p>
+                <p class="desc">
+                  Wallet-Icon + „Redirecting to wallet…" als Placeholder. Nach 100 ms: client-side
+                  Redirect zu /.
+                </p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img src="screenshots/11-receive-no-account-redirect.png" alt="Receive redirect" />
+              </div>
+              <div class="cap">
+                <p class="title">/receive — kein Account</p>
+                <p class="desc">Identische Placeholder-Variante. Auch hier 100-ms-Redirect.</p>
+              </div>
+            </div>
+            <div class="screen">
+              <div class="img">
+                <img
+                  src="screenshots/11-settings-no-account-redirect.png"
+                  alt="Settings redirect"
+                />
+              </div>
+              <div class="cap">
+                <p class="title">/settings — kein Account</p>
+                <p class="desc">
+                  Settings hat keine Redirect-Placeholder — die Conditional-Sektionen verschwinden
+                  einfach. Nach 100 ms erfolgt der Redirect zur Welcome-Page.
+                </p>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <hr class="sep" />
+
+        <!-- 12. COVERAGE -->
+        <section id="coverage">
+          <h2>Test-Abdeckung &amp; Qualität</h2>
+          <p class="lede">
+            Jeder Screenshot in diesem Guide ist gleichzeitig eine Visual-Regression-Baseline. Wenn
+            dieser Guide aktuell ist, dann ist die App auch in CI grün.
+          </p>
+
+          <table>
+            <thead>
+              <tr>
+                <th>MVP-Funktion</th>
+                <th>E2E-Spec</th>
+                <th>Tests</th>
+                <th>Baselines</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>Wallet erstellen — Seed</td>
+                <td><code>02-create-seed</code></td>
+                <td>10</td>
+                <td><span class="ok">9</span></td>
+              </tr>
+              <tr>
+                <td>Wallet wiederherstellen — Seed</td>
+                <td><code>03-restore-seed</code></td>
+                <td>10</td>
+                <td><span class="ok">9</span></td>
+              </tr>
+              <tr>
+                <td>Wallet entsperren — Passwort</td>
+                <td><code>04-unlock-password</code></td>
+                <td>5</td>
+                <td><span class="ok">5</span></td>
+              </tr>
+              <tr>
+                <td>Disconnect Wallet</td>
+                <td><code>05-disconnect</code></td>
+                <td>7</td>
+                <td><span class="ok">7</span></td>
+              </tr>
+              <tr>
+                <td>Balance ansehen</td>
+                <td><code>06-balance</code></td>
+                <td>6</td>
+                <td><span class="ok">6</span></td>
+              </tr>
+              <tr>
+                <td>Tx-History anzeigen</td>
+                <td><code>07-send</code> (Post-Send-Rows)</td>
+                <td>—</td>
+                <td><span class="ok">in 12</span></td>
+              </tr>
+              <tr>
+                <td>Bitcoin senden (2-phase)</td>
+                <td><code>07-send</code></td>
+                <td>13</td>
+                <td><span class="ok">12</span></td>
+              </tr>
+              <tr>
+                <td>Bitcoin empfangen (Adresse + QR)</td>
+                <td><code>08-receive</code></td>
+                <td>4</td>
+                <td><span class="ok">4</span></td>
+              </tr>
+              <tr>
+                <td>Network-Info-Badge</td>
+                <td><code>09-network-and-shell</code></td>
+                <td>6</td>
+                <td><span class="ok">6</span></td>
+              </tr>
+              <tr>
+                <td>Install als PWA</td>
+                <td><code>10-pwa</code></td>
+                <td>4</td>
+                <td><span class="ok">4</span></td>
+              </tr>
+              <tr>
+                <td colspan="2"><strong>Σ MVP</strong></td>
+                <td><strong>65</strong></td>
+                <td><strong class="ok">62</strong></td>
+              </tr>
+              <tr>
+                <td>+ Welcome / Onboarding</td>
+                <td><code>01-onboarding-welcome</code></td>
+                <td>5</td>
+                <td><span class="ok">5</span></td>
+              </tr>
+              <tr>
+                <td>+ Route-Guards</td>
+                <td><code>11-cross-spec-redirects</code></td>
+                <td>3</td>
+                <td><span class="ok">3</span></td>
+              </tr>
+              <tr>
+                <td colspan="2"><strong>Σ gesamt</strong></td>
+                <td><strong>73</strong></td>
+                <td><strong class="ok">70</strong></td>
+              </tr>
+            </tbody>
+          </table>
+
+          <h3>Unit-Coverage</h3>
+          <p>
+            Auf der MVP-Surface (<code>src/lib/**</code> + <code>src/stores/**</code>):
+            <strong>100 %</strong> Lines, Statements, Branches, Functions. CI failt bei jedem Drop.
+          </p>
+
+          <h3>Integration in CI</h3>
+          <p>Vier required Branch-Protection-Checks auf <code>develop</code>:</p>
+          <ul>
+            <li><code>Lint &amp; Build</code></li>
+            <li><code>Unit Tests</code></li>
+            <li><code>Rust Crypto Tests</code></li>
+            <li><code>E2E Tests</code> — 73 Tests inkl. 70 Visual-Baseline-Vergleiche</li>
+          </ul>
+          <p>
+            Keine PR mergt rot. Wenn das UI sich ändert, wird die Baseline über den dedizierten
+            <em>Regenerate Visual Baselines</em>-Workflow neu generiert.
+          </p>
+
+          <div class="callout">
+            <p>
+              <b>Stand:</b> 2026-05-16. Vollständiger Plan und Implementierungs-Details in
+              <code>e2e/README.md</code>. Live unter
+              <a href="https://zkcoins.app" style="color: var(--bitcoin)">zkcoins.app</a>.
+            </p>
+          </div>
+        </section>
+      </main>
+    </div>
+  </body>
+</html>
