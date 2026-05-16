@@ -69,15 +69,13 @@ test.describe('Network badge + AppShell', () => {
     await snap(page, '09-network-badge-signet');
   });
 
-  test('network-badge-loading', async ({ page }) => {
-    // KNOWN LIMITATION: this test currently captures the steady-state
-    // badge, not the loading state — `aliceLogin` already populates
-    // `networkName` in the store via WalletScreen's useEffect, so the
-    // route intercept below catches no traffic and the badge renders
-    // immediately on Settings. The proper fix needs `window.__use
-    // NetworkStore.setState({ networkName: '' })` AFTER the dev bundle
-    // ships the store expose (`src/stores/network.ts`). Once that
-    // build lands on dev.zkcoins.app, swap the body to:
+  test.fixme('network-badge-loading', async ({ page }) => {
+    // Marked fixme — the previous body captured the steady-state badge,
+    // not the loading state, because `aliceLogin`'s WalletScreen
+    // useEffect already populated `networkName` in the store before
+    // the route intercept could fire. The proper body needs to clear
+    // the store via `window.__useNetworkStore.setState({ networkName:
+    // '' })` after the route intercept is set:
     //
     //   await page.route('**/api/info', async (route) => {
     //     await new Promise((r) => setTimeout(r, 8_000));
@@ -86,10 +84,16 @@ test.describe('Network badge + AppShell', () => {
     //   await page.evaluate(() => {
     //     (window as any).__useNetworkStore?.setState?.({ networkName: '' });
     //   });
-    //   ... + expect(badge).toHaveCount(0) before snap
+    //   await page.getByTestId('nav-settings').click();
+    //   await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
+    //   await expect(page.getByTestId('settings-network-badge')).toHaveCount(0);
+    //   await snap(page, '09-network-badge-loading');
     //
-    // Tracked as a follow-up; for now the test stays in place to keep
-    // the baseline slot reserved and to flag if the badge testid moves.
+    // The `window.__useNetworkStore` expose ships in this PR
+    // (`src/stores/network.ts`) but only takes effect on
+    // `dev.zkcoins.app` once this PR has merged to `develop` and the
+    // `Deploy DEV` workflow has run. Re-enable the test (drop the
+    // `.fixme`) in the follow-up PR after that deploy lands.
     await page.route('**/api/info', async (route) => {
       await new Promise((r) => setTimeout(r, 8_000));
       await route.continue();
