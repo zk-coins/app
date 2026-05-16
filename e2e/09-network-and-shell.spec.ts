@@ -18,16 +18,18 @@ import { snap, setViewport } from './_helpers/screenshot';
 
 test.describe('Network badge + AppShell', () => {
   test.beforeEach(async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await aliceLogin(page);
   });
 
   test('shell-bottomnav-wallet-active', async ({ page }) => {
-    // Default — Alice landed on /, Wallet tab is active. Use the
-    // BottomNav as the clip target so the surrounding (masked) balance
-    // area doesn't dominate the baseline.
+    // Default — Alice landed on /, Wallet tab is active. Wait for the
+    // balance-poll tick so this captures the funded wallet view rather
+    // than the pre-tick empty-banner state (which is visually identical
+    // to Bob's empty wallet).
     await expect(page.getByTestId('nav-wallet')).toBeVisible();
-    await snap(page, '09-shell-bottomnav-wallet-active');
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await snap(page, '09-shell-bottomnav-wallet-active', { fullPage: true });
   });
 
   test('shell-bottomnav-settings-active', async ({ page }) => {
@@ -37,14 +39,16 @@ test.describe('Network badge + AppShell', () => {
     // populated by WalletScreen's `useEffect(api.info, …)`. Without
     // this wait, the snapshot races the badge render.
     await expect(page.getByTestId('settings-network-badge')).toBeVisible({ timeout: 10_000 });
-    await snap(page, '09-shell-bottomnav-settings-active');
+    await snap(page, '09-shell-bottomnav-settings-active', { fullPage: true });
   });
 
   test('shell-footerlinks-row', async ({ page }) => {
     // The FooterLinks row variant lives under AppShell on every page.
-    // Capture from the wallet (Alice is already there).
+    // Capture from the wallet (Alice is already there). fullPage so the
+    // row at the bottom of the page is actually in the screenshot.
     await expect(page.getByTestId('footer-links-row')).toBeVisible();
-    await snap(page, '09-shell-footerlinks-row');
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await snap(page, '09-shell-footerlinks-row', { fullPage: true });
   });
 
   test('shell-footerlinks-grid', async ({ page }) => {
@@ -65,9 +69,31 @@ test.describe('Network badge + AppShell', () => {
     await snap(page, '09-network-badge-signet');
   });
 
-  test('network-badge-loading', async ({ page }) => {
-    // Intercept /api/info with a long delay so the badge has time to
-    // render its loading state on the Settings header.
+  test.fixme('network-badge-loading', async ({ page }) => {
+    // Marked fixme — the previous body captured the steady-state badge,
+    // not the loading state, because `aliceLogin`'s WalletScreen
+    // useEffect already populated `networkName` in the store before
+    // the route intercept could fire. The proper body needs to clear
+    // the store via `window.__useNetworkStore.setState({ networkName:
+    // '' })` after the route intercept is set:
+    //
+    //   await page.route('**/api/info', async (route) => {
+    //     await new Promise((r) => setTimeout(r, 8_000));
+    //     await route.continue();
+    //   });
+    //   await page.evaluate(() => {
+    //     (window as any).__useNetworkStore?.setState?.({ networkName: '' });
+    //   });
+    //   await page.getByTestId('nav-settings').click();
+    //   await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
+    //   await expect(page.getByTestId('settings-network-badge')).toHaveCount(0);
+    //   await snap(page, '09-network-badge-loading');
+    //
+    // The `window.__useNetworkStore` expose ships in this PR
+    // (`src/stores/network.ts`) but only takes effect on
+    // `dev.zkcoins.app` once this PR has merged to `develop` and the
+    // `Deploy DEV` workflow has run. Re-enable the test (drop the
+    // `.fixme`) in the follow-up PR after that deploy lands.
     await page.route('**/api/info', async (route) => {
       await new Promise((r) => setTimeout(r, 8_000));
       await route.continue();

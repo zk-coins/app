@@ -39,7 +39,7 @@ async function enterSeedFlow(page: Page): Promise<void> {
 
 test.describe('Create wallet — seed phrase', () => {
   test.beforeEach(async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await clearWalletState(page);
   });
 
@@ -153,7 +153,12 @@ test.describe('Create wallet — seed phrase', () => {
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 30_000,
     });
-    await snap(page, '02-wallet-after-create');
+    // Empty banner is the *correct* end state — this is a brand-new
+    // wallet, no faucet, balance is genuinely zero. The baseline ends
+    // up visually identical to `06-balance-zero-empty-banner` and
+    // that is fine: both tests assert the empty-wallet rendering, just
+    // from different code paths.
+    await snap(page, '02-wallet-after-create', { fullPage: true });
   });
 
   test('back-from-reveal (no shot)', async ({ page }) => {

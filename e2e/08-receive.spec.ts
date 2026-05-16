@@ -39,7 +39,7 @@ test.describe('Receive Bitcoin', () => {
   });
 
   test('receive-after-copy', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await goToReceive(page);
     await page.getByTestId('receive-copy-btn').click();
@@ -50,13 +50,16 @@ test.describe('Receive Bitcoin', () => {
   });
 
   test('receive-back-to-wallet', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await goToReceive(page);
     await page.getByTestId('receive-back-link').click();
     // The chip is the most reliable marker for WalletScreen.
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 10_000,
     });
-    await snap(page, '08-receive-back-to-wallet');
+    // Wait for the balance tick to land so this captures the post-receive
+    // funded view (not the pre-tick empty banner).
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await snap(page, '08-receive-back-to-wallet', { fullPage: true });
   });
 });
