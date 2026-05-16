@@ -21,6 +21,21 @@
           window.location.replace(supported[lang]);
         }
       })();
+      // Auto-open the <details> for the hash anchor (e.g. /handbook#spec-04).
+      function openHashTarget() {
+        var hash = location.hash;
+        if (!hash) return;
+        var el = document.querySelector(hash);
+        if (el && el.tagName === 'DETAILS') {
+          el.open = true;
+          // Re-scroll after open so the heading lands in view.
+          requestAnimationFrame(function () {
+            el.scrollIntoView({ behavior: 'instant', block: 'start' });
+          });
+        }
+      }
+      window.addEventListener('hashchange', openHashTarget);
+      document.addEventListener('DOMContentLoaded', openHashTarget);
     </script>
     <style>
       :root {
@@ -272,20 +287,47 @@
       }
 
       /* Spec section header */
+      details.spec {
+        margin: 56px 0 0;
+        scroll-margin-top: 20px;
+      }
+      details.spec summary {
+        list-style: none;
+        cursor: pointer;
+        user-select: none;
+      }
+      details.spec summary::-webkit-details-marker {
+        display: none;
+      }
       .spec-head {
         display: flex;
         align-items: flex-end;
         justify-content: space-between;
         gap: 24px;
-        margin: 64px 0 6px;
         padding-bottom: 14px;
         border-bottom: 2px solid var(--bitcoin);
-        scroll-margin-top: 20px;
+        transition: border-color 0.15s;
+      }
+      details.spec summary:hover .spec-head {
+        border-bottom-color: var(--bitcoin-hover);
       }
       .spec-head .lhs h2 {
         display: flex;
         align-items: baseline;
         gap: 14px;
+      }
+      .spec-head .lhs h2::before {
+        content: '▶';
+        display: inline-block;
+        margin-right: 6px;
+        font-size: 12px;
+        color: var(--ink-3);
+        transition: transform 0.15s ease-out;
+        transform: translateY(-3px);
+      }
+      details.spec[open] .spec-head .lhs h2::before {
+        transform: translateY(-3px) rotate(90deg);
+        color: var(--bitcoin);
       }
       .spec-head .num {
         color: var(--bitcoin);
@@ -495,8 +537,11 @@
       }
 
       /* Spec section spacer */
-      section.spec {
-        margin-bottom: 72px;
+      details.spec {
+        margin-bottom: 16px;
+      }
+      details.spec[open] {
+        margin-bottom: 48px;
       }
     </style>
   </head>
@@ -615,26 +660,28 @@
         <hr class="sep" />
 
         <!-- SPEC 01 -->
-        <section id="spec-01" class="spec">
-          <div class="spec-head">
-            <div class="lhs">
-              <h2><span class="num">01</span>Welcome &amp; Onboarding</h2>
-              <div class="file">e2e/01-onboarding-welcome.spec.ts</div>
-            </div>
-            <div class="rhs">
-              <b>5 tests · 5 baselines</b>
-              <div class="links">
-                <a
-                  href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts"
-                  >Spec ↗</a
-                >
-                <a
-                  href="https://github.com/zk-coins/app/tree/develop/e2e/01-onboarding-welcome.spec.ts-snapshots"
-                  >Baselines ↗</a
-                >
+        <details id="spec-01" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">01</span>Welcome &amp; Onboarding</h2>
+                <div class="file">e2e/01-onboarding-welcome.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>5 tests · 5 baselines</b>
+                <div class="links">
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/01-onboarding-welcome.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
+          </summary>
           <p class="spec-intro">
             The very first screen a new user sees. Two paths lead off it —
             <em>CREATE WALLET</em> (generate a fresh seed phrase) and
@@ -736,28 +783,30 @@
               </div>
             </div>
           </div>
-        </section>
+        </details>
 
         <!-- SPEC 02 -->
-        <section id="spec-02" class="spec">
-          <div class="spec-head">
-            <div class="lhs">
-              <h2><span class="num">02</span>Create wallet — Seed phrase</h2>
-              <div class="file">e2e/02-create-seed.spec.ts</div>
-            </div>
-            <div class="rhs">
-              <b>10 tests · 9 baselines</b>
-              <div class="links">
-                <a href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts"
-                  >Spec ↗</a
-                >
-                <a
-                  href="https://github.com/zk-coins/app/tree/develop/e2e/02-create-seed.spec.ts-snapshots"
-                  >Baselines ↗</a
-                >
+        <details id="spec-02" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">02</span>Create wallet — Seed phrase</h2>
+                <div class="file">e2e/02-create-seed.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>10 tests · 9 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/02-create-seed.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
+          </summary>
           <p class="spec-intro">
             The primary onboarding path. From WASM-generated 12-word mnemonic through the reveal
             stage (hidden → shown → acknowledged) to local AES-256-GCM encryption with a user-chosen
@@ -944,28 +993,30 @@
               <div class="desc">No-shot: state validation only, no new screen variant.</div>
             </div>
           </div>
-        </section>
+        </details>
 
         <!-- SPEC 03 -->
-        <section id="spec-03" class="spec">
-          <div class="spec-head">
-            <div class="lhs">
-              <h2><span class="num">03</span>Restore wallet — Seed phrase</h2>
-              <div class="file">e2e/03-restore-seed.spec.ts</div>
-            </div>
-            <div class="rhs">
-              <b>10 tests · 9 baselines</b>
-              <div class="links">
-                <a href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts"
-                  >Spec ↗</a
-                >
-                <a
-                  href="https://github.com/zk-coins/app/tree/develop/e2e/03-restore-seed.spec.ts-snapshots"
-                  >Baselines ↗</a
-                >
+        <details id="spec-03" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">03</span>Restore wallet — Seed phrase</h2>
+                <div class="file">e2e/03-restore-seed.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>10 tests · 9 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/03-restore-seed.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
+          </summary>
           <p class="spec-intro">
             The second onboarding path — importing an existing 12-word mnemonic. Live validation
             checks word count, BIP-39 wordlist membership and checksum before "Continue" is enabled.
@@ -1161,29 +1212,31 @@
               <div class="desc">No-shot: state test, no new variant.</div>
             </div>
           </div>
-        </section>
+        </details>
 
         <!-- SPEC 04 -->
-        <section id="spec-04" class="spec">
-          <div class="spec-head">
-            <div class="lhs">
-              <h2><span class="num">04</span>Unlock wallet — Password</h2>
-              <div class="file">e2e/04-unlock-password.spec.ts</div>
-            </div>
-            <div class="rhs">
-              <b>5 tests · 5 baselines</b>
-              <div class="links">
-                <a
-                  href="https://github.com/zk-coins/app/blob/develop/e2e/04-unlock-password.spec.ts"
-                  >Spec ↗</a
-                >
-                <a
-                  href="https://github.com/zk-coins/app/tree/develop/e2e/04-unlock-password.spec.ts-snapshots"
-                  >Baselines ↗</a
-                >
+        <details id="spec-04" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">04</span>Unlock wallet — Password</h2>
+                <div class="file">e2e/04-unlock-password.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>5 tests · 5 baselines</b>
+                <div class="links">
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/04-unlock-password.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/04-unlock-password.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
+          </summary>
           <p class="spec-intro">
             On every app start with an encrypted wallet already on the device, the app shows the
             unlock screen. PBKDF2 derives an AES key from the password; AES-GCM throws an
@@ -1281,28 +1334,30 @@
               <div class="desc">Successfully unlocked — wallet opens with current state.</div>
             </div>
           </div>
-        </section>
+        </details>
 
         <!-- SPEC 05 -->
-        <section id="spec-05" class="spec">
-          <div class="spec-head">
-            <div class="lhs">
-              <h2><span class="num">05</span>Disconnect wallet</h2>
-              <div class="file">e2e/05-disconnect.spec.ts</div>
-            </div>
-            <div class="rhs">
-              <b>7 tests · 7 baselines</b>
-              <div class="links">
-                <a href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts"
-                  >Spec ↗</a
-                >
-                <a
-                  href="https://github.com/zk-coins/app/tree/develop/e2e/05-disconnect.spec.ts-snapshots"
-                  >Baselines ↗</a
-                >
+        <details id="spec-05" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">05</span>Disconnect wallet</h2>
+                <div class="file">e2e/05-disconnect.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>7 tests · 7 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/05-disconnect.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
+          </summary>
           <p class="spec-intro">
             Disconnect the wallet from this device. <strong>Irreversible</strong> without the seed
             phrase. A browser-native <code>window.confirm</code> dialog serves as a last-chance
@@ -1439,28 +1494,30 @@
               </div>
             </div>
           </div>
-        </section>
+        </details>
 
         <!-- SPEC 06 -->
-        <section id="spec-06" class="spec">
-          <div class="spec-head">
-            <div class="lhs">
-              <h2><span class="num">06</span>Balance &amp; wallet home</h2>
-              <div class="file">e2e/06-balance.spec.ts</div>
-            </div>
-            <div class="rhs">
-              <b>6 tests · 6 baselines</b>
-              <div class="links">
-                <a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts"
-                  >Spec ↗</a
-                >
-                <a
-                  href="https://github.com/zk-coins/app/tree/develop/e2e/06-balance.spec.ts-snapshots"
-                  >Baselines ↗</a
-                >
+        <details id="spec-06" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">06</span>Balance &amp; wallet home</h2>
+                <div class="file">e2e/06-balance.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>6 tests · 6 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/06-balance.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
+          </summary>
           <p class="spec-intro">
             The wallet home screen after login. Balance polled every 5 s from
             <code>GET /api/balance</code>. The eye toggle hides the amount for screen-sharing. On an
@@ -1579,27 +1636,30 @@
               </div>
             </div>
           </div>
-        </section>
+        </details>
 
         <!-- SPEC 07 -->
-        <section id="spec-07" class="spec">
-          <div class="spec-head">
-            <div class="lhs">
-              <h2><span class="num">07</span>Send Bitcoin — 2-phase proof</h2>
-              <div class="file">e2e/07-send.spec.ts</div>
-            </div>
-            <div class="rhs">
-              <b>13 tests · 12 baselines</b>
-              <div class="links">
-                <a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts"
-                  >Spec ↗</a
-                >
-                <a href="https://github.com/zk-coins/app/tree/develop/e2e/07-send.spec.ts-snapshots"
-                  >Baselines ↗</a
-                >
+        <details id="spec-07" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">07</span>Send Bitcoin — 2-phase proof</h2>
+                <div class="file">e2e/07-send.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>13 tests · 12 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/07-send.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
+          </summary>
           <p class="spec-intro">
             The most central and complex spec. Real Alice → Bob transaction:
             <code>signSendRequest</code> produces a Schnorr signature →
@@ -1822,28 +1882,30 @@
               <div class="desc">No-shot: in-flight recovery logic, no new screen.</div>
             </div>
           </div>
-        </section>
+        </details>
 
         <!-- SPEC 08 -->
-        <section id="spec-08" class="spec">
-          <div class="spec-head">
-            <div class="lhs">
-              <h2><span class="num">08</span>Receive Bitcoin</h2>
-              <div class="file">e2e/08-receive.spec.ts</div>
-            </div>
-            <div class="rhs">
-              <b>4 tests · 4 baselines</b>
-              <div class="links">
-                <a href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts"
-                  >Spec ↗</a
-                >
-                <a
-                  href="https://github.com/zk-coins/app/tree/develop/e2e/08-receive.spec.ts-snapshots"
-                  >Baselines ↗</a
-                >
+        <details id="spec-08" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">08</span>Receive Bitcoin</h2>
+                <div class="file">e2e/08-receive.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>4 tests · 4 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/08-receive.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
+          </summary>
           <p class="spec-intro">
             The <code>{8hex}@zkcoins.app</code> address as QR + text. Senders see only the output
             they ship to you — no address, no amount, no link. Auto-rotate after each receive is
@@ -1926,29 +1988,31 @@
               </div>
             </div>
           </div>
-        </section>
+        </details>
 
         <!-- SPEC 09 -->
-        <section id="spec-09" class="spec">
-          <div class="spec-head">
-            <div class="lhs">
-              <h2><span class="num">09</span>Network badge &amp; app shell</h2>
-              <div class="file">e2e/09-network-and-shell.spec.ts</div>
-            </div>
-            <div class="rhs">
-              <b>6 tests · 6 baselines</b>
-              <div class="links">
-                <a
-                  href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts"
-                  >Spec ↗</a
-                >
-                <a
-                  href="https://github.com/zk-coins/app/tree/develop/e2e/09-network-and-shell.spec.ts-snapshots"
-                  >Baselines ↗</a
-                >
+        <details id="spec-09" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">09</span>Network badge &amp; app shell</h2>
+                <div class="file">e2e/09-network-and-shell.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>6 tests · 6 baselines</b>
+                <div class="links">
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/09-network-and-shell.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
+          </summary>
           <p class="spec-intro">
             Global app shell: bottom nav for the three main areas, footer links (row + grid),
             network badge with live status from <code>/api/info</code>. The network badge is an MVP
@@ -2068,25 +2132,30 @@
               </div>
             </div>
           </div>
-        </section>
+        </details>
 
         <!-- SPEC 10 -->
-        <section id="spec-10" class="spec">
-          <div class="spec-head">
-            <div class="lhs">
-              <h2><span class="num">10</span>PWA install</h2>
-              <div class="file">e2e/10-pwa.spec.ts</div>
-            </div>
-            <div class="rhs">
-              <b>4 tests · 4 baselines</b>
-              <div class="links">
-                <a href="https://github.com/zk-coins/app/blob/develop/e2e/10-pwa.spec.ts">Spec ↗</a>
-                <a href="https://github.com/zk-coins/app/tree/develop/e2e/10-pwa.spec.ts-snapshots"
-                  >Baselines ↗</a
-                >
+        <details id="spec-10" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">10</span>PWA install</h2>
+                <div class="file">e2e/10-pwa.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>4 tests · 4 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/10-pwa.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/10-pwa.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
+          </summary>
           <p class="spec-intro">
             <code>PwaPrompt</code> covers three detection modes — native (Chrome/Edge/Android), iOS
             Safari (share icon), manual desktop fallback — plus the installing sub-state. Closes the
@@ -2166,29 +2235,31 @@
               </div>
             </div>
           </div>
-        </section>
+        </details>
 
         <!-- SPEC 11 -->
-        <section id="spec-11" class="spec">
-          <div class="spec-head">
-            <div class="lhs">
-              <h2><span class="num">11</span>Route guards</h2>
-              <div class="file">e2e/11-cross-spec-redirects.spec.ts</div>
-            </div>
-            <div class="rhs">
-              <b>3 tests · 3 baselines</b>
-              <div class="links">
-                <a
-                  href="https://github.com/zk-coins/app/blob/develop/e2e/11-cross-spec-redirects.spec.ts"
-                  >Spec ↗</a
-                >
-                <a
-                  href="https://github.com/zk-coins/app/tree/develop/e2e/11-cross-spec-redirects.spec.ts-snapshots"
-                  >Baselines ↗</a
-                >
+        <details id="spec-11" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">11</span>Route guards</h2>
+                <div class="file">e2e/11-cross-spec-redirects.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>3 tests · 3 baselines</b>
+                <div class="links">
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/11-cross-spec-redirects.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/11-cross-spec-redirects.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
               </div>
             </div>
-          </div>
+          </summary>
           <p class="spec-intro">
             When the user navigates to <code>/send</code>, <code>/receive</code> or
             <code>/settings</code> directly without an active wallet, the app checks the store 100
@@ -2257,7 +2328,7 @@
               </div>
             </div>
           </div>
-        </section>
+        </details>
 
         <hr class="sep" />
 
