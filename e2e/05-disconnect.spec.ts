@@ -37,7 +37,7 @@ test.describe('Disconnect wallet', () => {
   });
 
   test('wallet-to-settings-nav', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     // Hover on the Settings tab so the link colour transition lands.
     const settingsTab = page.getByTestId('nav-settings');
     await settingsTab.hover();
@@ -60,7 +60,7 @@ test.describe('Disconnect wallet', () => {
   });
 
   test('settings-disconnect-hover', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await goToSettings(page);
     const disconnect = page.getByTestId('settings-disconnect-btn');
     await expect(disconnect).toBeVisible();
@@ -71,7 +71,7 @@ test.describe('Disconnect wallet', () => {
   });
 
   test('disconnect-confirm-dialog', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await goToSettings(page);
     // The dialog itself is browser chrome (window.confirm) and can't
     // be captured by Playwright's screenshot. This test asserts the
@@ -92,7 +92,7 @@ test.describe('Disconnect wallet', () => {
 
   test('post-disconnect-welcome', async ({ page }) => {
     test.setTimeout(60_000);
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await goToSettings(page);
     page.once('dialog', (dialog) => dialog.accept());
     await page.getByTestId('settings-disconnect-btn').scrollIntoViewIfNeeded();
@@ -102,7 +102,7 @@ test.describe('Disconnect wallet', () => {
   });
 
   test('disconnect-cancel-noop', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await goToSettings(page);
     page.once('dialog', (dialog) => dialog.dismiss());
     await page.getByTestId('settings-disconnect-btn').scrollIntoViewIfNeeded();

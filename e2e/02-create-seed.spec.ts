@@ -37,7 +37,7 @@ async function enterSeedFlow(page: Page): Promise<void> {
 
 test.describe('Create wallet — seed phrase', () => {
   test.beforeEach(async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await clearWalletState(page);
   });
 

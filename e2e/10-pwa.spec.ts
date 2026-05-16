@@ -59,7 +59,7 @@ async function dispatchBeforeInstallPrompt(page: Page, promptDelayMs: number): P
 
 test.describe('PwaPrompt — native mode', () => {
   test.beforeEach(async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await page.addInitScript({ content: CLEAR_DISMISSED_FLAG });
     await aliceLogin(page);
   });
@@ -99,7 +99,7 @@ test.describe('PwaPrompt — iOS Safari', () => {
 
 test.describe('PwaPrompt — manual fallback', () => {
   test.beforeEach(async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await page.addInitScript({ content: CLEAR_DISMISSED_FLAG });
     await aliceLogin(page);
   });

@@ -50,14 +50,14 @@ async function aliceGoToSend(page: Page): Promise<void> {
 
 test.describe('Send Bitcoin', () => {
   test('send-default', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await aliceGoToSend(page);
     await expect(page.getByTestId('send-submit-btn')).toBeDisabled();
     await snap(page, '07-send-default');
   });
 
   test('send-no-funds-banner', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await bobLogin(page);
     await goToSend(page);
     await expect(page.getByTestId('send-no-funds-banner')).toBeVisible({ timeout: 30_000 });
@@ -65,7 +65,7 @@ test.describe('Send Bitcoin', () => {
   });
 
   test('recipient-valid-hex', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
     await page.getByTestId('send-recipient-input').fill(bob.address);
@@ -77,7 +77,7 @@ test.describe('Send Bitcoin', () => {
   });
 
   test('recipient-valid-username', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await aliceGoToSend(page);
     await page.getByTestId('send-recipient-input').fill('bob@zkcoins.app');
     await snap(page, '07-recipient-valid-username', {
@@ -86,7 +86,7 @@ test.describe('Send Bitcoin', () => {
   });
 
   test('amount-typed', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
     await page.getByTestId('send-recipient-input').fill(bob.address);
@@ -98,7 +98,7 @@ test.describe('Send Bitcoin', () => {
   });
 
   test('amount-set-max-clicked', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
     await page.getByTestId('send-recipient-input').fill(bob.address);
@@ -109,7 +109,7 @@ test.describe('Send Bitcoin', () => {
   });
 
   test('amount-invalid-text', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
     await page.getByTestId('send-recipient-input').fill(bob.address);
@@ -124,7 +124,7 @@ test.describe('Send Bitcoin', () => {
   });
 
   test('amount-insufficient', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
     await page.getByTestId('send-recipient-input').fill(bob.address);
@@ -165,7 +165,7 @@ test.describe('Send Bitcoin', () => {
   });
 
   test('confirm-cancel-back', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
     await page.getByTestId('send-recipient-input').fill(bob.address);
@@ -187,7 +187,7 @@ test.describe('Send Bitcoin', () => {
 
   test('send-success', async ({ page }) => {
     test.setTimeout(120_000);
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
     await page.getByTestId('send-recipient-input').fill(bob.address);

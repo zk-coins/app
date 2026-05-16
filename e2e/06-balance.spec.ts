@@ -40,7 +40,7 @@ test.describe('View balance', () => {
   });
 
   test('balance-hidden', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await aliceLogin(page);
     await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
     await page.getByTestId('balance-toggle-btn').click();
@@ -55,7 +55,7 @@ test.describe('View balance', () => {
   });
 
   test('balance-zero-faucet-visible', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await bobLogin(page);
     await expect(page.getByTestId('wallet-empty-banner')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('faucet-btn')).toBeVisible({ timeout: 30_000 });
@@ -63,7 +63,7 @@ test.describe('View balance', () => {
   });
 
   test('balance-faucet-minting', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     // Intercept /api/mint so the round-trip stalls and the "Minting…"
     // disabled-button state has time to render.
     await page.route('**/api/mint', async (route) => {
@@ -80,7 +80,7 @@ test.describe('View balance', () => {
   });
 
   test('balance-copied-feedback', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await aliceLogin(page);
     await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
     // Grant clipboard permission so navigator.clipboard.writeText
