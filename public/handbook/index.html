@@ -553,8 +553,9 @@
 
           <h3>Hover-Zustände der Action-Buttons</h3>
           <p>
-            Beim Überfahren mit der Maus heben sich die beiden Aktionen visuell hervor — der
-            Bitcoin-Orange-Akzent macht klar, welche der beiden gerade aktiv ist.
+            Beim Überfahren mit der Maus reagieren die beiden Aktionen unterschiedlich, weil sie
+            unterschiedliche Visual-Hierarchien haben: der primäre CTA wechselt nur dezent den
+            Farbton, der sekundäre Link bekommt erstmal überhaupt eine Akzentfarbe.
           </p>
           <div class="screens cols-2">
             <div class="screen">
@@ -564,8 +565,9 @@
               <div class="cap">
                 <p class="title">CREATE WALLET (Hover)</p>
                 <p class="desc">
-                  Der primäre CTA bekommt einen Bitcoin-Orange-Outline und füllt sich gleichzeitig
-                  dezent. Der sekundäre Restore-Link tritt visuell zurück.
+                  Der Button wechselt von <code>bg-bitcoin</code> (#f7931a) zu
+                  <code>bg-bitcoin-hover</code> (#ffae40) — ein kaum sichtbarer Hue-Shift zu einem
+                  wärmeren Orange. Der „Restore"-Link bleibt unverändert grau.
                 </p>
               </div>
             </div>
@@ -576,8 +578,9 @@
               <div class="cap">
                 <p class="title">Restore existing wallet (Hover)</p>
                 <p class="desc">
-                  Der sekundäre Link unterstreicht sich beim Hover. Funktional gleichwertig — keine
-                  Eile, eine bewusste Entscheidung zu treffen.
+                  Hier ist die Veränderung deutlich sichtbar: der Link wechselt von
+                  <code>text-ink2</code> (grau) zu <code>text-bitcoin</code> — die graue Schrift
+                  wird hell Bitcoin-Orange. Der CREATE-WALLET-Button bleibt im Default-Zustand.
                 </p>
               </div>
             </div>
