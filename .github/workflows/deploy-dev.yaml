@@ -29,18 +29,17 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Docker image
+        # DEV mirrors PRD — no feature-flag build-args. The
+        # NEXT_PUBLIC_ENABLE_* flags default to false, so DCE strips
+        # every gated path from the bundle here too. Feature flags are
+        # for local developer setups via `.env.local`, not for shared
+        # infra. See issue #30 for the migration rationale.
         uses: docker/build-push-action@v6
         with:
           context: .
           push: true
           tags: ${{ env.DOCKER_TAGS }}
           platforms: linux/arm64
-          build-args: |
-            ENABLE_PASSKEY=true
-            ENABLE_FAUCET=true
-            ENABLE_USERNAMES=true
-            ENABLE_APPS_DIRECTORY=true
-            ENABLE_DEV_ROUTES=true
 
       - name: Install cloudflared
         run: |

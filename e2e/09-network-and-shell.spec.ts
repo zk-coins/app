@@ -5,9 +5,9 @@
  * plus the navigation chrome that wraps every other screen (BottomNav
  * tab states, FooterLinks row + grid variants). 6 tests, 6 baselines.
  *
- * DEV-only widgets visible in these baselines (per § 8.0 (b)):
- *   - Apps tab in BottomNav
- *   - `dev-*` hostnames in the FooterLinks (row + grid)
+ * DEV mirrors PRD (issue #30) — no Apps tab in BottomNav (gated by
+ * FEATURES.APPS_DIRECTORY, off by default), `dev-*` hostnames in the
+ * FooterLinks row come from the runtime URL substitution.
  *
  * Locators: testid-based.
  */
