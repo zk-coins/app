@@ -25,7 +25,11 @@ const FIXTURES_DIR = path.join(__dirname, '.fixtures');
 const FIXTURES_PATH = path.join(FIXTURES_DIR, 'accounts.json');
 
 const FAUCET_CALLS = Number.parseInt(process.env.E2E_FAUCET_CALLS ?? '1', 10);
-const BALANCE_POLL_TIMEOUT_MS = 30_000;
+// Bumped from 30 s to 90 s — the DEV mint flow on Mutinynet sometimes
+// takes longer than 30 s (server-side ZK proof gen + Bitcoin broadcast
+// + scanner re-detects the inscription). On slow days we burn through
+// the budget before the balance actually rises.
+const BALANCE_POLL_TIMEOUT_MS = 90_000;
 const BALANCE_POLL_INTERVAL_MS = 1_500;
 
 async function pollBalance(address: string): Promise<number> {
