@@ -153,11 +153,11 @@ test.describe('Create wallet — seed phrase', () => {
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 30_000,
     });
-    // Wait for Alice's first balance-poll tick to land so the empty banner
-    // is hidden — without this the screenshot captures the pre-poll state
-    // (banner visible) and is visually indistinguishable from Bob's empty
-    // wallet, eroding the test signal.
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    // Empty banner is the *correct* end state — this is a brand-new
+    // wallet, no faucet, balance is genuinely zero. The baseline ends
+    // up visually identical to `06-balance-zero-empty-banner` and
+    // that is fine: both tests assert the empty-wallet rendering, just
+    // from different code paths.
     await snap(page, '02-wallet-after-create', { fullPage: true });
   });
 
