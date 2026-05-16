@@ -157,7 +157,10 @@ test.describe('Restore wallet — seed phrase', () => {
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 30_000,
     });
-    await snap(page, '03-wallet-after-restore');
+    // Wait for Alice's first balance-poll tick — see comment in
+    // 02-create-seed.spec.ts::wallet-after-create.
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await snap(page, '03-wallet-after-restore', { fullPage: true });
   });
 
   test('back-from-input (no shot)', async ({ page }) => {

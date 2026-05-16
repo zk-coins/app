@@ -62,6 +62,11 @@ test.describe('PwaPrompt — native mode', () => {
     await setViewport(page, 'mobile');
     await page.addInitScript({ content: CLEAR_DISMISSED_FLAG });
     await aliceLogin(page);
+    // Wait for Alice's balance-poll tick so the wallet behind the
+    // PwaPrompt card is funded. Without this the PwaPrompt baselines
+    // capture the pre-tick empty-banner state and `pwa-manual-mode`
+    // collapses onto `06-balance-zero-empty-banner`.
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
   });
 
   test('pwa-native-mode', async ({ page }) => {
@@ -89,6 +94,11 @@ test.describe('PwaPrompt — iOS Safari', () => {
     await setViewport(page, 'mobile');
     await page.addInitScript({ content: CLEAR_DISMISSED_FLAG });
     await aliceLogin(page);
+    // Wait for Alice's balance-poll tick so the wallet behind the
+    // PwaPrompt card is funded. Without this the PwaPrompt baselines
+    // capture the pre-tick empty-banner state and `pwa-manual-mode`
+    // collapses onto `06-balance-zero-empty-banner`.
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
   });
 
   test('pwa-ios-mode', async ({ page }) => {
@@ -102,6 +112,11 @@ test.describe('PwaPrompt — manual fallback', () => {
     await setViewport(page, 'mobile');
     await page.addInitScript({ content: CLEAR_DISMISSED_FLAG });
     await aliceLogin(page);
+    // Wait for Alice's balance-poll tick so the wallet behind the
+    // PwaPrompt card is funded. Without this the PwaPrompt baselines
+    // capture the pre-tick empty-banner state and `pwa-manual-mode`
+    // collapses onto `06-balance-zero-empty-banner`.
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
   });
 
   test('pwa-manual-mode', async ({ page }) => {
