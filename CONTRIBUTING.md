@@ -222,7 +222,7 @@ The app runs as a standalone Next.js container:
 docker build -t zkcoin/app .
 docker run -p 3090:3090 \
   -e NEXT_PUBLIC_API_URL=https://api.zkcoins.app \
-  -e NEXT_PUBLIC_EXPLORER_URL=https://explorer.zkcoins.app \
+  -e NEXT_PUBLIC_EXPLORER_URL=https://zkcoins.space \
   zkcoin/app
 ```
 

@@ -2,20 +2,17 @@
  * Spec 06 — View balance
  *
  * Covers § 8.6 of e2e/README.md. WalletScreen balance area + copy chip
- * + faucet banner under Alice (funded) and Bob (empty). 6 tests, 6
- * linux baselines (one mobile).
+ * + empty-state banner under Alice (funded) and Bob (empty). 4 tests,
+ * 4 linux baselines (one mobile).
  *
- * DEV-only widgets visible in these baselines (per § 8.0 (b)):
- *   - Apps tab in BottomNav (FEATURES.APPS_DIRECTORY)
- *   - Username claim input on the wallet (FEATURES.USERNAMES) — for
- *     Alice + Bob, both unclaimed
- *   - Faucet button on the empty-balance banner (Bob screenshots)
- *   - `dev-*` hostnames in the FooterLinks row
+ * The faucet-button-visible / faucet-minting tests are gone — the
+ * faucet is gated behind `FEATURES.FAUCET`, which is off in both DEV
+ * and PRD bundles (see issue #30). Faucet UI testing belongs to a
+ * local-only setup with `NEXT_PUBLIC_ENABLE_FAUCET=true` in
+ * `.env.local`.
  *
  * Locators: testid-based throughout. The funded-vs-empty signal is
- * `wallet-empty-banner` visibility; faucet minting state is detected
- * via the `data-minting` attribute on the faucet button so the
- * "Minting…" baseline doesn't depend on the literal text.
+ * `wallet-empty-banner` visibility.
  */
 
 import { expect, test } from '@playwright/test';
@@ -44,51 +41,26 @@ test.describe('View balance', () => {
     await aliceLogin(page);
     await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
     await page.getByTestId('balance-toggle-btn').click();
-    // Hidden state shows the "••••" placeholder — the default mask
-    // covers the balance-value testid wrapper, so this baseline
-    // captures the surrounding chrome change (icon, BTC line, layout).
-    // Assert the hidden flag flipped via `data-hidden`, which is the
-    // i18n-stable replacement for the previous `aria-label='Show balance'`
-    // role-based check.
     await expect(page.getByTestId('balance-toggle-btn')).toHaveAttribute('data-hidden', 'true');
     await snap(page, '06-balance-hidden');
   });
 
-  test('balance-zero-faucet-visible', async ({ page }) => {
+  test('balance-zero-empty-banner', async ({ page }) => {
     await setViewport(page, 'desktop');
     await bobLogin(page);
     await expect(page.getByTestId('wallet-empty-banner')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId('faucet-btn')).toBeVisible({ timeout: 30_000 });
-    await snap(page, '06-balance-zero-faucet-visible');
-  });
-
-  test('balance-faucet-minting', async ({ page }) => {
-    await setViewport(page, 'desktop');
-    // Intercept /api/mint so the round-trip stalls and the "Minting…"
-    // disabled-button state has time to render.
-    await page.route('**/api/mint', async (route) => {
-      await new Promise((r) => setTimeout(r, 2_500));
-      await route.continue();
-    });
-    await bobLogin(page);
-    await expect(page.getByTestId('faucet-btn')).toBeVisible({ timeout: 30_000 });
-    await page.getByTestId('faucet-btn').click();
-    await expect(page.getByTestId('faucet-btn')).toHaveAttribute('data-minting', 'true', {
-      timeout: 5_000,
-    });
-    await snap(page, '06-balance-faucet-minting');
+    // FEATURES.FAUCET is off in PRD-equivalent DEV — the faucet button
+    // is removed from the bundle. Verify the no-funds banner shows up,
+    // not the gated button.
+    await expect(page.getByTestId('faucet-btn')).toHaveCount(0);
+    await snap(page, '06-balance-zero-empty-banner');
   });
 
   test('balance-copied-feedback', async ({ page }) => {
     await setViewport(page, 'desktop');
     await aliceLogin(page);
     await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
-    // Grant clipboard permission so navigator.clipboard.writeText
-    // resolves rather than rejecting under Playwright's default deny.
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-    // Click the address chip button. After click: `copied` state turns
-    // the chip's icon into Check + appends a localisable "copied" hint
-    // for 1.5 s.
     await page.getByTestId('address-copy-btn').click();
     await expect(page.getByTestId('address-copied-feedback')).toBeVisible({ timeout: 2_000 });
     await snap(page, '06-balance-copied-feedback');

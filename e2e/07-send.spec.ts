@@ -2,18 +2,15 @@
  * Spec 07 — Send Bitcoin (2-phase)
  *
  * Covers § 8.7 of e2e/README.md. The full Send pipeline plus every
- * error branch. 15 tests, 14 linux baselines, 1 no-shot.
+ * error branch. 14 tests, 13 linux baselines, 1 no-shot.
  *
  * Alice (funded, 100 000 sats) sends 1 000 sats to Bob. The send
  * goes through real `/api/send` + `/api/commit` against DEV.
  *
- * DEV-only widgets visible in these baselines (per § 8.0 (b)):
- *   - Apps tab in BottomNav
- *   - `@user` / `$user` resolver hint placeholder on the recipient
- *     input (FEATURES.USERNAMES)
- *   - "Buy private BTC through DFX" link inside the No-funds banner
- *     (the Bob `send-no-funds-banner` shot)
- *   - `dev-*` hostnames in the FooterLinks row
+ * DEV mirrors PRD (issue #30): no FEATURES.USERNAMES, no
+ * FEATURES.APPS_DIRECTORY → no `@user` placeholder, no DFX link in
+ * the no-funds banner. The `recipient-valid-username` test was removed
+ * with the migration.
  *
  * Locators: testid-based. The two amount-error paths (invalid text,
  * insufficient balance) currently share the `send-error` container,
@@ -72,15 +69,6 @@ test.describe('Send Bitcoin', () => {
     // Amount still empty → button still disabled.
     await expect(page.getByTestId('send-submit-btn')).toBeDisabled();
     await snap(page, '07-recipient-valid-hex', {
-      mask: [page.getByTestId('send-recipient-input')],
-    });
-  });
-
-  test('recipient-valid-username', async ({ page }) => {
-    await setViewport(page, 'desktop');
-    await aliceGoToSend(page);
-    await page.getByTestId('send-recipient-input').fill('bob@zkcoins.app');
-    await snap(page, '07-recipient-valid-username', {
       mask: [page.getByTestId('send-recipient-input')],
     });
   });

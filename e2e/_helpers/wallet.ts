@@ -65,9 +65,16 @@ export async function createSeedWallet(
   await page.goto('/');
 
   await page.getByTestId('onboarding-create-btn').click();
-  // DEV bundle: an extra PasskeyFlow intro screen sits between the
-  // welcome and SeedFlow. Skip it. (See e2e/README.md § 8.0 (a).)
-  await page.getByTestId('passkey-other-options-btn').click();
+  // Skip the PasskeyFlow intro if present. With FEATURES.PASSKEY off
+  // (the default in DEV + PRD per issue #30), the intro doesn't exist
+  // and we land directly on the seed flow. With FEATURES.PASSKEY on
+  // (local-only via .env.local), the intro is there and needs an
+  // explicit click. Tolerate both — the existence of the seed-flow is
+  // the actual success condition asserted right after.
+  const passkeySkip = page.getByTestId('passkey-other-options-btn');
+  if (await passkeySkip.isVisible({ timeout: 1500 }).catch(() => false)) {
+    await passkeySkip.click();
+  }
 
   await expect(page.getByTestId('seed-flow')).toBeVisible({ timeout: 15_000 });
   await page.getByTestId('seed-reveal-btn').click();
