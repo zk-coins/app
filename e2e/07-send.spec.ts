@@ -28,11 +28,34 @@ async function goToSend(page: Page): Promise<void> {
   });
 }
 
+/**
+ * Wait for Alice's `/api/balance` polling tick to land so the in-store
+ * balance reflects her on-chain funds. Without this, the Send-page
+ * `handleConfirm` sees `account.balance === 0` and rejects every amount
+ * with "Insufficient balance" — the confirm dialog never opens.
+ *
+ * Called from WalletScreen state: when balance > 0 the "Wallet is empty"
+ * banner is removed by the polling tick.
+ */
+async function waitForAliceBalanceLoaded(page: Page): Promise<void> {
+  await expect(page.getByText('Wallet is empty')).not.toBeVisible({ timeout: 30_000 });
+}
+
+/**
+ * Common Alice setup for Send tests: log in, wait for balance, navigate
+ * to /send via the in-app link. Every Send test that needs to enter a
+ * valid amount calls this.
+ */
+async function aliceGoToSend(page: Page): Promise<void> {
+  await aliceLogin(page);
+  await waitForAliceBalanceLoaded(page);
+  await goToSend(page);
+}
+
 test.describe('Send Bitcoin', () => {
   test('send-default', async ({ page }) => {
     await setViewport(page, 'desktop');
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await expect(page.getByRole('button', { name: 'Send privately' })).toBeDisabled();
     await snap(page, '07-send-default');
   });
@@ -48,8 +71,7 @@ test.describe('Send Bitcoin', () => {
   test('recipient-valid-hex', async ({ page }) => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill(bob.address);
     // Amount still empty → button still disabled.
     await expect(page.getByRole('button', { name: 'Send privately' })).toBeDisabled();
@@ -60,8 +82,7 @@ test.describe('Send Bitcoin', () => {
 
   test('recipient-valid-username', async ({ page }) => {
     await setViewport(page, 'desktop');
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill('bob@zkcoins.app');
     await snap(page, '07-recipient-valid-username', {
       mask: [page.locator('input[placeholder]').first()],
@@ -71,8 +92,7 @@ test.describe('Send Bitcoin', () => {
   test('amount-typed', async ({ page }) => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill(bob.address);
     await page.locator('input[inputMode="decimal"]').fill('0.00001');
     await expect(page.getByRole('button', { name: 'Send privately' })).toBeEnabled();
@@ -84,8 +104,7 @@ test.describe('Send Bitcoin', () => {
   test('amount-set-max-clicked', async ({ page }) => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill(bob.address);
     await page.getByText('Set max').click();
     await snap(page, '07-amount-set-max-clicked', {
@@ -99,8 +118,7 @@ test.describe('Send Bitcoin', () => {
   test('amount-invalid-text', async ({ page }) => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill(bob.address);
     await page.locator('input[inputMode="decimal"]').fill('abc');
     await page.getByRole('button', { name: 'Send privately' }).click();
@@ -113,8 +131,7 @@ test.describe('Send Bitcoin', () => {
   test('amount-insufficient', async ({ page }) => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill(bob.address);
     await page.locator('input[inputMode="decimal"]').fill('999');
     await page.getByRole('button', { name: 'Send privately' }).click();
@@ -127,8 +144,7 @@ test.describe('Send Bitcoin', () => {
   test('confirm-dialog-desktop', async ({ page }) => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill(bob.address);
     await page.locator('input[inputMode="decimal"]').fill('0.00001');
     await page.getByRole('button', { name: 'Send privately' }).click();
@@ -141,8 +157,7 @@ test.describe('Send Bitcoin', () => {
   test('confirm-dialog-mobile', async ({ page }) => {
     await setViewport(page, 'mobile');
     const { bob } = readAccounts();
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill(bob.address);
     await page.locator('input[inputMode="decimal"]').fill('0.00001');
     await page.getByRole('button', { name: 'Send privately' }).click();
@@ -155,8 +170,7 @@ test.describe('Send Bitcoin', () => {
   test('confirm-cancel-back', async ({ page }) => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill(bob.address);
     await page.locator('input[inputMode="decimal"]').fill('0.00001');
     await page.getByRole('button', { name: 'Send privately' }).click();
@@ -173,8 +187,7 @@ test.describe('Send Bitcoin', () => {
     test.setTimeout(60_000);
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill(bob.address);
     await page.locator('input[inputMode="decimal"]').fill('0.00001');
     await page.getByRole('button', { name: 'Send privately' }).click();
@@ -195,8 +208,7 @@ test.describe('Send Bitcoin', () => {
     test.setTimeout(120_000);
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill(bob.address);
     await page.locator('input[inputMode="decimal"]').fill('0.00001');
     await page.getByRole('button', { name: 'Send privately' }).click();
@@ -210,8 +222,7 @@ test.describe('Send Bitcoin', () => {
   test('send-failure-network', async ({ page }) => {
     await setViewport(page, 'desktop');
     const { bob } = readAccounts();
-    await aliceLogin(page);
-    await goToSend(page);
+    await aliceGoToSend(page);
     await page.locator('input[placeholder]').first().fill(bob.address);
     await page.locator('input[inputMode="decimal"]').fill('0.00001');
     await page.getByRole('button', { name: 'Send privately' }).click();
