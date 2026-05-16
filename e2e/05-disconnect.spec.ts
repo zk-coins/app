@@ -25,10 +25,18 @@ import { snap, setViewport } from './_helpers/screenshot';
  * wallet — /settings then sees `account=null` and redirects to /. The
  * BottomNav Settings link is a Next.js `<Link>` and navigates client-side
  * with the store intact.
+ *
+ * Settings has two `{networkName && …}`-gated regions (the badge in the
+ * header and the "Network" row in the About section). The store value
+ * is populated by WalletScreen's `useEffect(api.info, …)`, which races
+ * the in-app navigation here. Without waiting for the badge to land,
+ * the snapshot can capture the page ~52 px shorter than the linux
+ * baseline (badge + Network row missing) and fail visual regression.
  */
 async function goToSettings(page: Page): Promise<void> {
   await page.getByTestId('nav-settings').click();
   await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
+  await expect(page.getByTestId('settings-network-badge')).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('Disconnect wallet', () => {

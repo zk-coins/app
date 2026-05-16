@@ -113,7 +113,10 @@ export default function SettingsPage() {
           <p className="text-[14px] text-ink2">Wallet, network, and privacy preferences</p>
         </div>
         {networkName && (
-          <span className="mt-2 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line2 bg-line/40 px-2.5 py-1 mono text-[10px] font-semibold tracking-[0.2em] text-ink2 uppercase">
+          <span
+            data-testid="settings-network-badge"
+            className="mt-2 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line2 bg-line/40 px-2.5 py-1 mono text-[10px] font-semibold tracking-[0.2em] text-ink2 uppercase"
+          >
             <span className="h-1.5 w-1.5 rounded-full bg-ink2" />
             {networkName}
           </span>

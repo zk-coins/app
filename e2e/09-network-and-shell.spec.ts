@@ -33,6 +33,10 @@ test.describe('Network badge + AppShell', () => {
   test('shell-bottomnav-settings-active', async ({ page }) => {
     await page.getByTestId('nav-settings').click();
     await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
+    // Settings has a `{networkName && …}`-gated badge whose value is
+    // populated by WalletScreen's `useEffect(api.info, …)`. Without
+    // this wait, the snapshot races the badge render.
+    await expect(page.getByTestId('settings-network-badge')).toBeVisible({ timeout: 10_000 });
     await snap(page, '09-shell-bottomnav-settings-active');
   });
 
@@ -44,18 +48,20 @@ test.describe('Network badge + AppShell', () => {
   });
 
   test('shell-footerlinks-grid', async ({ page }) => {
-    // Grid variant is inside Settings § Resources.
+    // Grid variant is inside Settings § Resources. fullPage snap also
+    // captures the network-badge area at the top, so wait for it.
     await page.getByTestId('nav-settings').click();
     await expect(page.getByTestId('footer-links-grid')).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId('settings-network-badge')).toBeVisible({ timeout: 10_000 });
     await snap(page, '09-shell-footerlinks-grid', { fullPage: true });
   });
 
   test('network-badge-signet', async ({ page }) => {
     // Network badge is rendered on the Settings header — go there.
     await page.getByTestId('nav-settings').click();
-    // The badge text is whatever `network` /api/info returned. We
-    // assert the badge is visible without pinning the exact label.
-    await expect(page.locator('header').last()).toBeVisible({ timeout: 10_000 });
+    // The badge text is whatever `network` /api/info returned. Assert
+    // the badge is visible without pinning the exact label.
+    await expect(page.getByTestId('settings-network-badge')).toBeVisible({ timeout: 10_000 });
     await snap(page, '09-network-badge-signet');
   });
 
