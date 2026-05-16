@@ -153,7 +153,12 @@ test.describe('Create wallet — seed phrase', () => {
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 30_000,
     });
-    await snap(page, '02-wallet-after-create');
+    // Wait for Alice's first balance-poll tick to land so the empty banner
+    // is hidden — without this the screenshot captures the pre-poll state
+    // (banner visible) and is visually indistinguishable from Bob's empty
+    // wallet, eroding the test signal.
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await snap(page, '02-wallet-after-create', { fullPage: true });
   });
 
   test('back-from-reveal (no shot)', async ({ page }) => {

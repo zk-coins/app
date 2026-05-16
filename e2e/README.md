@@ -201,15 +201,18 @@ export function bobLogin(page: Page, password: string): Promise<void>;
 
 ### Default masks (applied by `snap` to every shot)
 
-| Locator                           | What it hides                                  | Source file (PR-2 adds the `data-testid` here)                                                |
-| --------------------------------- | ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `text=/[0-9a-f]{8}@zkcoins\.app/` | Wallet address chip                            | Already a content match — no attribute change needed                                          |
-| `[data-testid="balance-value"]`   | Numeric BTC / USD balance                      | `src/components/screens/WalletScreen.tsx` — wrap the `<h1>` + BTC `<p>`                       |
-| `[data-testid="tx-row-amount"]`   | Transaction row amount                         | `src/components/screens/WalletScreen.tsx::TransactionsList`                                   |
-| `[data-testid="tx-row-time"]`     | Transaction row timestamp                      | same file                                                                                     |
-| `[data-testid="seed-grid"]`       | The 12 mnemonic words                          | `src/components/onboarding/Onboarding.tsx::SeedFlow` — wrap the `grid-cols-3 gap-2 …` `<div>` |
-| `[data-testid="qr-code"]`         | The receive QR (depends on address)            | `src/app/receive/page.tsx` — wrap the `QRCodeSVG` parent `<div>`                              |
-| `[data-testid="proof-id"]`        | The "proof #N" line on the send success screen | `src/app/send/page.tsx`                                                                       |
+| Locator                              | What it hides                                  | Source file                                                                                   |
+| ------------------------------------ | ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
+| `text=/[0-9a-f]{8}@zkcoins\.app/`    | Wallet address chip                            | Already a content match — no attribute change needed                                          |
+| `[data-testid="balance-amount-usd"]` | The USD value text (`$X`)                      | `src/components/screens/WalletScreen.tsx` — the `<h1>` only, NOT the surrounding card         |
+| `[data-testid="balance-amount-btc"]` | The BTC value text (`X BTC`)                   | same file — the `<p>` only                                                                    |
+| `[data-testid="tx-row-amount"]`      | Transaction row amount                         | `src/components/screens/WalletScreen.tsx::TransactionsList`                                   |
+| `[data-testid="tx-row-time"]`        | Transaction row timestamp                      | same file                                                                                     |
+| `[data-testid="seed-grid"]`          | The 12 mnemonic words                          | `src/components/onboarding/Onboarding.tsx::SeedFlow` — wrap the `grid-cols-3 gap-2 …` `<div>` |
+| `[data-testid="qr-code"]`            | The receive QR (depends on address)            | `src/app/receive/page.tsx` — wrap the `QRCodeSVG` parent `<div>`                              |
+| `[data-testid="proof-id"]`           | The "proof #N" line on the send success screen | `src/app/send/page.tsx`                                                                       |
+
+The two balance masks replaced the previous `[data-testid="balance-value"]` mask. The old mask covered the entire balance card (USD heading + toggle button + BTC text + username/address row), which on mobile dominated the visible viewport and collapsed `balance-hidden`, `balance-copied-feedback`, and several wallet-screen tests onto the same baseline. Masking only the volatile USD/BTC value text preserves the toggle-icon flip and the copy-feedback strip as differentiators.
 
 The data-testid attributes are added **incrementally**, by the PR that first needs each one — not all at once in PR-2. The `snap` helper in `_helpers/screenshot.ts` references the full list from PR-1; Playwright's `mask` ignores selectors with no matches, so unused entries are inert until the matching component lands. No `data-testid` proliferation beyond this set — anything else has to be stable without one.
 

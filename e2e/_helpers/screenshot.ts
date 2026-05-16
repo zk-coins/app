@@ -24,8 +24,13 @@ function defaultMasks(page: Page): Locator[] {
   return [
     // Wallet-address chip — content match, no attribute needed.
     page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/'),
-    // Numeric balance (BTC + USD readouts on WalletScreen).
-    page.locator('[data-testid="balance-value"]'),
+    // Numeric balance — mask only the volatile USD + BTC value texts,
+    // NOT the whole balance card. The previous `[data-testid="balance-value"]`
+    // mask covered the toggle-button icon and the surrounding chrome,
+    // which collapsed `balance-hidden` and `balance-copied-feedback` onto
+    // `balance-funded-mobile` on the smaller mobile viewport.
+    page.locator('[data-testid="balance-amount-usd"]'),
+    page.locator('[data-testid="balance-amount-btc"]'),
     // Transaction-row amount + timestamp (varies per send).
     page.locator('[data-testid="tx-row-amount"]'),
     page.locator('[data-testid="tx-row-time"]'),

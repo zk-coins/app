@@ -57,6 +57,9 @@ test.describe('Receive Bitcoin', () => {
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 10_000,
     });
-    await snap(page, '08-receive-back-to-wallet');
+    // Wait for the balance tick to land so this captures the post-receive
+    // funded view (not the pre-tick empty banner).
+    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await snap(page, '08-receive-back-to-wallet', { fullPage: true });
   });
 });

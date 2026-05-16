@@ -42,7 +42,9 @@ test.describe('View balance', () => {
     await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
     await page.getByTestId('balance-toggle-btn').click();
     await expect(page.getByTestId('balance-toggle-btn')).toHaveAttribute('data-hidden', 'true');
-    await snap(page, '06-balance-hidden');
+    // fullPage so the toggle-icon flip + the now-shown HIDDEN placeholder
+    // are both captured (mobile viewport otherwise clips below the chrome).
+    await snap(page, '06-balance-hidden', { fullPage: true });
   });
 
   test('balance-zero-empty-banner', async ({ page }) => {
@@ -53,7 +55,9 @@ test.describe('View balance', () => {
     // is removed from the bundle. Verify the no-funds banner shows up,
     // not the gated button.
     await expect(page.getByTestId('faucet-btn')).toHaveCount(0);
-    await snap(page, '06-balance-zero-empty-banner');
+    // fullPage so the empty-banner is captured (sits below the masked
+    // balance card and is the entire differentiator vs. funded state).
+    await snap(page, '06-balance-zero-empty-banner', { fullPage: true });
   });
 
   test('balance-copied-feedback', async ({ page }) => {
@@ -63,6 +67,8 @@ test.describe('View balance', () => {
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await page.getByTestId('address-copy-btn').click();
     await expect(page.getByTestId('address-copied-feedback')).toBeVisible({ timeout: 2_000 });
-    await snap(page, '06-balance-copied-feedback');
+    // fullPage so the toast/feedback area below the balance card is
+    // captured — the differentiator vs. funded-mobile lives there.
+    await snap(page, '06-balance-copied-feedback', { fullPage: true });
   });
 });

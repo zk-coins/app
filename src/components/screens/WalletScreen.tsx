@@ -98,7 +98,10 @@ export function WalletScreen() {
       {/* Balance */}
       <div data-testid="balance-value">
         <div className="flex items-center gap-3">
-          <h1 className="text-[56px] font-bold leading-none -tracking-[0.02em] text-ink tabular-nums">
+          <h1
+            data-testid="balance-amount-usd"
+            className="text-[56px] font-bold leading-none -tracking-[0.02em] text-ink tabular-nums"
+          >
             {hidden ? HIDDEN : `$${usd}`}
           </h1>
           <button
@@ -111,7 +114,10 @@ export function WalletScreen() {
             {hidden ? <EyeOff size={16} strokeWidth={2} /> : <Eye size={16} strokeWidth={2} />}
           </button>
         </div>
-        <p className="mt-2 mono text-[14px] text-ink2 tabular-nums">
+        <p
+          data-testid="balance-amount-btc"
+          className="mt-2 mono text-[14px] text-ink2 tabular-nums"
+        >
           {hidden ? HIDDEN : `${btc} BTC`}
         </p>
 
