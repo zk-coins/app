@@ -525,7 +525,17 @@ steps:
 
 ### 9.3 PR gating
 
-`e2e-visual` joins the existing required-checks list. Once the workflow is green on `develop`, branch protection enforces it.
+The `E2E Tests` check (job name `e2e-tests` in `ci.yaml`) is a required
+context on the `develop` branch-protection rule. Required contexts on
+develop (as of 2026-05-16):
+
+```
+Lint & Build, Unit Tests, Rust Crypto Tests, E2E Tests
+```
+
+A PR cannot merge if any of these are red. Branch-protection still
+allows admin override (`enforce_admins: false`) — that is the escape
+hatch for regen PRs (see §9.2), not for routine work.
 
 ### 9.4 Debugging a failing visual diff
 
@@ -564,21 +574,25 @@ Local iteration without CI: `E2E_BASE_URL=https://dev.zkcoins.app npx playwright
 
 ### 11.3 Picking up this plan as a fresh Claude session
 
+**Status (2026-05-16): all 13 PRs landed. The exhaustive suite is live —
+73 tests / 70 linux baselines, all wired into `ci.yaml::e2e-tests` and
+gated by `regenerate-visual-baselines.yml` for any UI change.**
+
 The implementation order **matters** because later specs depend on earlier helpers:
 
-1. **PR-1**: §6 helpers (`_helpers/api.ts`, `_helpers/wallet.ts`, `_helpers/screenshot.ts`, `_helpers/fixtures.ts`), §5 global setup/teardown, `.gitignore` rule for `e2e/.fixtures/`. No specs yet. CI still green because the new files aren't picked up by `testDir` until they live under `e2e/*.spec.ts`.
-2. **PR-2**: §8.1 `01-onboarding-welcome.spec.ts` + the `regenerate-visual-baselines.yml` workflow itself (was originally bundled with PR-13 but is needed earlier — every spec PR depends on it to produce its linux PNGs). The address-chip mask is a regex match (no attribute needed). Does **not** retire `visual.spec.ts` yet — its `landing-*` shots still serve as a sanity diff while the new suite ramps.
-3. **PR-3**: §8.2 `02-create-seed.spec.ts`. Retires `visual.spec.ts` and its snapshots dir in the same PR (the new file is a superset). (`data-testid="seed-grid"` already landed in PR-1 because the create helper reads the mnemonic during `globalSetup`.)
-4. **PR-4**: §8.3 `03-restore-seed.spec.ts`. Wires up `fixtures.aliceLogin`.
-5. **PR-5**: §8.4 `04-unlock-password.spec.ts` _(closes MVP triage gap)_.
-6. **PR-6**: §8.5 `05-disconnect.spec.ts`.
-7. **PR-7**: §8.6 `06-balance.spec.ts`. Adds `data-testid="balance-value"` to `WalletScreen.tsx`.
-8. **PR-8**: §8.7 `07-send.spec.ts` (this is the big one — Alice → Bob real on-chain send). Adds `data-testid="tx-row-amount"` + `"tx-row-time"` to `WalletScreen.tsx::TransactionsList` and `"proof-id"` to `send/page.tsx`.
-9. **PR-9**: §8.8 `08-receive.spec.ts`. Adds `data-testid="qr-code"` to `receive/page.tsx`.
-10. **PR-10**: §8.9 `09-network-and-shell.spec.ts`.
-11. **PR-11**: §8.10 `10-pwa.spec.ts` _(closes MVP triage gap)_.
-12. **PR-12**: §8.11 `11-cross-spec-redirects.spec.ts`.
-13. **PR-13**: §9 CI integration — `e2e-visual` job + `regenerate-visual-baselines.yml`. Last so the gate only flips on a fully passing suite.
+1. **PR-1** ✅: §6 helpers (`_helpers/api.ts`, `_helpers/wallet.ts`, `_helpers/screenshot.ts`, `_helpers/fixtures.ts`), §5 global setup/teardown, `.gitignore` rule for `e2e/.fixtures/`. No specs yet. CI still green because the new files aren't picked up by `testDir` until they live under `e2e/*.spec.ts`.
+2. **PR-2** ✅: §8.1 `01-onboarding-welcome.spec.ts` + the `regenerate-visual-baselines.yml` workflow itself (was originally bundled with PR-13 but is needed earlier — every spec PR depends on it to produce its linux PNGs). The address-chip mask is a regex match (no attribute needed). Does **not** retire `visual.spec.ts` yet — its `landing-*` shots still serve as a sanity diff while the new suite ramps.
+3. **PR-3** ✅: §8.2 `02-create-seed.spec.ts`. Retires `visual.spec.ts` and its snapshots dir in the same PR (the new file is a superset). (`data-testid="seed-grid"` already landed in PR-1 because the create helper reads the mnemonic during `globalSetup`.)
+4. **PR-4** ✅: §8.3 `03-restore-seed.spec.ts`. Wires up `fixtures.aliceLogin`.
+5. **PR-5** ✅: §8.4 `04-unlock-password.spec.ts` _(closes MVP triage gap)_.
+6. **PR-6** ✅: §8.5 `05-disconnect.spec.ts`.
+7. **PR-7** ✅: §8.6 `06-balance.spec.ts`. Adds `data-testid="balance-value"` to `WalletScreen.tsx`.
+8. **PR-8** ✅: §8.7 `07-send.spec.ts` (this is the big one — Alice → Bob real on-chain send). Adds `data-testid="tx-row-amount"` + `"tx-row-time"` to `WalletScreen.tsx::TransactionsList` and `"proof-id"` to `send/page.tsx`.
+9. **PR-9** ✅: §8.8 `08-receive.spec.ts`. Adds `data-testid="qr-code"` to `receive/page.tsx`.
+10. **PR-10** ✅: §8.9 `09-network-and-shell.spec.ts`.
+11. **PR-11** ✅: §8.10 `10-pwa.spec.ts` _(closes MVP triage gap)_.
+12. **PR-12** ✅: §8.11 `11-cross-spec-redirects.spec.ts`.
+13. **PR-13** ✅: §9 CI integration — `e2e-tests` job in `ci.yaml` plus `E2E Tests` as a required branch-protection context on `develop`.
 
 **Transactions coverage** (the original "06 transactions" spec) lives inside `07-send.spec.ts`: every send produces a tx row, and the spec asserts both Alice's outbound row and Bob's inbound row at the end. The transaction icon variants (send/receive/mint) are exercised in `06-balance.spec.ts:balance-zero-faucet-visible` followed by the faucet-mint in `balance-faucet-minting`. No dedicated spec.
 
