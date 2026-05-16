@@ -19,15 +19,19 @@ import { useWalletStore, type Transaction } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
 import { api } from '@/lib/api/client';
 import { formatBtc, formatBtcCompact, formatUsd, toZkAddress } from '@/lib/format';
+import { FEATURES } from '@/lib/features';
 
 const HIDDEN = '••••';
 
 export function WalletScreen() {
   const { account, transactions, setBalance, setUsername } = useWalletStore();
   const { networkName, setNetworkName } = useNetworkStore();
-  // Faucet must never appear on mainnet. We only enable it once we know the
-  // network and it's anything other than mainnet (testnet, regtest, signet, …).
-  const showFaucet = networkName !== '' && networkName !== 'mainnet';
+  // Faucet is gated at build time by `NEXT_PUBLIC_ENABLE_FAUCET`. When that
+  // flag is off, the entire button — including the mint API call — is dead
+  // code and is removed from the production bundle. The additional runtime
+  // mainnet check is defence in depth: even on a DEV build, never show the
+  // faucet if the connected server happens to report `mainnet`.
+  const showFaucet = FEATURES.FAUCET && networkName !== '' && networkName !== 'mainnet';
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [minting, setMinting] = useState(false);
@@ -43,14 +47,16 @@ export function WalletScreen() {
       .catch(() => {});
   }, [setNetworkName]);
 
-  // Balance + username polling.
+  // Balance polling. Username is only read when the feature is enabled —
+  // when off, the server is not expected to return a username and the
+  // `setUsername` call would be a no-op anyway.
   useEffect(() => {
     if (!account) return;
     const tick = async () => {
       try {
         const res = await api.balance(account.address);
         setBalance(res.balance);
-        if (res.username && !account.username) {
+        if (FEATURES.USERNAMES && res.username && !account.username) {
           setUsername(res.username);
         }
       } catch {
@@ -90,12 +96,14 @@ export function WalletScreen() {
       </header>
 
       {/* Balance */}
-      <div>
+      <div data-testid="balance-value">
         <div className="flex items-center gap-3">
           <h1 className="text-[56px] font-bold leading-none -tracking-[0.02em] text-ink tabular-nums">
             {hidden ? HIDDEN : `$${usd}`}
           </h1>
           <button
+            data-testid="balance-toggle-btn"
+            data-hidden={hidden || undefined}
             onClick={() => setHidden((h) => !h)}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-line2 text-ink3 transition-colors hover:border-ink2 hover:text-ink"
             aria-label={hidden ? 'Show balance' : 'Hide balance'}
@@ -111,9 +119,11 @@ export function WalletScreen() {
         {account && (
           <div className="mt-2 space-y-1.5">
             <p className="mono text-[12px] text-ink2">
-              {account.username ? `${account.username}@zkcoins.app` : zkAddress}
+              {FEATURES.USERNAMES && account.username
+                ? `${account.username}@zkcoins.app`
+                : zkAddress}
             </p>
-            {!account.username && (
+            {FEATURES.USERNAMES && !account.username && (
               <div className="flex items-center gap-2">
                 <input
                   type="text"
@@ -151,8 +161,12 @@ export function WalletScreen() {
                 </button>
               </div>
             )}
-            {claimError && <p className="text-[11px] text-bad">{claimError}</p>}
+            {FEATURES.USERNAMES && claimError && (
+              <p className="text-[11px] text-bad">{claimError}</p>
+            )}
             <button
+              data-testid="address-copy-btn"
+              data-copied={copied || undefined}
               onClick={copyAddress}
               className="inline-flex items-center gap-1.5 mono text-[11px] text-ink3 transition-colors hover:text-ink"
               title={account.address}
@@ -163,7 +177,11 @@ export function WalletScreen() {
                 <Copy size={11} strokeWidth={2} />
               )}
               <span>{zkAddress}</span>
-              {copied && <span className="text-bitcoin">copied</span>}
+              {copied && (
+                <span data-testid="address-copied-feedback" className="text-bitcoin">
+                  copied
+                </span>
+              )}
             </button>
           </div>
         )}
@@ -177,7 +195,10 @@ export function WalletScreen() {
 
       {/* No-balance helper + faucet (faucet button only on testnet) */}
       {account && sats <= 0 && (
-        <div className="flex items-start gap-3 rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3">
+        <div
+          data-testid="wallet-empty-banner"
+          className="flex items-start gap-3 rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3"
+        >
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-bitcoin/10 text-bitcoin">
             <CircleDollarSign size={14} strokeWidth={2} />
           </div>
@@ -192,7 +213,7 @@ export function WalletScreen() {
                   </Link>
                   .
                 </>
-              ) : (
+              ) : FEATURES.APPS_DIRECTORY ? (
                 <>
                   Buy private BTC through{' '}
                   <Link href="/apps" className="text-bitcoin hover:underline">
@@ -204,10 +225,20 @@ export function WalletScreen() {
                   </Link>
                   .
                 </>
+              ) : (
+                <>
+                  Share your address via{' '}
+                  <Link href="/receive" className="text-bitcoin hover:underline">
+                    Receive
+                  </Link>
+                  .
+                </>
               )}
             </p>
             {showFaucet && (
               <button
+                data-testid="faucet-btn"
+                data-minting={minting || undefined}
                 onClick={async () => {
                   if (!account || minting) return;
                   setMinting(true);
@@ -260,6 +291,7 @@ function PrimaryButton({
   const Icon = icon === 'send' ? ArrowUpRight : ArrowDownLeft;
   return (
     <Link
+      data-testid={`wallet-${icon}-btn`}
       href={href}
       aria-disabled={disabled}
       tabIndex={disabled ? -1 : 0}
@@ -314,7 +346,7 @@ function TransactionsList({ transactions }: { transactions: Transaction[] }) {
               </div>
               <div>
                 <p className="text-[13px] font-medium text-ink">{label}</p>
-                <p className="mono text-[11px] text-ink3 tabular-nums">
+                <p data-testid="tx-row-time" className="mono text-[11px] text-ink3 tabular-nums">
                   {new Date(tx.timestamp).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
@@ -323,6 +355,7 @@ function TransactionsList({ transactions }: { transactions: Transaction[] }) {
               </div>
             </div>
             <span
+              data-testid="tx-row-amount"
               className={`mono text-[13px] font-medium tabular-nums ${
                 positive ? 'text-ink' : 'text-bitcoin'
               }`}

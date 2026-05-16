@@ -3,6 +3,17 @@ import { test, expect, type CDPSession } from '@playwright/test';
 /**
  * WebAuthn/Passkey E2E tests using Chrome DevTools Protocol virtual authenticators.
  * Only runs in Chromium (CDP required).
+ *
+ * Non-MVP coverage — the passkey flow is build-time dead-stripped from
+ * the PRD bundle (FEATURES.PASSKEY off). This spec exists for the DEV
+ * bundle only.
+ *
+ * Locators: shared MVP testids are used where they exist. The remaining
+ * `getByText`/`getByRole` calls all target passkey-specific copy that
+ * has no testid yet (Register/Authenticate buttons, "Waiting for device"
+ * transient text, PRF error). Once the passkey flow ships in earnest
+ * those should grow testids too — until then they stay text-driven and
+ * will need an i18n pass before any translation rolls out.
  */
 
 test.describe('WebAuthn Passkey', () => {
@@ -50,32 +61,36 @@ test.describe('WebAuthn Passkey', () => {
   });
 
   test('passkey create button is visible on passkey screen', async ({ page }) => {
-    await page.getByText('CREATE WALLET').click();
+    await page.getByTestId('onboarding-create-btn').click();
+    // i18n-todo: passkey flow has no testid yet.
     await expect(page.getByRole('button', { name: /register passkey/i })).toBeVisible();
   });
 
   test('passkey restore button is visible on restore screen', async ({ page }) => {
-    await page.getByText('Restore existing wallet').click();
-    await expect(page.getByText('RESTORE WITH PASSKEY')).toBeVisible();
+    await page.getByTestId('onboarding-restore-btn').click();
+    await expect(page.getByTestId('passkey-restore-btn')).toBeVisible();
   });
 
   test('both passkey and seed phrase paths are accessible', async ({ page }) => {
     // Create path: Welcome -> CREATE WALLET -> passkey screen (with "OTHER LOGIN OPTIONS" to seed)
-    await page.getByText('CREATE WALLET').click();
+    await page.getByTestId('onboarding-create-btn').click();
+    // i18n-todo: passkey-register button has no testid yet.
     await expect(page.getByRole('button', { name: /register passkey/i })).toBeVisible();
-    await expect(page.getByText('OTHER LOGIN OPTIONS')).toBeVisible();
+    await expect(page.getByTestId('passkey-other-options-btn')).toBeVisible();
 
     // Go back to welcome
     await page.getByRole('button', { name: /back/i }).first().click();
 
-    // Restore path: Welcome -> Restore existing wallet -> seed import (with "RESTORE WITH PASSKEY")
-    await page.getByText('Restore existing wallet').click();
-    await expect(page.getByPlaceholder('Enter your 12 words')).toBeVisible();
-    await expect(page.getByText('RESTORE WITH PASSKEY')).toBeVisible();
+    // Restore path: Welcome -> Restore existing wallet -> seed import (with passkey-restore link)
+    await page.getByTestId('onboarding-restore-btn').click();
+    await expect(page.getByTestId('seed-import-textarea')).toBeVisible();
+    await expect(page.getByTestId('passkey-restore-btn')).toBeVisible();
   });
 
   test('clicking "Register passkey" triggers the passkey flow', async ({ page }) => {
-    await page.getByText('CREATE WALLET').click();
+    await page.getByTestId('onboarding-create-btn').click();
+    // i18n-todo: the "Use a passkey" header + Register button have no
+    // testids yet — non-MVP, blocked on the passkey flow shipping.
     await expect(page.getByText('Use a passkey')).toBeVisible();
     await expect(page.getByRole('button', { name: /register passkey/i })).toBeVisible();
 
@@ -105,8 +120,9 @@ test.describe('WebAuthn Passkey', () => {
   });
 
   test('passkey restore flow shows authentication state', async ({ page }) => {
-    await page.getByText('Restore existing wallet').click();
-    await page.getByText('RESTORE WITH PASSKEY').click();
+    await page.getByTestId('onboarding-restore-btn').click();
+    await page.getByTestId('passkey-restore-btn').click();
+    // i18n-todo: passkey restore screen has no testids yet.
     await expect(page.getByText('Restore with passkey')).toBeVisible();
     await expect(page.getByRole('button', { name: /authenticate with passkey/i })).toBeVisible();
 
@@ -120,13 +136,14 @@ test.describe('WebAuthn Passkey', () => {
   });
 
   test('Back button returns to previous screen', async ({ page }) => {
-    await page.getByText('CREATE WALLET').click();
+    await page.getByTestId('onboarding-create-btn').click();
+    // i18n-todo: passkey screen header has no testid yet.
     await expect(page.getByText('Use a passkey')).toBeVisible();
 
     await page.getByRole('button', { name: /back/i }).first().click();
 
     // Should be back on welcome
-    await expect(page.getByText('Welcome to zkCoins')).toBeVisible();
-    await expect(page.getByText('CREATE WALLET')).toBeVisible();
+    await expect(page.getByTestId('welcome-heading')).toBeVisible();
+    await expect(page.getByTestId('onboarding-create-btn')).toBeVisible();
   });
 });

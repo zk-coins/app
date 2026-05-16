@@ -108,7 +108,7 @@ export function PwaPrompt() {
   // iOS Safari: show share-icon instructions
   if (mode.kind === 'ios') {
     return (
-      <Card onDismiss={dismiss}>
+      <Card onDismiss={dismiss} testid="pwa-prompt-ios">
         <p className="text-[12px] font-semibold text-ink">Add zkCoins to your home screen</p>
         <p className="mt-0.5 text-[11px] leading-relaxed text-ink3">
           Tap the{' '}
@@ -124,7 +124,7 @@ export function PwaPrompt() {
   // Native install available — show button
   if (mode.kind === 'native') {
     return (
-      <Card onDismiss={dismiss}>
+      <Card onDismiss={dismiss} testid="pwa-prompt-native">
         <div className="flex items-start gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-[12px] font-semibold text-ink">Install zkCoins as an app</p>
@@ -133,6 +133,8 @@ export function PwaPrompt() {
             </p>
           </div>
           <button
+            data-testid="pwa-install-btn"
+            data-installing={installing || undefined}
             onClick={install}
             disabled={installing}
             className="shrink-0 inline-flex items-center gap-1.5 rounded-md bg-bitcoin px-3 py-1.5 text-[11px] font-semibold tracking-wide text-bg transition-colors hover:bg-bitcoin-hover disabled:opacity-50"
@@ -147,16 +149,27 @@ export function PwaPrompt() {
 
   // Manual fallback — instructions only
   return (
-    <Card onDismiss={dismiss}>
+    <Card onDismiss={dismiss} testid="pwa-prompt-manual">
       <p className="text-[12px] font-semibold text-ink">Install zkCoins as an app</p>
       <p className="mt-0.5 text-[11px] leading-relaxed text-ink3">{mode.body}</p>
     </Card>
   );
 }
 
-function Card({ onDismiss, children }: { onDismiss: () => void; children: React.ReactNode }) {
+function Card({
+  onDismiss,
+  children,
+  testid,
+}: {
+  onDismiss: () => void;
+  children: React.ReactNode;
+  testid?: string;
+}) {
   return (
-    <div className="flex items-start gap-3 rounded-md border border-line bg-surface px-3 py-3">
+    <div
+      data-testid={testid}
+      className="flex items-start gap-3 rounded-md border border-line bg-surface px-3 py-3"
+    >
       <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-bitcoin/10 text-bitcoin">
         <Home size={14} strokeWidth={2} />
       </div>

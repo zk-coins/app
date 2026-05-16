@@ -80,6 +80,27 @@ describe('api.send', () => {
   });
 });
 
+describe('api.commit', () => {
+  it('sends POST to /api/commit with commit request', async () => {
+    mockResponse({ success: true, proof_id: 4 });
+    const commitData = {
+      proof_id: 4,
+      public_key: 'pk',
+      signature: 'sig',
+      message: 'msg',
+    };
+    const result = await api.commit(commitData);
+    expect(mockFetch).toHaveBeenCalledWith(
+      'https://test-api.zkcoins.app/api/commit',
+      expect.objectContaining({
+        method: 'POST',
+        body: JSON.stringify(commitData),
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
+});
+
 describe('api.info', () => {
   it('sends GET to /api/info', async () => {
     mockResponse({ network: 'Mutinynet' });

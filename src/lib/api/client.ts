@@ -9,6 +9,7 @@ const REQUEST_TIMEOUT_MS = 120_000; // 2 minutes (proof generation can be slow)
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const controller = new AbortController();
+  /* c8 ignore next — 2-minute timeout callback, not triggered in unit tests */
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
   try {

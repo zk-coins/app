@@ -9,6 +9,7 @@ import { useWalletStore } from '@/stores/wallet';
 import { api, type CommitRequest } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
 import { SATS_PER_BTC, formatBtc, formatBtcCompact } from '@/lib/format';
+import { FEATURES } from '@/lib/features';
 
 /* --- In-flight commit crash recovery --- */
 
@@ -96,17 +97,22 @@ export default function SendPage() {
     setSending(true);
     setError(null);
     try {
-      // Resolve username to address if needed.
+      // Resolve username to address if the recipient looks like one.
+      // Username resolution itself is gated by `NEXT_PUBLIC_ENABLE_USERNAMES`;
+      // when disabled, only raw hex addresses are accepted and the resolver
+      // code (including the `api.resolveUsername` call) is dead.
       let resolvedRecipient = recipient.trim();
-      if (resolvedRecipient.startsWith('$')) {
-        resolvedRecipient = resolvedRecipient.slice(1);
-      }
-      if (resolvedRecipient.endsWith('@zkcoins.app')) {
-        resolvedRecipient = resolvedRecipient.replace('@zkcoins.app', '');
-      }
-      if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
-        const resolved = await api.resolveUsername(resolvedRecipient);
-        resolvedRecipient = resolved.address;
+      if (FEATURES.USERNAMES) {
+        if (resolvedRecipient.startsWith('$')) {
+          resolvedRecipient = resolvedRecipient.slice(1);
+        }
+        if (resolvedRecipient.endsWith('@zkcoins.app')) {
+          resolvedRecipient = resolvedRecipient.replace('@zkcoins.app', '');
+        }
+        if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
+          const resolved = await api.resolveUsername(resolvedRecipient);
+          resolvedRecipient = resolved.address;
+        }
       }
 
       const wasm = await initWasm();
@@ -196,7 +202,9 @@ export default function SendPage() {
       <AppShell showNav={false}>
         <div className="flex min-h-[80vh] flex-col items-center justify-center text-center">
           <Wallet size={36} strokeWidth={1.75} className="text-ink4" />
-          <p className="mt-4 text-[14px] text-ink2">Redirecting to wallet…</p>
+          <p data-testid="redirecting-placeholder" className="mt-4 text-[14px] text-ink2">
+            Redirecting to wallet…
+          </p>
         </div>
       </AppShell>
     );
@@ -209,12 +217,19 @@ export default function SendPage() {
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-bitcoin text-bg">
             <Check size={28} strokeWidth={2.5} />
           </div>
-          <h1 className="mt-6 text-[22px] font-bold tracking-tight text-ink">Sent privately</h1>
+          <h1
+            data-testid="send-success-heading"
+            className="mt-6 text-[22px] font-bold tracking-tight text-ink"
+          >
+            Sent privately
+          </h1>
           <p className="mt-2 mono text-[14px] text-ink2 tabular-nums">
             {formatBtcCompact(success.amount)} BTC
           </p>
           {success.proofId && (
-            <p className="mt-4 mono text-[11px] text-ink4">proof #{success.proofId}</p>
+            <p data-testid="proof-id" className="mt-4 mono text-[11px] text-ink4">
+              proof #{success.proofId}
+            </p>
           )}
           <button
             onClick={() => router.push('/')}
@@ -242,14 +257,19 @@ export default function SendPage() {
 
       <div className="mt-10 space-y-7">
         <div>
-          <h1 className="text-[26px] font-bold tracking-tight text-ink">Send Bitcoin</h1>
+          <h1 data-testid="send-heading" className="text-[26px] font-bold tracking-tight text-ink">
+            Send Bitcoin
+          </h1>
           <p className="mt-1 text-[13px] text-ink2">
             Privately. The chain never sees the amount or the recipient.
           </p>
         </div>
 
         {recovering && (
-          <div className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3 text-[12px] text-ink2">
+          <div
+            data-testid="send-recovering-banner"
+            className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3 text-[12px] text-ink2"
+          >
             Recovering a previous in-flight transaction…
           </div>
         )}
@@ -262,7 +282,10 @@ export default function SendPage() {
 
         {/* No-balance banner */}
         {account.balance <= 0 && (
-          <div className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3 text-[12px] leading-relaxed text-ink2">
+          <div
+            data-testid="send-no-funds-banner"
+            className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3 text-[12px] leading-relaxed text-ink2"
+          >
             <span className="font-semibold text-bitcoin">No funds to send.</span> Get sats via{' '}
             <Link href="/receive" className="text-bitcoin hover:underline">
               Receive
@@ -279,12 +302,13 @@ export default function SendPage() {
         <div>
           <label className="mb-1.5 block text-[12px] font-medium text-ink2">Recipient</label>
           <input
+            data-testid="send-recipient-input"
             type="text"
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
             spellCheck={false}
             autoComplete="off"
-            placeholder="alice@zkcoins.app"
+            placeholder={FEATURES.USERNAMES ? 'alice@zkcoins.app' : '0x…'}
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
         </div>
@@ -294,6 +318,7 @@ export default function SendPage() {
           <label className="mb-1.5 block text-[12px] font-medium text-ink2">Amount</label>
           <div className="relative">
             <input
+              data-testid="send-amount-input"
               type="text"
               inputMode="decimal"
               value={amount}
@@ -308,6 +333,7 @@ export default function SendPage() {
             </span>
           </div>
           <button
+            data-testid="send-setmax-btn"
             onClick={() => setAmount(formatBtc(account.balance))}
             className="mt-2 text-[12px] font-medium text-bitcoin transition-colors hover:text-bitcoin-hover"
           >
@@ -316,13 +342,16 @@ export default function SendPage() {
         </div>
 
         {error && (
-          <p className="text-[12px] text-bad">
+          <p data-testid="send-error" className="text-[12px] text-bad">
             <span className="text-ink3">err:</span> {error}
           </p>
         )}
 
         {confirming ? (
-          <div className="space-y-4 rounded-md border border-bitcoin/30 bg-bitcoin/5 p-4">
+          <div
+            data-testid="send-confirm-card"
+            className="space-y-4 rounded-md border border-bitcoin/30 bg-bitcoin/5 p-4"
+          >
             <p className="text-[13px] text-ink">
               Send{' '}
               <span className="mono font-semibold">
@@ -334,12 +363,14 @@ export default function SendPage() {
             <p className="text-[11px] text-ink3">This cannot be undone.</p>
             <div className="flex gap-3">
               <button
+                data-testid="send-cancel-btn"
                 onClick={() => setConfirming(false)}
                 className="flex-1 rounded-md border border-line2 py-3 text-[13px] text-ink2 transition-colors hover:border-ink2 hover:text-ink"
               >
                 Cancel
               </button>
               <button
+                data-testid="send-confirm-btn"
                 onClick={send}
                 disabled={sending}
                 className="flex-1 rounded-md bg-bitcoin py-3 text-[13px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover disabled:bg-line disabled:text-ink4"
@@ -350,6 +381,7 @@ export default function SendPage() {
           </div>
         ) : (
           <button
+            data-testid="send-submit-btn"
             onClick={handleConfirm}
             disabled={sending || !recipient || !amount}
             className="w-full rounded-md bg-bitcoin py-4 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"

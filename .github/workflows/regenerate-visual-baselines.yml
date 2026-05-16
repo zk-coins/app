@@ -1,0 +1,102 @@
+name: Regenerate Visual Baselines
+
+# Manually-dispatched workflow that runs the new exhaustive E2E suite with
+# --update-snapshots and commits the resulting linux baselines back to the
+# triggering branch. See e2e/README.md § 9.2.
+#
+# This is the canonical way to:
+#   - Generate baselines for a brand-new spec.
+#   - Refresh baselines after an intentional UI change.
+#
+# Never edit baselines by hand — always go through this workflow.
+
+on:
+  workflow_dispatch:
+    inputs:
+      branch:
+        description: Branch to update baselines on
+        required: true
+        default: develop
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  regen:
+    name: Regenerate baselines
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      E2E_BASE_URL: https://dev.zkcoins.app
+      E2E_API_URL: https://dev-api.zkcoins.app
+      E2E_NETWORK_EXPECTED: signet
+      E2E_FAUCET_CALLS: '1'
+      # Opt globalSetup in so Alice + Bob get minted before the suite runs.
+      E2E_NEED_FIXTURES: 'true'
+      # Opt every spec back in (including those listed in
+      # playwright.config.ts::testIgnore) so this workflow can produce
+      # their missing linux baselines. The regular CI job does NOT set
+      # this — testIgnore stays in effect there.
+      E2E_REGENERATING: 'true'
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.branch }}
+          # Need to push back to the same branch; default token works if
+          # branch protection allows the bot. Otherwise switch to a PAT
+          # via secrets.
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Regenerate baselines for the new exhaustive suite
+        # `--update-snapshots=all` is mandatory because newer Playwright
+        # parses the bare `--update-snapshots` as taking the next CLI arg
+        # as its mode value (and would greedily consume the file pattern).
+        run: npx playwright test --project=chromium --update-snapshots=all e2e/0*.spec.ts e2e/1*.spec.ts
+
+      - name: Commit, push to a side branch, open auto-merge PR
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if [[ -z "$(git status --porcelain e2e/*-snapshots/)" ]]; then
+            echo "No baseline changes."
+            exit 0
+          fi
+          # `develop` is branch-protected; the github-actions bot cannot push
+          # to it directly. Land the PNGs on a side branch and open a PR
+          # against `inputs.branch`, then auto-merge once required checks
+          # pass.
+          NEW_BRANCH="e2e/regen-baselines-${{ github.run_id }}"
+          git checkout -b "$NEW_BRANCH"
+          git add e2e/*-snapshots/
+          git commit -m "test(e2e): regenerate visual baselines"
+          git push origin "$NEW_BRANCH"
+          # Open the PR but do NOT try to auto-merge: workflows started by
+          # the GITHUB_TOKEN do not cascade-trigger CI on the new branch
+          # (anti-loop policy), so the required status checks never run
+          # on the PR and `gh pr merge --auto` blocks indefinitely. The
+          # downstream operator (or a follow-up admin-merge command) is
+          # expected to close the loop.
+          PR_BODY="Automated baseline refresh triggered by run ${{ github.run_id }}. Generated from \`${{ inputs.branch }}\`@${{ github.sha }}. Merge with \`gh pr merge --admin --squash --delete-branch\` once reviewed."
+          PR_URL=$(gh pr create \
+            --base "${{ inputs.branch }}" \
+            --head "$NEW_BRANCH" \
+            --title "test(e2e): regenerate visual baselines" \
+            --body "$PR_BODY")
+          echo "::notice title=Baselines PR::$PR_URL"

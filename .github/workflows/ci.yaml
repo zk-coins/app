@@ -1,10 +1,21 @@
 name: CI
 
 on:
+  # Only trigger on PRs targeting develop (feature → develop). The
+  # release PR (develop → main) is opened automatically and would
+  # otherwise fire a second CI run for every push to develop — those
+  # duplicate runs surfaced as "fail" entries on the release PR's
+  # check list whenever the concurrency block cancelled the older
+  # one. The push event already covers develop, and its run is
+  # associated with the same SHA on the release PR.
   pull_request:
-    branches: [develop, main]
+    branches: [develop]
   push:
     branches: [develop]
+
+concurrency:
+  group: ci-${{ github.event.pull_request.head.sha || github.sha }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -106,6 +117,15 @@ jobs:
         run: npx playwright test --project=chromium
         env:
           E2E_BASE_URL: https://dev.zkcoins.app
+          E2E_API_URL: https://dev-api.zkcoins.app
+          E2E_NETWORK_EXPECTED: signet
+          E2E_FAUCET_CALLS: '1'
+          # globalSetup runs once per CI invocation and mints fresh Alice + Bob
+          # via /api/mint. The active specs (03-restore-seed et al.) consume
+          # the resulting e2e/.fixtures/accounts.json via aliceLogin/bobLogin.
+          # Legacy specs are unaffected — they create their own throwaway
+          # wallets inline. See e2e/README.md § 4 and § 5.
+          E2E_NEED_FIXTURES: 'true'
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
