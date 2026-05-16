@@ -289,11 +289,16 @@ export default function SendPage() {
             <span className="font-semibold text-bitcoin">No funds to send.</span> Get sats via{' '}
             <Link href="/receive" className="text-bitcoin hover:underline">
               Receive
-            </Link>{' '}
-            or{' '}
-            <Link href="/apps" className="text-bitcoin hover:underline">
-              DFX
             </Link>
+            {FEATURES.APPS_DIRECTORY && (
+              <>
+                {' '}
+                or{' '}
+                <Link href="/apps" className="text-bitcoin hover:underline">
+                  DFX
+                </Link>
+              </>
+            )}
             .
           </div>
         )}
