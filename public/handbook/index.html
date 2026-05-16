@@ -566,7 +566,7 @@
           </ol>
         </nav>
 
-        <div class="toc-label">Specs (73 tests · 70 baselines)</div>
+        <div class="toc-label">Specs (71 tests · 68 baselines)</div>
         <nav class="toc">
           <ol>
             <li>
@@ -625,7 +625,7 @@
             <span>🟢 <b>PRD:</b> <a href="https://zkcoins.app">zkcoins.app</a></span>
             <span>🟡 <b>DEV:</b> <a href="https://dev.zkcoins.app">dev.zkcoins.app</a></span>
             <span>📂 <b>Code:</b> <a href="https://github.com/zk-coins/app">zk-coins/app</a></span>
-            <span>🧪 <b>Specs:</b> 11 · 73 tests · 70 baselines</span>
+            <span>🧪 <b>Specs:</b> 11 · 71 tests · 68 baselines</span>
           </div>
         </section>
 
@@ -647,12 +647,11 @@
 
           <div class="callout info">
             <p>
-              <b>DEV vs. PRD bundle:</b> the suite runs against <code>dev.zkcoins.app</code> (DEV)
-              because that's the only deployment where the faucet (<code>POST /api/mint</code>) is
-              available. The DEV bundle additionally shows the Apps tab in the bottom nav and the
-              faucet button in the wallet's empty state — both are build-time flags stripped from
-              the PRD bundle by dead-code elimination. The 10 MVP functions are identical in both
-              bundles.
+              <b>DEV mirrors PRD.</b> Both deployments build with the same
+              <code>NEXT_PUBLIC_ENABLE_*</code> defaults (all off), so dead-code elimination strips
+              every gated path identically. What you see in this handbook is what ships to users —
+              no feature in any screenshot is hidden behind a flag in production. Feature flags
+              exist for local developer setups via <code>.env.local</code> only.
             </p>
           </div>
         </section>
@@ -1505,7 +1504,7 @@
                 <div class="file">e2e/06-balance.spec.ts</div>
               </div>
               <div class="rhs">
-                <b>6 tests · 6 baselines</b>
+                <b>5 tests · 5 baselines</b>
                 <div class="links">
                   <a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts"
                     >Spec ↗</a
@@ -1521,7 +1520,7 @@
           <p class="spec-intro">
             The wallet home screen after login. Balance polled every 5 s from
             <code>GET /api/balance</code>. The eye toggle hides the amount for screen-sharing. On an
-            empty wallet, the DEV bundle exposes a faucet button for 100k test sats.
+            empty wallet, the no-funds banner replaces the transactions list.
             <span class="tag mvp">MVP · View balance</span>
             <span class="tag mvp">MVP · Tx history</span>
           </p>
@@ -1543,8 +1542,8 @@
                 />
               </div>
               <div class="desc">
-                Fully funded wallet at 1440×900: balance in BTC + USD, address chip,
-                Send/Receive-CTAs, Username-Claim-Input (DEV), Tx-Liste, Network-Chart, Footer.
+                Fully funded wallet at 1440×900: balance in BTC + USD, address chip, Send/Receive
+                CTAs, tx list, network chart, footer.
               </div>
             </div>
             <div class="test">
@@ -1560,7 +1559,7 @@
                 <img src="/handbook/screenshots/06-balance-funded-mobile.png" alt="funded mobile" />
               </div>
               <div class="desc">
-                Funded Wallet at 375×812 — vertikal gestapelt, Bottom-Nav unten.
+                Funded wallet at 375×812 — vertically stacked, bottom nav at the bottom.
               </div>
             </div>
             <div class="test">
@@ -1581,42 +1580,22 @@
             </div>
             <div class="test">
               <div class="head">
-                <span class="name">balance-zero-faucet-visible</span
+                <span class="name">balance-zero-empty-banner</span
                 ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L49"
-                    >L49</a
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L48"
+                    >L48</a
                   ></span
                 >
               </div>
               <div class="img">
                 <img
-                  src="/handbook/screenshots/06-balance-zero-faucet-visible.png"
-                  alt="zero faucet"
+                  src="/handbook/screenshots/06-balance-zero-empty-banner.png"
+                  alt="zero empty banner"
                 />
               </div>
               <div class="desc">
-                Balance 0 → "Wallet is empty" banner replaces the tx list. DEV/Signet: faucet button
-                for 100,000 sats. Automatically hidden on mainnet.
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">balance-faucet-minting</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L57"
-                    >L57</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img
-                  src="/handbook/screenshots/06-balance-faucet-minting.png"
-                  alt="faucet minting"
-                />
-              </div>
-              <div class="desc">
-                Faucet clicked — button shows loading state while <code>POST /api/mint</code> issues
-                the test coins.
+                Balance 0 → "Wallet is empty" banner replaces the tx list. Bob freshly minted with
+                no balance.
               </div>
             </div>
             <div class="test">
@@ -1647,7 +1626,7 @@
                 <div class="file">e2e/07-send.spec.ts</div>
               </div>
               <div class="rhs">
-                <b>13 tests · 12 baselines</b>
+                <b>12 tests · 11 baselines</b>
                 <div class="links">
                   <a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts"
                     >Spec ↗</a
@@ -1664,8 +1643,8 @@
             The most central and complex spec. Real Alice → Bob transaction:
             <code>signSendRequest</code> produces a Schnorr signature →
             <code>POST /api/send</code> reserves output coins → the client computes
-            <code>Schnorr(hash(state || coins))</code> → <code>POST /api/commit</code>
-            confirms. Recipient as 64-hex or via username resolver.
+            <code>Schnorr(hash(state || coins))</code> → <code>POST /api/commit</code> confirms.
+            Recipient is a 64-hex address.
             <span class="tag mvp">MVP · Send</span>
           </p>
 
@@ -1684,7 +1663,7 @@
               </div>
               <div class="desc">
                 Initial: empty recipient + amount, "Set MAX" link, disabled submit. Placeholder
-                "Address or @username".
+                "0x…".
               </div>
             </div>
             <div class="test">
@@ -1700,8 +1679,8 @@
                 <img src="/handbook/screenshots/07-send-no-funds-banner.png" alt="no funds" />
               </div>
               <div class="desc">
-                Send at balance 0: top banner "Wallet is empty", faucet hint (DEV), DFX buy link
-                (DEV).
+                Send at balance 0: top banner "Wallet is empty". Send via Receive link only — faucet
+                and DFX links are gated and stripped from the bundle.
               </div>
             </div>
             <div class="test">
@@ -1717,26 +1696,6 @@
                 <img src="/handbook/screenshots/07-recipient-valid-hex.png" alt="valid hex" />
               </div>
               <div class="desc">64-hex string accepted, no resolve needed, "Continue" enabled.</div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">recipient-valid-username</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L83"
-                    >L83</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img
-                  src="/handbook/screenshots/07-recipient-valid-username.png"
-                  alt="valid username"
-                />
-              </div>
-              <div class="desc">
-                @user or $user → resolved via <code>/api/username/resolve</code> on Continue
-                (DEV-gated).
-              </div>
             </div>
             <div class="test">
               <div class="head">
@@ -2014,8 +1973,8 @@
             </div>
           </summary>
           <p class="spec-intro">
-            Global app shell: bottom nav for the three main areas, footer links (row + grid),
-            network badge with live status from <code>/api/info</code>. The network badge is an MVP
+            Global app shell: bottom nav (Wallet + Settings), footer links (row + grid), network
+            badge with live status from <code>/api/info</code>. The network badge is an MVP
             function; the other tests cover the surrounding chrome.
             <span class="tag mvp">MVP · Network badge</span>
           </p>
@@ -2038,7 +1997,8 @@
                 />
               </div>
               <div class="desc">
-                Wallet tab active (default). Apps tab visible (DEV-gated), Settings tab inactive.
+                Wallet tab active (default). Settings tab inactive. Apps tab is gated and not in the
+                bundle.
               </div>
             </div>
             <div class="test">
@@ -2380,20 +2340,20 @@
               <tr>
                 <td>View balance</td>
                 <td><code>06-balance</code></td>
-                <td>6</td>
-                <td><span class="ok">6</span></td>
+                <td>5</td>
+                <td><span class="ok">5</span></td>
               </tr>
               <tr>
                 <td>Tx history</td>
-                <td><code>07-send</code> (Post-Send Rows)</td>
+                <td><code>07-send</code> (post-send rows)</td>
                 <td>—</td>
-                <td><span class="ok">in 12</span></td>
+                <td><span class="ok">in 11</span></td>
               </tr>
               <tr>
                 <td>Send Bitcoin (2-phase)</td>
                 <td><code>07-send</code></td>
-                <td>13</td>
-                <td><span class="ok">12</span></td>
+                <td>12</td>
+                <td><span class="ok">11</span></td>
               </tr>
               <tr>
                 <td>Receive Bitcoin</td>
@@ -2402,21 +2362,21 @@
                 <td><span class="ok">4</span></td>
               </tr>
               <tr>
-                <td>Network-Info-Badge</td>
+                <td>Network info badge</td>
                 <td><code>09-network-and-shell</code></td>
                 <td>6</td>
                 <td><span class="ok">6</span></td>
               </tr>
               <tr>
-                <td>Install als PWA</td>
+                <td>Install as PWA</td>
                 <td><code>10-pwa</code></td>
                 <td>4</td>
                 <td><span class="ok">4</span></td>
               </tr>
               <tr>
                 <td colspan="2"><strong>Σ MVP</strong></td>
-                <td><strong>65</strong></td>
-                <td><strong class="ok">62</strong></td>
+                <td><strong>63</strong></td>
+                <td><strong class="ok">60</strong></td>
               </tr>
               <tr>
                 <td>+ Welcome / onboarding</td>
@@ -2432,8 +2392,8 @@
               </tr>
               <tr>
                 <td colspan="2"><strong>Σ total</strong></td>
-                <td><strong>73</strong></td>
-                <td><strong class="ok">70</strong></td>
+                <td><strong>71</strong></td>
+                <td><strong class="ok">68</strong></td>
               </tr>
             </tbody>
           </table>
@@ -2450,7 +2410,7 @@
             <li><code>Lint &amp; Build</code></li>
             <li><code>Unit Tests</code></li>
             <li><code>Rust Crypto Tests</code></li>
-            <li><code>E2E Tests</code> — all 73 tests including 70 visual-baseline comparisons</li>
+            <li><code>E2E Tests</code> — all 71 tests including 68 visual-baseline comparisons</li>
           </ul>
 
           <h3>Baseline regeneration</h3>
