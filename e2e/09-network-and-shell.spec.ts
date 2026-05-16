@@ -45,11 +45,10 @@ test.describe('Network badge + AppShell', () => {
   });
 
   test('shell-footerlinks-grid', async ({ page }) => {
-    // Grid variant is inside Settings § Resources.
+    // Grid variant is inside Settings § Resources. The section title is
+    // a `<p>` not an `<h*>` heading; locate by text instead.
     await page.getByRole('link', { name: 'Settings' }).click();
-    await expect(page.getByRole('heading', { name: 'Resources' })).toBeVisible({
-      timeout: 10_000,
-    });
+    await expect(page.getByText('RESOURCES')).toBeVisible({ timeout: 10_000 });
     await snap(page, '09-shell-footerlinks-grid', { fullPage: true });
   });
 
