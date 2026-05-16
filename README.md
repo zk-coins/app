@@ -43,31 +43,31 @@ User-facing functions, their activation status, and the tests that cover them.
 
 **Coverage legend:** unit % refers to Vitest line coverage of the lowest-covered involved file in `src/lib/**` + `src/stores/**` (Components are excluded from coverage scope). `e2e` means a Playwright spec covers the flow. `—` means no test exists.
 
-| Feature                        | Status                                    | Triage  | Tests                  |
-| ------------------------------ | ----------------------------------------- | ------- | ---------------------- |
-| Create wallet — seed phrase    | always                                    | mvp     | 88% · e2e              |
-| Create wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate    | 14% · e2e              |
-| Restore wallet — seed phrase   | always                                    | mvp     | 88% · e2e              |
-| Restore wallet — passkey       | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate    | 14% · e2e              |
-| Unlock wallet — password       | always                                    | mvp     | 100% · —               |
-| Unlock wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate    | 14% · e2e              |
-| Disconnect wallet              | always                                    | mvp     | 88% · e2e              |
-| View balance                   | always                                    | mvp     | 88% · e2e              |
-| View transaction history       | always                                    | mvp     | 88% · e2e              |
-| Send Bitcoin (2-phase)         | always                                    | mvp     | 88% · e2e              |
-| Receive Bitcoin (address + QR) | always                                    | mvp     | 100% · e2e             |
-| Mint test BTC (faucet)         | env (`NEXT_PUBLIC_ENABLE_FAUCET`)¹        | gate    | 99% · e2e              |
-| Claim username                 | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | gate    | 99% · e2e              |
-| Resolve username (in Send)     | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | gate    | 99% · e2e              |
-| Network info badge             | always                                    | mvp     | 100% · e2e             |
-| Network activity chart         | env (`NEXT_PUBLIC_EXPLORER_URL`)²         | keep    | 0% · e2e (visual only) |
-| Install as PWA                 | always                                    | mvp     | —                      |
-| Apps directory                 | env (`NEXT_PUBLIC_ENABLE_APPS_DIRECTORY`) | gate    | e2e (visual only)      |
-| Auto-lock                      | planned                                   | planned | —                      |
-| Auto-rotate addresses          | planned                                   | planned | —                      |
-| Tor routing                    | planned                                   | planned | —                      |
-| `/reset` — wipe local state    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | gate    | —                      |
-| `/simulate` — demo populate    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | gate    | —                      |
+| Feature                        | Status                                    | Triage  | Tests                 |
+| ------------------------------ | ----------------------------------------- | ------- | --------------------- |
+| Create wallet — seed phrase    | always                                    | mvp     | 100% · e2e            |
+| Create wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate    | 14% · e2e             |
+| Restore wallet — seed phrase   | always                                    | mvp     | 100% · e2e            |
+| Restore wallet — passkey       | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate    | 14% · e2e             |
+| Unlock wallet — password       | always                                    | mvp     | 100% · e2e            |
+| Unlock wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate    | 14% · e2e             |
+| Disconnect wallet              | always                                    | mvp     | 100% · e2e            |
+| View balance                   | always                                    | mvp     | 100% · e2e            |
+| View transaction history       | always                                    | mvp     | 100% · e2e            |
+| Send Bitcoin (2-phase)         | always                                    | mvp     | 100% · e2e            |
+| Receive Bitcoin (address + QR) | always                                    | mvp     | 100% · e2e            |
+| Mint test BTC (faucet)         | env (`NEXT_PUBLIC_ENABLE_FAUCET`)¹        | gate    | 100% · e2e (indirect) |
+| Claim username                 | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | gate    | 100% · e2e (visual)   |
+| Resolve username (in Send)     | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | gate    | 100% · e2e (visual)   |
+| Network info badge             | always                                    | mvp     | 100% · e2e            |
+| Network activity chart         | env (`NEXT_PUBLIC_EXPLORER_URL`)²         | keep    | 0% · —                |
+| Install as PWA                 | always                                    | mvp     | — · e2e               |
+| Apps directory                 | env (`NEXT_PUBLIC_ENABLE_APPS_DIRECTORY`) | gate    | e2e (visual only)     |
+| Auto-lock                      | planned                                   | planned | —                     |
+| Auto-rotate addresses          | planned                                   | planned | —                     |
+| Tor routing                    | planned                                   | planned | —                     |
+| `/reset` — wipe local state    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | gate    | —                     |
+| `/simulate` — demo populate    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | gate    | —                     |
 
 ¹ Faucet additionally checks `/api/info` at runtime and stays hidden if the connected server reports `network = mainnet`, even if the flag is on. Defence in depth.
 ² Empty (default) → `/network` shows simulated data with a "Preview · simulated" badge. URL set → live chart fetched from the explorer.
@@ -88,10 +88,12 @@ The image built by `deploy-dev.yaml` sets every flag to `true` for testing. The 
 
 ### Triage gaps
 
-Features tagged `mvp` whose current test coverage is insufficient — these block "100% on activated features":
+_Closed (2026-05-16):_ all 10 `mvp` features now have at least one
+dedicated E2E spec and the unit-coverage figure is 100 % across the
+MVP-scoped files. Two historical gaps were:
 
-- **Unlock wallet — password** — unit covers the crypto path, but no E2E exercises the unlock screen
-- **Install as PWA** — no automated test (browser-native install prompt, hard to exercise in CI)
+- **Unlock wallet — password** — now covered by `e2e/04-unlock-password.spec.ts` (5 tests).
+- **Install as PWA** — `e2e/10-pwa.spec.ts` (4 tests) covers the deferred-prompt save path in native / iOS-Safari / manual-fallback modes plus the "Installing…" sub-state. The browser-native install dialog itself stays out of scope because it cannot be exercised headless — that's documented as an accepted gap in `e2e/README.md § 10`.
 
 ### Details
 
@@ -101,7 +103,7 @@ Features tagged `mvp` whose current test coverage is insufficient — these bloc
 - **Crypto:** `@zkcoins/wasm` (`generateMnemonic`, `createAccountFromMnemonic`), `src/lib/crypto/encryption.ts`, `src/lib/crypto/key-derivation.ts`
 - **Storage:** `src/lib/crypto/storage.ts` (encrypted IndexedDB blob), `src/stores/wallet.ts::saveWithPassword`
 - **APIs:** `GET /api/balance` (optional initial balance fetch)
-- **Tests:** unit `src/__tests__/lib/crypto/encryption.test.ts`, `key-derivation.test.ts`, `storage.test.ts`, `stores/wallet.test.ts` — e2e `e2e/wallet.spec.ts`
+- **Tests:** unit `src/__tests__/lib/crypto/encryption.test.ts`, `key-derivation.test.ts`, `storage.test.ts`, `stores/wallet.test.ts` — e2e `e2e/01-onboarding-welcome.spec.ts` (entry path) + `e2e/02-create-seed.spec.ts` (10 tests covering reveal → confirm → password → wallet)
 
 #### Create wallet — passkey
 
@@ -117,7 +119,7 @@ Features tagged `mvp` whose current test coverage is insufficient — these bloc
 - **Crypto:** `validateMnemonic`, `createAccountFromMnemonic` (WASM), `encryption.ts`
 - **Storage:** `storage.ts::saveEncryptedWallet`
 - **APIs:** `GET /api/balance`
-- **Tests:** unit (same as create) — e2e `e2e/wallet.spec.ts` (`navigates to seed phrase import`)
+- **Tests:** unit (same as create) — e2e `e2e/03-restore-seed.spec.ts` (10 tests: textarea → continue → password → unlocked wallet)
 
 #### Restore wallet — passkey
 
@@ -132,7 +134,7 @@ Features tagged `mvp` whose current test coverage is insufficient — these bloc
 - **UI:** `src/app/page.tsx` (UnlockScreen)
 - **Crypto:** `unlockWithPassword`, AES-256-GCM decrypt via `encryption.ts`
 - **Storage:** `loadEncryptedWallet`
-- **Tests:** unit `encryption.test.ts`, `storage.test.ts` — no E2E (E2E suites stay unlocked across runs)
+- **Tests:** unit `encryption.test.ts`, `storage.test.ts` — e2e `e2e/04-unlock-password.spec.ts` (5 tests covering empty form, wrong password, correct password)
 
 #### Unlock wallet — passkey
 
@@ -144,33 +146,33 @@ Features tagged `mvp` whose current test coverage is insufficient — these bloc
 
 - **UI:** `src/app/settings/page.tsx` (Disconnect button + `window.confirm`)
 - **Implementation:** `deleteWallet`, `deleteCredential`, `useAuthStore.reset()`
-- **Tests:** unit `stores/wallet.test.ts`, `stores/auth.test.ts` — e2e `e2e/settings.spec.ts`
+- **Tests:** unit `stores/wallet.test.ts`, `stores/auth.test.ts` — e2e `e2e/05-disconnect.spec.ts` (7 tests: settings → confirm dialog → onboarding)
 
 #### View balance
 
 - **UI:** `src/components/screens/WalletScreen.tsx` (balance card with 5 s polling, eye toggle to hide/show)
 - **Implementation:** `api.balance()`, `format.ts::formatBtc/formatUsd`, `useWalletStore.setBalance`
 - **APIs:** `GET /api/balance?address=<hex>`
-- **Tests:** unit `client.test.ts`, `format.test.ts`, `format-full.test.ts`, `wallet.test.ts` — e2e `e2e/send-flow.spec.ts`
+- **Tests:** unit `client.test.ts`, `format.test.ts`, `format-full.test.ts`, `wallet.test.ts` — e2e `e2e/06-balance.spec.ts` (6 tests: zero-balance, faucet-visible, faucet-minting, funded desktop/mobile, balance-hidden)
 
 #### View transaction history
 
 - **UI:** `WalletScreen.tsx` (TransactionsList, icons per type, BTC compact format)
 - **Implementation:** `useWalletStore.transactions` persisted under `zkcoins_transactions` in localStorage
-- **Tests:** unit `wallet-transactions.test.ts` — e2e `send-flow.spec.ts` (asserts list renders)
+- **Tests:** unit `wallet-transactions.test.ts` — e2e `e2e/07-send.spec.ts` (asserts Alice's outbound + Bob's inbound rows after a real send)
 
 #### Send Bitcoin (2-phase)
 
 - **UI:** `src/app/send/page.tsx` (recipient, amount, confirm dialog)
 - **Implementation:** `signSendRequest` (Schnorr) → `api.sendSigned` → client commitment (`Schnorr(hash(account_state_hash || output_coins_root))`) → `api.commit`. In-flight commit recovery via `zkcoins_inflight_commit` in localStorage (3 attempts, exp. backoff)
 - **APIs:** `POST /api/send`, `POST /api/commit`, `GET /api/username/resolve/:name` (if recipient starts with `@` or `$`)
-- **Tests:** unit `client-signing.test.ts`, `client-username.test.ts`, `wallet-transactions.test.ts` — e2e `send-flow.spec.ts` (`Send Page` suite)
+- **Tests:** unit `client-signing.test.ts`, `client-username.test.ts`, `wallet-transactions.test.ts` — e2e `e2e/07-send.spec.ts` (13 tests covering recipient validation, amount validation, confirm dialog, real Alice→Bob send, post-send transaction rows)
 
 #### Receive Bitcoin (address + QR)
 
 - **UI:** `src/app/receive/page.tsx` (`toZkAddress`, QRCodeSVG, copy-to-clipboard)
 - **Implementation:** `format.ts::toZkAddress`
-- **Tests:** unit `format.test.ts` — e2e `send-flow.spec.ts` (`Receive Page` suite)
+- **Tests:** unit `format.test.ts` — e2e `e2e/08-receive.spec.ts` (4 tests: desktop, mobile, after-copy, back-to-wallet)
 
 #### Mint test BTC (faucet)
 
@@ -178,45 +180,45 @@ Features tagged `mvp` whose current test coverage is insufficient — these bloc
 - **Visibility:** Auto-hidden when `useNetworkStore.networkName === 'mainnet'`. No flag — runtime check against `/api/info`
 - **Implementation:** `api.mint()`
 - **APIs:** `POST /api/mint`, `GET /api/info` (network detection)
-- **Tests:** unit `client.test.ts`, `network.test.ts` — e2e `send-flow.spec.ts` (asserts button visible on testnet)
+- **Tests:** unit `client.test.ts`, `network.test.ts` — e2e `e2e/06-balance.spec.ts` (`balance-zero-faucet-visible` asserts the button is rendered on signet) + indirect via `e2e/_global-setup.ts` which calls `/api/mint` to seed Alice + Bob every run
 
 #### Claim username
 
 - **UI:** `WalletScreen.tsx` (claim button + input)
 - **Implementation:** `signClaimRequest` (Schnorr with pubkey_0) → `api.claimUsername`
 - **APIs:** `POST /api/username/claim`
-- **Tests:** unit `client-username.test.ts` — e2e `send-flow.spec.ts` (`Wallet Address Display` suite)
+- **Tests:** unit `client-username.test.ts` — e2e `e2e/06-balance.spec.ts:balance-funded-desktop/mobile` (visually verifies the claim input + button render on a funded wallet)
 
 #### Resolve username (in Send)
 
 - **UI:** Send page input — recipient starting with `@` or `$` triggers resolution before signing
 - **Implementation:** `api.resolveUsername`
 - **APIs:** `GET /api/username/resolve/:username`
-- **Tests:** unit `client-username.test.ts` — e2e implicit via `send-flow.spec.ts`
+- **Tests:** unit `client-username.test.ts` — e2e `e2e/07-send.spec.ts:send-default + recipient-valid-username` (visually verifies the `@user` / `$user` placeholder hint)
 
 #### Network info badge
 
 - **UI:** `WalletScreen.tsx` + `src/app/settings/page.tsx`
 - **Implementation:** `useNetworkStore` hydrated from `/api/info` on mount
 - **APIs:** `GET /api/info`
-- **Tests:** unit `stores/network.test.ts` — e2e `e2e/settings.spec.ts`
+- **Tests:** unit `stores/network.test.ts` — e2e `e2e/09-network-and-shell.spec.ts` (6 tests: signet badge, loading state, AppShell bottom-nav + footer-links variants)
 
 #### Network activity chart
 
 - **UI:** `src/app/network/page.tsx` (`NetworkActivity` component, 6 h window, 8 s polling)
 - **Activation:** `NEXT_PUBLIC_EXPLORER_URL` empty → simulated data with `Preview · simulated` badge; URL set → live data fetched from explorer's `/network/activity?window_ms=…`
 - **Implementation:** `src/lib/api/explorer.ts` + `src/lib/simulate-network.ts`
-- **Tests:** unit — none for explorer fetcher (depends on external service); simulator also uncovered — e2e `e2e/visual.spec.ts` (visual regression only)
+- **Tests:** unit — none for explorer fetcher (depends on external service); simulator also uncovered. No dedicated E2E — triage `keep` per `e2e/README.md § 10`
 
 #### Install as PWA
 
 - **UI:** `src/components/PwaPrompt.tsx` (handles `beforeinstallprompt`), manifest + service worker in `public/`
-- **Tests:** none (browser-native install prompt — not exercisable in CI)
+- **Tests:** e2e `e2e/10-pwa.spec.ts` (4 tests: native deferred prompt, native-installing sub-state, iOS-Safari instructions, manual desktop fallback). The browser-native install dialog itself is not exercised — that's an accepted gap per `e2e/README.md § 10`.
 
 #### Apps directory
 
 - **UI:** `src/app/apps/page.tsx` (static list with external links: DFX, OpenCryptoPay)
-- **Tests:** e2e `e2e/visual.spec.ts` (visual regression only — no functional assertions on links)
+- **Tests:** indirectly via the BottomNav `Apps` tab visible in every WalletScreen/Settings baseline; no dedicated functional spec for the link destinations (triage `gate`)
 
 #### Planned (UI present, disabled)
 
@@ -250,12 +252,12 @@ Image build vs. container start: the two `_URL` placeholders are baked at build 
 
 ### Tests
 
-| Stack       | Command                 | What it covers                                                                                                                                         |
-| ----------- | ----------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Vitest + v8 | `npm run test`          | 144 unit tests across `src/lib/**` and `src/stores/**`                                                                                                 |
-| Coverage    | `npm run test:coverage` | v8 coverage, scoped to the MVP activated surface. Latest run: **100% lines · 100% statements · 100% functions · 100% branches**. CI fails on any drop. |
-| Playwright  | `npm run test:e2e`      | 5 suites — `wallet`, `send-flow`, `webauthn`, `settings`, `visual`. Runs against `E2E_BASE_URL`                                                        |
-| Playwright  | `npm run test:visual`   | Visual regression subset only                                                                                                                          |
+| Stack       | Command                 | What it covers                                                                                                                                                                                                                                 |
+| ----------- | ----------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Vitest + v8 | `npm run test`          | 144 unit tests across `src/lib/**` and `src/stores/**`                                                                                                                                                                                         |
+| Coverage    | `npm run test:coverage` | v8 coverage, scoped to the MVP activated surface. Latest run: **100% lines · 100% statements · 100% functions · 100% branches**. CI fails on any drop.                                                                                         |
+| Playwright  | `npm run test:e2e`      | 12 active specs — 11 exhaustive (`e2e/0[1-9]-*.spec.ts` + `e2e/1[01]-*.spec.ts`, 73 tests / 70 linux visual baselines) + `webauthn.spec.ts` (DEV-bundle passkey coverage). Runs against `E2E_BASE_URL`. Full inventory in `e2e/README.md § 8`. |
+| Playwright  | `npm run test:visual`   | Visual regression subset (baselines under `e2e/*.spec.ts-snapshots/`). Linux-only; regenerated via `.github/workflows/regenerate-visual-baselines.yml`.                                                                                        |
 
 The coverage scope excludes `src/components/**`, `src/app/**`, and four files that belong to gated features (`crypto/passkey.ts`, `simulate.ts`, `simulate-network.ts`, `api/explorer.ts`) — see `vitest.config.ts`. Those files still have unit tests that run unconditionally; they are simply not counted toward the MVP coverage figure because the PRD build never reaches them.
 
