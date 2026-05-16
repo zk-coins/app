@@ -3,8 +3,11 @@
   "version": "0.9.0",
   "private": true,
   "scripts": {
+    "predev": "node scripts/sync-handbook-baselines.mjs",
     "dev": "next dev --port 3090",
+    "prebuild": "node scripts/sync-handbook-baselines.mjs",
     "build": "next build",
+    "sync:handbook": "node scripts/sync-handbook-baselines.mjs",
     "start": "next start --port 3090",
     "lint": "next lint && prettier --check .",
     "lint:fix": "next lint --fix && prettier --write .",
@@ -12,8 +15,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "npx playwright test",
-    "test:visual": "npx playwright test e2e/visual.spec.ts"
+    "test:e2e": "npx playwright test"
   },
   "dependencies": {
     "lucide-react": "^0.460.0",

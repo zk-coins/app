@@ -3,7 +3,7 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>zkCoins App — Benutzerhandbuch</title>
+    <title>zkCoins App — Handbook &amp; Test-Doku</title>
     <style>
       :root {
         --bg: #0a0a0a;
@@ -20,9 +20,8 @@
         --ok: #4ade80;
         --warn: #fbbf24;
         --err: #f87171;
-        --content-width: 920px;
+        --content-width: 960px;
       }
-
       * {
         box-sizing: border-box;
       }
@@ -40,15 +39,16 @@
         line-height: 1.65;
         -webkit-font-smoothing: antialiased;
       }
-      .mono {
+      .mono,
+      code {
         font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
       }
 
       /* Layout */
       .wrap {
         display: grid;
-        grid-template-columns: 260px 1fr;
-        max-width: 1280px;
+        grid-template-columns: 280px 1fr;
+        max-width: 1320px;
         margin: 0 auto;
       }
       aside {
@@ -85,7 +85,7 @@
         display: flex;
         align-items: center;
         gap: 10px;
-        margin: 0 0 28px;
+        margin: 0 0 8px;
       }
       .brand .dot {
         width: 14px;
@@ -98,42 +98,46 @@
         font-weight: 700;
         letter-spacing: -0.01em;
       }
+      .brand-sub {
+        font-size: 11px;
+        color: var(--ink-4);
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        margin: 0 0 24px;
+      }
       .toc-label {
         font-size: 11px;
         font-weight: 600;
         letter-spacing: 0.08em;
         color: var(--ink-4);
         text-transform: uppercase;
-        margin: 18px 0 8px;
+        margin: 18px 0 6px;
       }
       nav.toc ol {
         list-style: none;
         padding: 0;
         margin: 0;
-        counter-reset: section;
       }
       nav.toc li {
         margin: 0;
       }
       nav.toc a {
         display: block;
-        padding: 4px 0;
-        font-size: 13px;
+        padding: 5px 0;
+        font-size: 12.5px;
         color: var(--ink-2);
         text-decoration: none;
-        line-height: 1.4;
+        line-height: 1.45;
         transition: color 0.15s;
       }
       nav.toc a:hover {
         color: var(--bitcoin);
       }
-      nav.toc li.depth-2 a {
-        padding-left: 14px;
-        font-size: 12px;
-        color: var(--ink-3);
-      }
-      nav.toc li.depth-2 a:hover {
-        color: var(--bitcoin);
+      nav.toc .spec-num {
+        color: var(--ink-4);
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 10.5px;
+        margin-right: 8px;
       }
 
       /* Headings & prose */
@@ -144,26 +148,17 @@
         margin: 0 0 6px;
       }
       h2 {
-        font-size: 24px;
+        font-size: 22px;
         font-weight: 700;
         letter-spacing: -0.015em;
-        margin: 56px 0 6px;
-        scroll-margin-top: 20px;
-      }
-      h2::before {
-        content: counter(h2-counter) '.';
-        color: var(--bitcoin);
-        margin-right: 12px;
-        counter-increment: h2-counter;
+        margin: 0;
       }
       h3 {
-        font-size: 17px;
+        font-size: 16px;
         font-weight: 600;
-        margin: 36px 0 6px;
+        margin: 32px 0 6px;
         scroll-margin-top: 20px;
-      }
-      main {
-        counter-reset: h2-counter;
+        color: var(--ink);
       }
       p {
         margin: 0 0 14px;
@@ -172,7 +167,24 @@
       .lede {
         font-size: 18px;
         color: var(--ink-2);
-        max-width: 780px;
+        max-width: 800px;
+      }
+      a {
+        color: var(--bitcoin);
+        text-decoration: none;
+      }
+      a:hover {
+        text-decoration: underline;
+      }
+      strong {
+        color: var(--ink);
+      }
+      code {
+        font-size: 0.88em;
+        background: var(--surface-2);
+        padding: 2px 6px;
+        border-radius: 3px;
+        color: var(--bitcoin);
       }
       hr.sep {
         border: none;
@@ -184,23 +196,11 @@
         color: var(--ink-2);
         padding-left: 22px;
       }
-      ul li,
-      ol li {
+      li {
         margin: 4px 0;
       }
-      strong {
-        color: var(--ink);
-      }
-      code {
-        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
-        font-size: 0.9em;
-        background: var(--surface-2);
-        padding: 2px 6px;
-        border-radius: 3px;
-        color: var(--bitcoin);
-      }
 
-      /* Hero */
+      /* Hero + meta */
       .hero {
         padding: 16px 0 12px;
         border-bottom: 1px solid var(--line);
@@ -208,16 +208,13 @@
       .hero h1 {
         margin-bottom: 10px;
       }
-      .hero .lede {
-        margin-top: 0;
-        margin-bottom: 16px;
-      }
       .meta {
         display: flex;
         gap: 18px;
         font-size: 12px;
         color: var(--ink-3);
         flex-wrap: wrap;
+        margin-top: 14px;
       }
       .meta span {
         display: inline-flex;
@@ -228,13 +225,59 @@
         color: var(--ink);
       }
 
-      /* Tags */
-      .tag-row {
+      /* Spec section header */
+      .spec-head {
         display: flex;
-        gap: 8px;
-        flex-wrap: wrap;
-        margin: 6px 0 8px;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 24px;
+        margin: 64px 0 6px;
+        padding-bottom: 14px;
+        border-bottom: 2px solid var(--bitcoin);
+        scroll-margin-top: 20px;
       }
+      .spec-head .lhs h2 {
+        display: flex;
+        align-items: baseline;
+        gap: 14px;
+      }
+      .spec-head .num {
+        color: var(--bitcoin);
+        font-weight: 800;
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 26px;
+      }
+      .spec-head .file {
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 13px;
+        color: var(--ink-3);
+        margin-top: 6px;
+      }
+      .spec-head .rhs {
+        text-align: right;
+        font-size: 12px;
+        color: var(--ink-3);
+        line-height: 1.5;
+      }
+      .spec-head .rhs b {
+        color: var(--ink);
+      }
+      .spec-head .rhs .links {
+        margin-top: 4px;
+      }
+      .spec-head .rhs .links a {
+        font-size: 11px;
+        margin-left: 10px;
+      }
+
+      .spec-intro {
+        max-width: 800px;
+        color: var(--ink-2);
+        font-size: 15px;
+        margin: 18px 0 0;
+      }
+
+      /* Tag badges */
       .tag {
         display: inline-block;
         font-size: 10px;
@@ -245,6 +288,7 @@
         text-transform: uppercase;
         border: 1px solid var(--line-2);
         color: var(--ink-3);
+        margin-right: 6px;
       }
       .tag.mvp {
         color: var(--bitcoin);
@@ -254,110 +298,102 @@
         color: var(--warn);
         border-color: rgba(251, 191, 36, 0.4);
       }
-      .tag.planned {
-        color: var(--ink-4);
+      .tag.gap-closed {
+        color: var(--ok);
+        border-color: rgba(74, 222, 128, 0.4);
       }
 
-      /* Screen card grid */
-      .screens {
+      /* Test grid */
+      .tests {
         display: grid;
-        grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
-        gap: 28px;
+        grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
+        gap: 22px;
         margin: 28px 0 8px;
       }
-      .screens.cols-2 {
-        grid-template-columns: repeat(auto-fill, minmax(420px, 1fr));
+      .tests.cols-2 {
+        grid-template-columns: repeat(auto-fill, minmax(440px, 1fr));
       }
-      .screens.cols-1 {
-        grid-template-columns: 1fr;
-        max-width: 760px;
-      }
-      .screen {
+      .test {
         background: var(--surface);
         border: 1px solid var(--line);
         border-radius: 8px;
         overflow: hidden;
+        display: flex;
+        flex-direction: column;
       }
-      .screen .img {
+      .test .head {
+        padding: 12px 14px 10px;
+        border-bottom: 1px solid var(--line);
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 10px;
+      }
+      .test .head .name {
+        font-family: ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
+        font-size: 12px;
+        color: var(--bitcoin);
+        font-weight: 600;
+      }
+      .test .head .src {
+        font-size: 10px;
+        color: var(--ink-4);
+        white-space: nowrap;
+      }
+      .test .head .src a {
+        color: var(--ink-3);
+        font-size: 10px;
+      }
+      .test .img {
         display: block;
         background: #fff;
-        border-bottom: 1px solid var(--line);
-        position: relative;
       }
-      .screen .img img {
+      .test .img img {
         display: block;
         width: 100%;
         height: auto;
-        max-height: 480px;
+        max-height: 420px;
         object-fit: contain;
         background: #fff;
       }
-      .screen.dark .img,
-      .screen.dark .img img {
-        background: var(--bg);
-      }
-      .screen .cap {
-        padding: 14px 16px 16px;
-      }
-      .screen .cap .title {
-        font-size: 14px;
-        font-weight: 600;
-        color: var(--ink);
-        margin: 0 0 4px;
-      }
-      .screen .cap .desc {
-        font-size: 12.5px;
-        color: var(--ink-3);
-        line-height: 1.55;
-        margin: 0;
-      }
-      .screen .badge {
-        position: absolute;
-        top: 10px;
-        right: 10px;
-        background: rgba(0, 0, 0, 0.65);
-        color: #fff;
-        font-size: 10px;
-        font-weight: 600;
-        letter-spacing: 0.06em;
-        padding: 3px 8px;
-        border-radius: 3px;
-        text-transform: uppercase;
-        backdrop-filter: blur(4px);
-      }
-
-      /* Step list with numbers */
-      ol.flow {
-        list-style: none;
-        padding: 0;
-        margin: 16px 0 0;
-        counter-reset: step;
-      }
-      ol.flow li {
-        position: relative;
-        padding: 0 0 16px 36px;
-        counter-increment: step;
-      }
-      ol.flow li::before {
-        content: counter(step);
-        position: absolute;
-        left: 0;
-        top: 0;
-        width: 24px;
-        height: 24px;
-        border-radius: 50%;
-        background: var(--bitcoin);
-        color: var(--bg);
-        font-size: 12px;
-        font-weight: 700;
+      .test .img.no-shot {
+        background: var(--surface-2);
         display: flex;
         align-items: center;
         justify-content: center;
+        min-height: 180px;
+        padding: 32px 20px;
+        text-align: center;
       }
-      ol.flow li b {
-        display: block;
-        color: var(--ink);
-        margin-bottom: 2px;
+      .test .img.no-shot p {
+        margin: 0;
+        font-size: 12px;
+        color: var(--ink-4);
+        font-style: italic;
+      }
+      .test .desc {
+        padding: 12px 14px 14px;
+        font-size: 12.5px;
+        color: var(--ink-2);
+        line-height: 1.55;
+      }
+      .test .vp {
+        position: absolute;
+        top: 8px;
+        right: 8px;
+      }
+      .vp-tag {
+        display: inline-block;
+        background: rgba(0, 0, 0, 0.7);
+        color: #fff;
+        font-size: 9px;
+        font-weight: 600;
+        letter-spacing: 0.05em;
+        padding: 2px 6px;
+        border-radius: 2px;
+        text-transform: uppercase;
+        backdrop-filter: blur(4px);
+        margin-left: 8px;
       }
 
       /* Callouts */
@@ -365,7 +401,7 @@
         border-left: 3px solid var(--bitcoin);
         background: rgba(247, 147, 26, 0.05);
         padding: 14px 18px;
-        margin: 22px 0;
+        margin: 24px 0;
         border-radius: 0 4px 4px 0;
       }
       .callout.warn {
@@ -385,7 +421,7 @@
         color: var(--ink);
       }
 
-      /* Coverage Table */
+      /* Table */
       table {
         width: 100%;
         border-collapse: collapse;
@@ -395,16 +431,15 @@
       th,
       td {
         text-align: left;
-        padding: 10px 14px;
+        padding: 9px 14px;
         border-bottom: 1px solid var(--line);
       }
       th {
-        font-size: 11px;
+        font-size: 10.5px;
         font-weight: 600;
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--ink-4);
-        background: var(--surface);
       }
       td {
         color: var(--ink-2);
@@ -412,1310 +447,1699 @@
       td .ok {
         color: var(--ok);
       }
-      td .err {
-        color: var(--err);
+
+      /* Spec section spacer */
+      section.spec {
+        margin-bottom: 72px;
       }
     </style>
   </head>
-
   <body>
     <div class="wrap">
       <aside>
         <div class="brand">
-          <span class="dot"></span><span class="name">zkCoins · User Guide</span>
+          <span class="dot"></span><span class="name">zkCoins · Handbook</span>
         </div>
+        <p class="brand-sub">User-Guide &amp; Test-Doku in einem</p>
 
-        <div class="toc-label">Inhalt</div>
+        <div class="toc-label">Übersicht</div>
         <nav class="toc">
           <ol>
-            <li><a href="#intro">Einführung</a></li>
-            <li><a href="#welcome">Willkommen &amp; Onboarding</a></li>
-            <li><a href="#create">Wallet erstellen</a></li>
-            <li><a href="#restore">Wallet wiederherstellen</a></li>
-            <li><a href="#unlock">Wallet entsperren</a></li>
-            <li><a href="#balance">Wallet-Übersicht &amp; Balance</a></li>
-            <li><a href="#send">Bitcoin senden</a></li>
-            <li><a href="#receive">Bitcoin empfangen</a></li>
-            <li><a href="#settings">Einstellungen &amp; Disconnect</a></li>
-            <li><a href="#shell">Navigation &amp; Netzwerk-Status</a></li>
-            <li><a href="#pwa">Als App installieren (PWA)</a></li>
-            <li><a href="#guards">Sicherheits-Routing</a></li>
-            <li><a href="#coverage">Test-Abdeckung</a></li>
+            <li><a href="#intro">Was ist das hier?</a></li>
+            <li><a href="#architecture">Test-Architektur</a></li>
+          </ol>
+        </nav>
+
+        <div class="toc-label">Specs (73 Tests · 70 Baselines)</div>
+        <nav class="toc">
+          <ol>
+            <li>
+              <a href="#spec-01"><span class="spec-num">01</span>Welcome &amp; Onboarding</a>
+            </li>
+            <li>
+              <a href="#spec-02"><span class="spec-num">02</span>Wallet erstellen — Seed</a>
+            </li>
+            <li>
+              <a href="#spec-03"><span class="spec-num">03</span>Wallet wiederherstellen</a>
+            </li>
+            <li>
+              <a href="#spec-04"><span class="spec-num">04</span>Entsperren — Passwort</a>
+            </li>
+            <li>
+              <a href="#spec-05"><span class="spec-num">05</span>Disconnect Wallet</a>
+            </li>
+            <li>
+              <a href="#spec-06"><span class="spec-num">06</span>Balance &amp; Wallet-Übersicht</a>
+            </li>
+            <li>
+              <a href="#spec-07"><span class="spec-num">07</span>Bitcoin senden (2-Phasen)</a>
+            </li>
+            <li>
+              <a href="#spec-08"><span class="spec-num">08</span>Bitcoin empfangen</a>
+            </li>
+            <li>
+              <a href="#spec-09"><span class="spec-num">09</span>Network-Badge &amp; AppShell</a>
+            </li>
+            <li>
+              <a href="#spec-10"><span class="spec-num">10</span>PWA-Installation</a>
+            </li>
+            <li>
+              <a href="#spec-11"><span class="spec-num">11</span>Route-Guards</a>
+            </li>
+          </ol>
+        </nav>
+
+        <div class="toc-label">Coverage</div>
+        <nav class="toc">
+          <ol>
+            <li><a href="#coverage">Abdeckung &amp; Triage</a></li>
           </ol>
         </nav>
       </aside>
 
       <main>
         <section class="hero" id="intro">
-          <h1>zkCoins App — Benutzerhandbuch</h1>
+          <h1>zkCoins App — Handbook</h1>
           <p class="lede">
-            Privater Bitcoin-Wallet mit
-            <a href="https://shieldedcsv.org" style="color: var(--bitcoin); text-decoration: none">
-              Shielded CSV
-            </a>
-            . Keine Adressen on-chain, keine Beträge, keine Verbindungen — nur
-            Zero-Knowledge-Beweise. Diese Doku führt dich durch jeden Screen, den die App heute hat,
-            exakt so wie er in der echten App aussieht.
+            User-Doku und Test-Doku in einem. Jedes Bild auf dieser Seite ist gleichzeitig eine
+            Visual-Regression-Baseline, die in CI bei jedem PR pixelgenau verglichen wird. Wenn das
+            Handbook aktuell aussieht, ist die Live-App es auch — und umgekehrt.
           </p>
           <div class="meta">
-            <span>🟢 <b>PRD:</b> zkcoins.app</span>
-            <span>🟡 <b>DEV:</b> dev.zkcoins.app</span>
-            <span>📦 <b>Image:</b> <code>zkcoin/app</code></span>
-            <span>📐 <b>Screens:</b> 70 / 10 MVP-Funktionen</span>
+            <span>🟢 <b>PRD:</b> <a href="https://zkcoins.app">zkcoins.app</a></span>
+            <span>🟡 <b>DEV:</b> <a href="https://dev.zkcoins.app">dev.zkcoins.app</a></span>
+            <span>📂 <b>Code:</b> <a href="https://github.com/zk-coins/app">zk-coins/app</a></span>
+            <span>🧪 <b>Specs:</b> 11 · 73 Tests · 70 Baselines</span>
           </div>
         </section>
 
-        <p style="margin-top: 32px">
-          Alle Screenshots stammen aus den automatisch generierten E2E-Baselines (Linux, Chromium,
-          1440×900 Desktop / 375×812 Mobile / 768×1024 Tablet). Jede Baseline wird bei jedem PR
-          pixelgenau verglichen — wenn dieser Guide aktuell ist, ist es die App auch.
-        </p>
-
-        <div class="callout info">
+        <section id="architecture" style="margin-top: 40px">
+          <h3 style="margin-top: 0">Single Source of Truth</h3>
           <p>
-            <b>DEV-Bundle vs. PRD-Bundle:</b> Die DEV-Variante (in diesem Guide gezeigt) hat
-            zusätzlich den <em>Apps</em>-Tab in der Bottom-Navigation und den
-            <em>Mint test BTC</em>-Faucet-Button auf der leeren Wallet — beides via Build-Time-Flags
-            gesteuert und im PRD-Build per Dead-Code-Elimination entfernt. Die 10 MVP-Funktionen
-            sind identisch.
+            Die kanonischen Baseline-Bilder liegen unter
+            <code>e2e/&lt;spec&gt;.spec.ts-snapshots/&lt;name&gt;-chromium-linux.png</code>. Sie
+            sind das einzige committed Asset und werden ausschließlich über den
+            <em>Regenerate Visual Baselines</em>-Workflow erneuert. Die Bilder, die dieses Handbook
+            zeigt, sind Hardlinks (<code>scripts/sync-handbook-baselines.mjs</code>) — kein zweites
+            Original, kein Drift möglich.
           </p>
-        </div>
-
-        <hr class="sep" />
-
-        <!-- 1. WELCOME -->
-        <section id="welcome">
-          <h2>Willkommen &amp; Onboarding</h2>
-          <p class="lede">
-            Der erste Screen. Hier entscheidest du, ob du eine neue Wallet erstellen oder eine
-            bestehende wiederherstellen willst.
-          </p>
-          <div class="tag-row">
-            <span class="tag">Always-on</span><span class="tag">Eintrittspunkt</span>
-          </div>
-
           <p>
-            Beim ersten Aufruf der App siehst du den Welcome-Screen. Zwei Aktionen stehen zur Wahl:
-            <strong>CREATE WALLET</strong> generiert lokal eine neue 12-Wort-Seed-Phrase und legt
-            damit eine frische zkCoins-Adresse an; <strong>Restore existing wallet</strong> erlaubt
-            das Importieren einer bestehenden Seed-Phrase. Beide Wege führen am Ende zur
-            passwortgeschützten Wallet.
+            Jeder Test in jedem Spec-File entspricht genau einem Screen (oder einer
+            Screen-Variante), den die App rendern kann. Wenn ein Test grün ist, ist die Variante
+            visuell wie spezifiziert. Wenn ein Test rot wird, ist entweder die UI gebrochen oder
+            absichtlich verändert — letzteres erfordert einen Baseline-Regen.
           </p>
-
-          <p>
-            <strong>Wichtig:</strong> Keine der Aktionen erzeugt eine On-Chain-Transaktion oder
-            kostet etwas. Die Wallet existiert anfangs nur auf deinem Gerät, verschlüsselt in
-            IndexedDB.
-          </p>
-
-          <h3>Drei Viewports — gleiches Layout</h3>
-          <p>
-            Die Welcome-Page ist responsiv. Desktop, Tablet und Mobile zeigen exakt denselben
-            Inhalt, nur das Layout passt sich an.
-          </p>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <span class="badge">Desktop · 1440×900</span
-                ><img src="screenshots/01-welcome-desktop.png" alt="Welcome Screen Desktop" />
-              </div>
-              <div class="cap">
-                <p class="title">Welcome — Desktop</p>
-                <p class="desc">
-                  Volle Breite mit Logo links oben, Hero-Headline, zwei Action-Buttons und
-                  Footer-Links.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <span class="badge">Tablet · 768×1024</span
-                ><img src="screenshots/01-welcome-tablet.png" alt="Welcome Screen Tablet" />
-              </div>
-              <div class="cap">
-                <p class="title">Welcome — Tablet</p>
-                <p class="desc">Identische Komposition, an Tablet-Auflösung angepasst.</p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <span class="badge">Mobile · 375×812</span
-                ><img src="screenshots/01-welcome-mobile.png" alt="Welcome Screen Mobile" />
-              </div>
-              <div class="cap">
-                <p class="title">Welcome — Mobile</p>
-                <p class="desc">
-                  Vertikal gestapelt, Bottom-Nav nicht sichtbar (kein Account vorhanden).
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <h3>Hover-Zustände der Action-Buttons</h3>
-          <p>
-            Beim Überfahren mit der Maus reagieren die beiden Aktionen unterschiedlich, weil sie
-            unterschiedliche Visual-Hierarchien haben: der primäre CTA wechselt nur dezent den
-            Farbton, der sekundäre Link bekommt erstmal überhaupt eine Akzentfarbe.
-          </p>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/01-welcome-create-hover.png" alt="CREATE WALLET hover" />
-              </div>
-              <div class="cap">
-                <p class="title">CREATE WALLET (Hover)</p>
-                <p class="desc">
-                  Der Button wechselt von <code>bg-bitcoin</code> (#f7931a) zu
-                  <code>bg-bitcoin-hover</code> (#ffae40) — ein kaum sichtbarer Hue-Shift zu einem
-                  wärmeren Orange. Der „Restore"-Link bleibt unverändert grau.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/01-welcome-restore-hover.png" alt="Restore hover" />
-              </div>
-              <div class="cap">
-                <p class="title">Restore existing wallet (Hover)</p>
-                <p class="desc">
-                  Hier ist die Veränderung deutlich sichtbar: der Link wechselt von
-                  <code>text-ink2</code> (grau) zu <code>text-bitcoin</code> — die graue Schrift
-                  wird hell Bitcoin-Orange. Der CREATE-WALLET-Button bleibt im Default-Zustand.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <hr class="sep" />
-
-        <!-- 2. CREATE -->
-        <section id="create">
-          <h2>Wallet erstellen mit Seed Phrase</h2>
-          <p class="lede">
-            Der primäre Onboarding-Pfad. 12 BIP-39-Wörter werden lokal generiert, du schreibst sie
-            ab, bestätigst und legst danach ein Verschlüsselungs-Passwort fest.
-          </p>
-          <div class="tag-row">
-            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
-          </div>
-
-          <p>
-            Nach Klick auf <strong>CREATE WALLET</strong> führt dich die App durch fünf Stationen:
-            Seed wird generiert → Seed wird angezeigt → du bestätigst, dass du sie aufgeschrieben
-            hast → du setzt ein Passwort → die Wallet öffnet sich.
-          </p>
-
-          <ol class="flow">
-            <li>
-              <b>Schritt 1 — Seed generieren</b>Die App ruft <code>generateMnemonic()</code> im
-              WASM-Modul auf. Das passiert clientseitig, kein Server sieht je deine Mnemonic.
-              Während der Generierung siehst du eine kurze Ladeanimation.
-            </li>
-            <li>
-              <b>Schritt 2 — Seed anzeigen</b>Die 12 Wörter werden zunächst hinter einem
-              Klick-Overlay versteckt — das schützt vor versehentlichem Vorzeigen. Nach einem Tap
-              erscheinen sie nummeriert in einem Grid.
-            </li>
-            <li>
-              <b>Schritt 3 — Aufschreiben bestätigen</b>Du klickst „I've written it down" um zu
-              bestätigen, dass die Wörter sicher offline gespeichert sind.
-            </li>
-            <li>
-              <b>Schritt 4 — Passwort setzen</b>Du wählst ein lokales Verschlüsselungs-Passwort. Die
-              Mnemonic wird damit AES-256-GCM-verschlüsselt in IndexedDB abgelegt. Mindestens 8
-              Zeichen; identische Wiederholung Pflicht.
-            </li>
-            <li>
-              <b>Schritt 5 — Wallet öffnet sich</b>Du landest auf der Wallet-Screen mit Balance 0
-              und deiner ersten <code>{8hex}@zkcoins.app</code>-Adresse.
-            </li>
-          </ol>
-
-          <h3>Seed generieren &amp; anzeigen</h3>
-          <div class="screens">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/02-seed-generating.png" alt="Seed wird generiert" />
-              </div>
-              <div class="cap">
-                <p class="title">Generating mnemonic…</p>
-                <p class="desc">
-                  Kurzer Lade-State während die WASM-Library 128 Bit Entropie zieht und in BIP-39
-                  enkodiert.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/02-seed-reveal-hidden.png" alt="Seed versteckt" />
-              </div>
-              <div class="cap">
-                <p class="title">Seed versteckt (Tap to reveal)</p>
-                <p class="desc">
-                  Die 12 Wörter sind als unkenntliche Blöcke dargestellt — ein expliziter Klick ist
-                  nötig, um sie freizugeben.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/02-seed-reveal-shown.png" alt="Seed sichtbar" />
-              </div>
-              <div class="cap">
-                <p class="title">Seed sichtbar</p>
-                <p class="desc">
-                  12 BIP-39-Wörter im 3-Spalten-Grid, nummeriert. Schreibe sie ab — du wirst sie zur
-                  Wiederherstellung brauchen.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/02-seed-acknowledged.png" alt="Aufgeschrieben bestätigt" />
-              </div>
-              <div class="cap">
-                <p class="title">"I've written it down" geklickt</p>
-                <p class="desc">
-                  Der Bestätigungs-Button wechselt visuell, der „Continue"-Button wird freigegeben.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <div class="callout warn">
-            <p>
-              <b>Sicherheits-Hinweis:</b> Die Seed-Phrase ist
-              <strong>die einzige</strong> Sicherheits-Kopie deiner Wallet. Wenn du dein Gerät
-              verlierst und die 12 Wörter nicht hast, sind deine Coins für immer verloren. Es gibt
-              keinen Recovery-Service. Bewahre sie offline auf — Papier oder Metallplatte, nicht in
-              der Cloud.
-            </p>
-          </div>
-
-          <h3>Passwort setzen</h3>
-          <p>
-            Vier Zustände auf dem Passwort-Setup-Bildschirm — die App gibt sofortiges Feedback bei
-            Eingabefehlern.
-          </p>
-          <div class="screens">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/02-password-empty.png" alt="Passwort leer" />
-              </div>
-              <div class="cap">
-                <p class="title">Initial — leer</p>
-                <p class="desc">
-                  „Create wallet"-Button ist disabled bis beide Felder ausgefüllt und identisch
-                  sind.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/02-password-too-short.png" alt="Zu kurz" />
-              </div>
-              <div class="cap">
-                <p class="title">Zu kurz</p>
-                <p class="desc">
-                  Mindestens 8 Zeichen werden verlangt. Fehlertext erscheint live unter dem Feld.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/02-password-mismatch.png" alt="Mismatch" />
-              </div>
-              <div class="cap">
-                <p class="title">Mismatch</p>
-                <p class="desc">
-                  Die beiden Eingaben stimmen nicht überein. Fehlermeldung in Rot direkt unter dem
-                  Confirm-Feld.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/02-password-filled.png" alt="Filled valid" />
-              </div>
-              <div class="cap">
-                <p class="title">Gültig</p>
-                <p class="desc">Beide Felder OK — der Submit-Button wird Bitcoin-Orange aktiv.</p>
-              </div>
-            </div>
-          </div>
-
-          <h3>Wallet nach der Erstellung</h3>
-          <div class="screens cols-1">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/02-wallet-after-create.png" alt="Wallet nach Erstellung" />
-              </div>
-              <div class="cap">
-                <p class="title">Wallet — frisch erstellt, 0 sats</p>
-                <p class="desc">
-                  Du landest auf der Wallet-Screen. Sichtbar: Balance 0, deine eindeutige
-                  <code>@zkcoins.app</code>-Adresse (oben rechts), Action-Buttons Send/Receive,
-                  Username-Claim-Input (gated), Faucet-Button (DEV) und „No transactions yet".
-                  Bottom-Nav unten mit Wallet/Apps/Settings.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <hr class="sep" />
-
-        <!-- 3. RESTORE -->
-        <section id="restore">
-          <h2>Wallet wiederherstellen aus Seed Phrase</h2>
-          <p class="lede">
-            Der zweite Onboarding-Pfad. Du gibst eine bestehende 12-Wort-BIP-39-Mnemonic ein, setzt
-            ein neues lokales Passwort und kannst sofort weiterarbeiten.
-          </p>
-          <div class="tag-row">
-            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
-          </div>
-
-          <p>
-            Die App validiert die Eingabe in Echtzeit: Wortzahl prüfen, alle Wörter müssen aus dem
-            BIP-39-Wordlist stammen, Checksum muss aufgehen. Erst dann geht der „Continue"-Button
-            frei.
-          </p>
-
-          <h3>Eingabe der Seed-Phrase</h3>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/03-restore-entry-empty.png" alt="Empty entry" />
-              </div>
-              <div class="cap">
-                <p class="title">Leer — Initialzustand</p>
-                <p class="desc">
-                  Ein Textarea zum Einfügen, „Continue" disabled. Wörter durch Leerzeichen oder
-                  Zeilenumbruch getrennt.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/03-restore-input-wrong-count.png" alt="Wrong count" />
-              </div>
-              <div class="cap">
-                <p class="title">Falsche Anzahl Wörter</p>
-                <p class="desc">
-                  Nur 12-Wort-Mnemonics werden akzeptiert. Bei 11 oder 13 zeigt die App den Fehler
-                  unter dem Eingabefeld.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/03-restore-input-bad-bip39.png" alt="Bad BIP-39" />
-              </div>
-              <div class="cap">
-                <p class="title">Ungültiges BIP-39-Wort</p>
-                <p class="desc">
-                  Mindestens ein Wort ist nicht im BIP-39-Wordlist enthalten oder die Checksum
-                  stimmt nicht. Fehlermeldung in Rot.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/03-restore-input-typed-valid.png" alt="Valid" />
-              </div>
-              <div class="cap">
-                <p class="title">Gültige Mnemonic eingegeben</p>
-                <p class="desc">Wenn alles passt, wird „Continue" freigeschaltet.</p>
-              </div>
-            </div>
-          </div>
-
-          <h3>Neues Passwort für dieses Gerät</h3>
-          <p>
-            Das Passwort, das du jetzt setzt, gilt nur für die lokale Verschlüsselung auf
-            <em>diesem</em> Gerät. Es ist nicht in der Seed-Phrase enthalten und wird nirgendwo
-            synchronisiert.
-          </p>
-          <div class="screens">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/03-restore-password-empty.png" alt="Password empty" />
-              </div>
-              <div class="cap">
-                <p class="title">Leer</p>
-                <p class="desc">
-                  Identisch zum Create-Flow: Mindestens 8 Zeichen, beide Felder müssen
-                  übereinstimmen.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/03-restore-password-too-short.png" alt="Too short" />
-              </div>
-              <div class="cap">
-                <p class="title">Zu kurz</p>
-                <p class="desc">Sofortiges Feedback bei &lt; 8 Zeichen.</p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/03-restore-password-mismatch.png" alt="Mismatch" />
-              </div>
-              <div class="cap">
-                <p class="title">Mismatch</p>
-                <p class="desc">Confirm-Feld weicht ab.</p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/03-restore-password-filled.png" alt="Filled" />
-              </div>
-              <div class="cap">
-                <p class="title">Gültig — Submit aktiv</p>
-                <p class="desc">„Restore wallet" wird Bitcoin-Orange.</p>
-              </div>
-            </div>
-          </div>
-
-          <h3>Wallet nach Restore</h3>
-          <div class="screens cols-1">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/03-wallet-after-restore.png" alt="Wallet after restore" />
-              </div>
-              <div class="cap">
-                <p class="title">Wallet — wiederhergestellt</p>
-                <p class="desc">
-                  Identisch zur frisch erstellten Wallet, nur dass die Adresse aus der
-                  wiederhergestellten Mnemonic deterministisch abgeleitet wurde.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <hr class="sep" />
-
-        <!-- 4. UNLOCK -->
-        <section id="unlock">
-          <h2>Wallet entsperren mit Passwort</h2>
-          <p class="lede">
-            Bei jedem App-Start, wenn bereits eine Wallet auf dem Gerät liegt, fragt die App nach
-            dem lokalen Passwort, um die verschlüsselte Mnemonic zu öffnen.
-          </p>
-          <div class="tag-row">
-            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
-          </div>
-
-          <p>
-            Die Entschlüsselung läuft komplett lokal: das Passwort wird via PBKDF2 mit 600 000
-            Iterationen zu einem AES-Schlüssel abgeleitet, der die in IndexedDB liegende Mnemonic
-            öffnet. Bei falschem Passwort wirft AES-GCM einen Authentication-Tag-Mismatch — die App
-            zeigt das als „Wrong password" an.
-          </p>
-
-          <div class="screens">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/04-unlock-empty.png" alt="Unlock empty" />
-              </div>
-              <div class="cap">
-                <p class="title">Initial — Welcome back</p>
-                <p class="desc">
-                  Großer „Welcome back"-Header, Passwort-Feld, disabled „Unlock"-Button.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/04-unlock-typed.png" alt="Unlock typed" />
-              </div>
-              <div class="cap">
-                <p class="title">Passwort eingegeben</p>
-                <p class="desc">„Unlock"-Button wird aktiv, sobald das Feld nicht leer ist.</p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/04-unlock-wrong-error.png" alt="Wrong password" />
-              </div>
-              <div class="cap">
-                <p class="title">Falsches Passwort</p>
-                <p class="desc">
-                  Direkt unter dem Feld: rote Fehlermeldung. Kein Cooldown, kein Rate-Limit — die
-                  ganze Härte des Passworts bildet die Sicherheit.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/04-unlock-unlocking.png" alt="Unlocking" />
-              </div>
-              <div class="cap">
-                <p class="title">Unlocking…</p>
-                <p class="desc">
-                  Während PBKDF2 läuft (ca. 200–400 ms je Gerät), zeigt der Button den Lade-Spinner.
-                  Die Verzögerung ist beabsichtigt und macht Brute-Force teuer.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/04-unlock-success-wallet.png" alt="Unlocked wallet" />
-              </div>
-              <div class="cap">
-                <p class="title">Erfolgreich entsperrt</p>
-                <p class="desc">Du landest in der Wallet mit deinem aktuellen Stand.</p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <hr class="sep" />
-
-        <!-- 5. BALANCE -->
-        <section id="balance">
-          <h2>Wallet-Übersicht &amp; Balance</h2>
-          <p class="lede">
-            Der Haupt-Screen nach dem Login. Hier siehst du dein Guthaben, deine Adresse, deine
-            letzten Transaktionen — und kannst Send/Receive starten.
-          </p>
-          <div class="tag-row">
-            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
-          </div>
-
-          <p>
-            Der Balance-Wert wird alle 5 Sekunden über <code>GET /api/balance</code> mit dem Server
-            abgeglichen. Beträge werden in BTC und USD angezeigt; das Auge-Icon rechts vom Betrag
-            erlaubt Verbergen für Streaming-Sessions oder Bildschirmaufnahmen.
-          </p>
-
-          <h3>Zero-Balance &amp; Faucet (nur DEV)</h3>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img
-                  src="screenshots/06-balance-zero-faucet-visible.png"
-                  alt="Zero balance with faucet"
-                />
-              </div>
-              <div class="cap">
-                <p class="title">Wallet leer · Faucet sichtbar</p>
-                <p class="desc">
-                  Wenn die Balance 0 ist, ersetzt ein Banner die Tx-Liste. Auf DEV (Signet) zeigt es
-                  zusätzlich einen „Faucet"-Button, der 100 000 sats Test-BTC schickt. Auf Mainnet
-                  wird der Button automatisch versteckt.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/06-balance-faucet-minting.png" alt="Faucet minting" />
-              </div>
-              <div class="cap">
-                <p class="title">Faucet — Minting…</p>
-                <p class="desc">
-                  Nach Klick: der Button zeigt einen Lade-State während
-                  <code>POST /api/mint</code> die Test-Coins ausgibt. Sobald der Server bestätigt,
-                  fließt die Balance ins UI.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <h3>Gefundete Wallet — Desktop &amp; Mobile</h3>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/06-balance-funded-desktop.png" alt="Funded desktop" />
-              </div>
-              <div class="cap">
-                <p class="title">Funded — Desktop</p>
-                <p class="desc">
-                  Vollständig befüllt: Adress-Chip, Balance in BTC und USD, Send/Receive-CTAs,
-                  Username-Claim-Input (DEV/gated), Tx-Liste, Network-Activity-Chart, Footer-Links.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/06-balance-funded-mobile.png" alt="Funded mobile" />
-              </div>
-              <div class="cap">
-                <p class="title">Funded — Mobile</p>
-                <p class="desc">
-                  Vertikal gestapelt. Bottom-Nav unten. Sticky Header mit Adress-Chip.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <h3>Balance-Sichtbarkeit &amp; Adress-Kopieren</h3>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/06-balance-hidden.png" alt="Balance hidden" />
-              </div>
-              <div class="cap">
-                <p class="title">Balance versteckt</p>
-                <p class="desc">
-                  Klick auf das Auge-Icon ersetzt den Betrag durch „••••••" — ideal für
-                  Screensharing.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/06-balance-copied-feedback.png" alt="Address copied" />
-              </div>
-              <div class="cap">
-                <p class="title">Adresse kopiert</p>
-                <p class="desc">
-                  Klick auf den Adress-Chip kopiert die volle Adresse in die Zwischenablage und
-                  zeigt kurz ein „Copied"-Feedback.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <hr class="sep" />
-
-        <!-- 6. SEND -->
-        <section id="send">
-          <h2>Bitcoin senden (2-Phasen-Proof)</h2>
-          <p class="lede">
-            Der zentrale Vorgang: Coins an eine andere zkCoins-Adresse senden. Kryptografisch ein
-            zweiphasiger Schnorr-Signature + Commitment-Prozess; aus User-Sicht eine
-            Recipient-Amount-Confirm-Send-Sequenz.
-          </p>
-          <div class="tag-row">
-            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
-          </div>
-
-          <p>
-            Hinter den Kulissen passiert: <code>signSendRequest</code> erzeugt eine Schnorr-Signatur
-            über den Send-Request → <code>POST /api/send</code> reserviert die Output-Coins
-            serverseitig → der Client berechnet ein lokales Commitment
-            <code>Schnorr(hash(state || output_coins))</code> →
-            <code>POST /api/commit</code> bestätigt den Send. Bei Netzwerkfehlern wird das laufende
-            Commit in localStorage geparkt und beim nächsten App-Start automatisch nachgereicht (3
-            Versuche mit Exponential-Backoff).
-          </p>
-
-          <h3>Empfänger-Eingabe</h3>
-          <p>
-            Die App akzeptiert zwei Formate als Empfänger:
-            <strong>volle 64-Hex-Adresse</strong> (kanonisch) oder <strong>@username</strong> bzw.
-            <strong>$username</strong> (in DEV/gated, wird via
-            <code>/api/username/resolve</code> aufgelöst). Validierung passiert live beim Tippen.
-          </p>
-          <div class="screens">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-send-default.png" alt="Send default" />
-              </div>
-              <div class="cap">
-                <p class="title">Send — Initialzustand</p>
-                <p class="desc">
-                  Leeres Recipient-Feld mit Placeholder „Address or @username", leeres Amount-Feld,
-                  „Set MAX"-Link, disabled Submit.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-send-no-funds-banner.png" alt="No funds" />
-              </div>
-              <div class="cap">
-                <p class="title">Send ohne Guthaben</p>
-                <p class="desc">
-                  Wenn die Balance 0 ist: Top-Banner „Wallet is empty", Faucet-Hinweis (DEV),
-                  DFX-Link zum Coin-Kauf (DEV/gated).
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-recipient-valid-hex.png" alt="Valid hex" />
-              </div>
-              <div class="cap">
-                <p class="title">Empfänger — gültige Hex-Adresse</p>
-                <p class="desc">
-                  64-Hex-String akzeptiert, kein Resolve nötig, „Continue" wird freigegeben.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-recipient-valid-username.png" alt="Valid username" />
-              </div>
-              <div class="cap">
-                <p class="title">Empfänger — Username (DEV)</p>
-                <p class="desc">
-                  @user oder $user wird über die Server-API aufgelöst. Resolve passiert beim
-                  Continue, nicht beim Tippen.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <h3>Betrag-Eingabe</h3>
-          <div class="screens">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-amount-typed.png" alt="Amount typed" />
-              </div>
-              <div class="cap">
-                <p class="title">Gültiger Betrag</p>
-                <p class="desc">
-                  Numerische Eingabe in sats. Live-Feedback unter dem Feld zeigt den BTC- und
-                  USD-Gegenwert. „Continue" wird Bitcoin-Orange.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-amount-invalid-text.png" alt="Invalid text" />
-              </div>
-              <div class="cap">
-                <p class="title">Ungültiger Text</p>
-                <p class="desc">
-                  Buchstaben oder Sonderzeichen → sofortiges Feedback, „Continue" bleibt disabled.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-amount-insufficient.png" alt="Insufficient" />
-              </div>
-              <div class="cap">
-                <p class="title">Mehr als verfügbar</p>
-                <p class="desc">
-                  Wenn der Betrag deine Balance übersteigt, erscheint „Exceeds available balance".
-                  Der Submit bleibt blockiert.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-amount-set-max-clicked.png" alt="Set MAX" />
-              </div>
-              <div class="cap">
-                <p class="title">Set MAX angeklickt</p>
-                <p class="desc">
-                  „Set MAX" füllt das Feld mit deiner gesamten Balance — abzüglich der minimalen
-                  Server-Fee.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <h3>Bestätigungs-Dialog</h3>
-          <p>
-            Bevor der Send tatsächlich ausgelöst wird, muss du die Aktion in einem dedizierten
-            Confirm-Dialog absegnen. Der Dialog zeigt Empfänger, Betrag und Fee nochmal —
-            wichtigster Moment, sich nicht zu vertippen.
-          </p>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-confirm-dialog-desktop.png" alt="Confirm dialog desktop" />
-              </div>
-              <div class="cap">
-                <p class="title">Confirm — Desktop</p>
-                <p class="desc">
-                  Volles Confirm-Layout: Empfänger gehighlightet, Betrag gross, Fee transparent.
-                  Cancel + „Send now".
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-confirm-dialog-mobile.png" alt="Confirm dialog mobile" />
-              </div>
-              <div class="cap">
-                <p class="title">Confirm — Mobile</p>
-                <p class="desc">Bottom-Sheet-Variante, identische Informationen.</p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-confirm-cancel-back.png" alt="Cancel" />
-              </div>
-              <div class="cap">
-                <p class="title">Cancel → zurück zum Formular</p>
-                <p class="desc">
-                  Klick auf „Cancel" schliesst den Dialog ohne Aktion. Die Felder bleiben
-                  vorbefüllt.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/07-send-success.png" alt="Send success" />
-              </div>
-              <div class="cap">
-                <p class="title">Send erfolgreich</p>
-                <p class="desc">
-                  Nach erfolgreichem 2-Phasen-Commit zeigt die App den Proof-Identifier und einen
-                  Link zurück zur Wallet. Die Transaktion erscheint sofort in der lokalen Tx-Liste.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <hr class="sep" />
-
-        <!-- 7. RECEIVE -->
-        <section id="receive">
-          <h2>Bitcoin empfangen (Adresse + QR)</h2>
-          <p class="lede">
-            Wenn dir jemand Bitcoin schicken soll, gibst du ihm deine zkCoins-Adresse. Die App zeigt
-            sie als QR-Code und als Text — beides aus deinem Public Key abgeleitet.
-          </p>
-          <div class="tag-row">
-            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
-          </div>
-
-          <p>
-            Die Adresse hat das Format <code>{8-hex-prefix}@zkcoins.app</code> für die
-            UI-Darstellung. Senders sehen ausschließlich das Output, das sie an dich schicken —
-            keine Adresse, kein Betrag, keine Verbindung. Privatsphäre by design.
-          </p>
-
-          <p>
-            Die App rotiert nach jedem Receive automatisch zu einem frischen Public-Key — du musst
-            nichts manuell tun, um Receiver-Adressen pro Sender zu trennen.
-          </p>
-
-          <h3>Receive-Screen</h3>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/08-receive-default-desktop.png" alt="Receive desktop" />
-              </div>
-              <div class="cap">
-                <p class="title">Receive — Desktop</p>
-                <p class="desc">
-                  QR-Code mittig, Adresse darunter monospace, „Copy address"-Button,
-                  Privacy-Hinweis.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/08-receive-default-mobile.png" alt="Receive mobile" />
-              </div>
-              <div class="cap">
-                <p class="title">Receive — Mobile</p>
-                <p class="desc">
-                  Mobile-optimiert: QR groß, Adresse darunter, Copy-Button volle Breite.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/08-receive-after-copy.png" alt="Copied" />
-              </div>
-              <div class="cap">
-                <p class="title">Adresse kopiert</p>
-                <p class="desc">
-                  Nach Klick auf „Copy address" wechselt der Button zu „Copied" mit Checkmark — die
-                  volle Adresse liegt in der Zwischenablage.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/08-receive-back-to-wallet.png" alt="Back to wallet" />
-              </div>
-              <div class="cap">
-                <p class="title">„Back" zurück zur Wallet</p>
-                <p class="desc">
-                  Link oben links bringt dich zurück. Kein Verlust von Eingaben — die Receive-Page
-                  hat keinen Edit-State.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <hr class="sep" />
-
-        <!-- 8. SETTINGS / DISCONNECT -->
-        <section id="settings">
-          <h2>Einstellungen &amp; Disconnect</h2>
-          <p class="lede">
-            Wallet-Verwaltung. Hier siehst du Auth-Methode, Netzwerk, App-Version — und kannst die
-            Wallet vom Gerät trennen.
-          </p>
-          <div class="tag-row">
-            <span class="tag mvp">MVP · Disconnect</span
-            ><span class="tag mvp">MVP · Network Badge</span>
-          </div>
-
-          <p>
-            Erreicht über die Bottom-Navigation rechts (Settings-Icon) oder via Direkt-URL
-            <code>/settings</code>. Der Disconnect-Button löscht die verschlüsselte Wallet aus
-            IndexedDB und führt zurück zum Welcome-Screen.
-          </p>
-
-          <h3>Settings-Screen</h3>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/05-wallet-to-settings-nav.png" alt="Settings via nav" />
-              </div>
-              <div class="cap">
-                <p class="title">Settings via Bottom-Nav</p>
-                <p class="desc">
-                  Aus der Wallet auf das Settings-Icon klicken — Cliend-side Navigation, kein
-                  Reload.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/05-settings-desktop.png" alt="Settings desktop" />
-              </div>
-              <div class="cap">
-                <p class="title">Settings — Desktop</p>
-                <p class="desc">
-                  Header mit Network-Badge oben rechts. Sektionen: Account (Adresse + Auth-Methode),
-                  Preferences (planned Toggles disabled), Resources (Links). Disconnect-Button am
-                  Ende.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/05-settings-mobile.png" alt="Settings mobile" />
-              </div>
-              <div class="cap">
-                <p class="title">Settings — Mobile</p>
-                <p class="desc">Identische Information, vertikal gestapelt.</p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/05-settings-disconnect-hover.png" alt="Disconnect hover" />
-              </div>
-              <div class="cap">
-                <p class="title">Disconnect-Button (Hover)</p>
-                <p class="desc">
-                  Der Disconnect-Button hebt sich rot ab beim Hover — visueller Hinweis auf die
-                  Destruktivität der Aktion.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <h3>Disconnect-Bestätigung</h3>
-          <p>
-            Disconnect ist <strong>irreversibel</strong> auf diesem Gerät. Ohne Seed-Phrase kannst
-            du nichts wiederherstellen. Deshalb fragt die App noch einmal explizit nach.
-          </p>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/05-disconnect-confirm-dialog.png" alt="Confirm dialog" />
-              </div>
-              <div class="cap">
-                <p class="title">Confirm-Dialog (window.confirm)</p>
-                <p class="desc">
-                  Browser-natives „Disconnect this wallet? Make sure you have your seed phrase
-                  saved." mit OK/Cancel.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/05-disconnect-cancel-noop.png" alt="Cancel noop" />
-              </div>
-              <div class="cap">
-                <p class="title">Cancel — nichts passiert</p>
-                <p class="desc">
-                  Du landest unverändert auf der Settings-Seite. Wallet bleibt aktiv.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/05-post-disconnect-welcome.png" alt="Post disconnect" />
-              </div>
-              <div class="cap">
-                <p class="title">Nach „OK" — zurück zum Welcome</p>
-                <p class="desc">
-                  Die App löscht IndexedDB, resettet die Zustand-Stores und navigiert zur
-                  Welcome-Page. Ein neuer Onboarding-Pfad startet.
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <hr class="sep" />
-
-        <!-- 9. NAV / NETWORK -->
-        <section id="shell">
-          <h2>Navigation &amp; Netzwerk-Status</h2>
-          <p class="lede">
-            Die globale App-Shell — Bottom-Nav für die drei Hauptbereiche, Footer-Links zu
-            zusätzlichen Ressourcen, Network-Badge mit Live-Status.
-          </p>
-          <div class="tag-row"><span class="tag mvp">MVP · Network Badge</span></div>
-
-          <h3>Bottom-Navigation</h3>
-          <p>
-            Die Bottom-Nav ist auf allen Hauptseiten sichtbar (außer Onboarding und Sub-Pages wie
-            /send /receive). Der aktive Tab ist Bitcoin-Orange hervorgehoben.
-          </p>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img
-                  src="screenshots/09-shell-bottomnav-wallet-active.png"
-                  alt="Bottom nav wallet"
-                />
-              </div>
-              <div class="cap">
-                <p class="title">Wallet-Tab aktiv</p>
-                <p class="desc">
-                  Standardansicht: Wallet ist der Default-Tab. Apps-Tab und Settings-Tab sichtbar
-                  (Apps gated via DEV-Flag).
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img
-                  src="screenshots/09-shell-bottomnav-settings-active.png"
-                  alt="Bottom nav settings"
-                />
-              </div>
-              <div class="cap">
-                <p class="title">Settings-Tab aktiv</p>
-                <p class="desc">
-                  Beim Wechsel hebt sich der Settings-Tab ab. Client-side Routing — kein Vollreload.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <h3>Footer-Links</h3>
-          <p>
-            Zwei Layouts: eine kompakte Row-Variante unter der Wallet und ein Grid-Variant in den
-            Settings § Resources.
-          </p>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/09-shell-footerlinks-row.png" alt="Footer row" />
-              </div>
-              <div class="cap">
-                <p class="title">Footer — Row</p>
-                <p class="desc">
-                  Eine Reihe von Links: Docs, Network, Status, Privacy, X. Unter Wallet/Send/Receive
-                  sichtbar.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/09-shell-footerlinks-grid.png" alt="Footer grid" />
-              </div>
-              <div class="cap">
-                <p class="title">Footer — Grid (in Settings)</p>
-                <p class="desc">
-                  In den Settings als „Resources"-Sektion. Volle Breite, Grid-Layout für bessere
-                  Lesbarkeit.
-                </p>
-              </div>
-            </div>
-          </div>
-
-          <h3>Netzwerk-Badge</h3>
-          <p>
-            Das kleine Badge oben rechts in den Settings zeigt auf einen Blick, mit welchem Netz die
-            App verbunden ist — Mainnet, Signet, Regtest, oder Loading.
-          </p>
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/09-network-badge-signet.png" alt="Signet badge" />
-              </div>
-              <div class="cap">
-                <p class="title">Verbunden mit Signet (DEV)</p>
-                <p class="desc">
-                  DEV-Bundle: das Badge zeigt „signet" — der DEV-Server läuft gegen Bitcoin Signet.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/09-network-badge-loading.png" alt="Loading badge" />
-              </div>
-              <div class="cap">
-                <p class="title">Loading-State</p>
-                <p class="desc">
-                  Solange <code>/api/info</code> noch keine Antwort gegeben hat, zeigt das Badge
-                  einen neutralen Lade-State (kein farbiger Dot).
-                </p>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <hr class="sep" />
-
-        <!-- 10. PWA -->
-        <section id="pwa">
-          <h2>Als App installieren (PWA)</h2>
-          <p class="lede">
-            zkCoins läuft im Browser, kann aber als Progressive Web App installiert werden — eigenes
-            Icon, eigenes Fenster, schnellerer Start, Offline-Caching.
-          </p>
-          <div class="tag-row">
-            <span class="tag mvp">MVP</span><span class="tag">Always-on</span>
-          </div>
-
-          <p>
-            Je nach Browser/OS unterstützt die App drei Modi, die das <code>PwaPrompt</code>-Banner
-            automatisch erkennt:
-          </p>
-          <ul>
-            <li>
-              <strong>Native (Chrome, Edge, Android)</strong> — die App fängt das
-              <code>beforeinstallprompt</code>-Event ab und zeigt einen eigenen „Install"-Button.
-              Klick öffnet den nativen Install-Dialog des Browsers.
-            </li>
-            <li>
-              <strong>iOS Safari</strong> — kein deferred-Prompt-Event verfügbar. Statt eines
-              Buttons zeigt die App eine Schritt-für-Schritt-Anleitung mit dem Safari-Share-Icon.
-            </li>
-            <li>
-              <strong>Desktop ohne BIP-Event</strong> — Firefox, alte Chromium-Versionen etc.:
-              manuelles Fallback mit Hinweis auf das Install-Icon in der Adress-Leiste.
-            </li>
-          </ul>
-
-          <div class="screens cols-2">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/10-pwa-native-mode.png" alt="Native mode" />
-              </div>
-              <div class="cap">
-                <p class="title">Native — „Install"-Button sichtbar</p>
-                <p class="desc">
-                  Chrome/Edge/Android: Das Banner zeigt einen Bitcoin-Orange „Install"-Button. Klick
-                  → nativer Dialog des Browsers.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/10-pwa-native-installing.png" alt="Native installing" />
-              </div>
-              <div class="cap">
-                <p class="title">Native — „Installing…"</p>
-                <p class="desc">
-                  Während der Browser den Install-Dialog zeigt, wechselt der Button zu „Installing…"
-                  und wird disabled.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img"><img src="screenshots/10-pwa-ios-mode.png" alt="iOS mode" /></div>
-              <div class="cap">
-                <p class="title">iOS Safari — Share-Icon-Anleitung</p>
-                <p class="desc">
-                  „Tap the [Share] icon in Safari's toolbar, then 'Add to Home Screen'." — visueller
-                  Hinweis aufs Share-Icon inline.
-                </p>
-              </div>
-            </div>
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/10-pwa-manual-mode.png" alt="Manual mode" />
-              </div>
-              <div class="cap">
-                <p class="title">Manueller Fallback</p>
-                <p class="desc">
-                  „Click the install icon in your browser's address bar — keys stay on this device."
-                </p>
-              </div>
-            </div>
-          </div>
 
           <div class="callout info">
             <p>
-              <b>Schlüssel bleiben lokal:</b> PWA-Installation ändert nichts an der
-              Sicherheits-Architektur. Die Wallet liegt weiterhin AES-256-GCM-verschlüsselt in
-              IndexedDB der gleichen Origin — egal ob du die App im Browser-Tab oder als
-              installierte PWA öffnest.
+              <b>DEV- vs. PRD-Bundle:</b> die Suite läuft gegen <code>dev.zkcoins.app</code> (DEV),
+              weil nur dort der Faucet (<code>POST /api/mint</code>) verfügbar ist. Das DEV-Bundle
+              zeigt zusätzlich den Apps-Tab in der Bottom-Nav und den Faucet-Button im
+              Wallet-Empty-State — beides Build-Time-Flags, im PRD-Build per Dead-Code-Elimination
+              entfernt. Die 10 MVP-Funktionen sind in beiden Bundles identisch.
             </p>
           </div>
         </section>
 
         <hr class="sep" />
 
-        <!-- 11. ROUTE GUARDS -->
-        <section id="guards">
-          <h2>Sicherheits-Routing — was passiert ohne Wallet?</h2>
-          <p class="lede">
-            Wenn du eine geschützte Route direkt aufrufst (<code>/send</code>,
-            <code>/receive</code>, <code>/settings</code>) ohne aktive Wallet im Store, sichert die
-            App die Route ab und leitet dich kontrolliert weg.
-          </p>
-          <div class="tag-row"><span class="tag">Routing-Integrität</span></div>
-
-          <p>
-            Die Guards funktionieren clientseitig: 100 ms nach Mount prüft jede der drei Routen
-            <code>useWalletStore.getState().account</code>; wenn leer, dann
-            <code>router.replace('/')</code>. In der kurzen Übergangsphase zeigt die App einen
-            Redirect-Placeholder, statt einen Flash leerer Komponenten.
-          </p>
-
-          <div class="screens">
-            <div class="screen">
-              <div class="img">
-                <img src="screenshots/11-send-no-account-redirect.png" alt="Send redirect" />
+        <!-- SPEC 01 -->
+        <section id="spec-01" class="spec">
+          <div class="spec-head">
+            <div class="lhs">
+              <h2><span class="num">01</span>Welcome &amp; Onboarding</h2>
+              <div class="file">e2e/01-onboarding-welcome.spec.ts</div>
+            </div>
+            <div class="rhs">
+              <b>5 Tests · 5 Baselines</b>
+              <div class="links">
+                <a
+                  href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts"
+                  >Spec ↗</a
+                >
+                <a
+                  href="https://github.com/zk-coins/app/tree/develop/e2e/01-onboarding-welcome.spec.ts-snapshots"
+                  >Baselines ↗</a
+                >
               </div>
-              <div class="cap">
-                <p class="title">/send — kein Account</p>
-                <p class="desc">
-                  Wallet-Icon + „Redirecting to wallet…" als Placeholder. Nach 100 ms: client-side
-                  Redirect zu /.
+            </div>
+          </div>
+          <p class="spec-intro">
+            Der allererste Screen, den ein neuer User sieht. Zwei Wege gehen davon ab —
+            <em>CREATE WALLET</em> (Seed-Phrase generieren) und <em>Restore existing wallet</em>
+            (bestehende Mnemonic importieren). Die Spec deckt das Layout bei drei Viewports und die
+            beiden Hover-Zustände der CTAs ab.
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">welcome-desktop</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts#L24"
+                    >L24</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/01-welcome-desktop.png" alt="Welcome desktop" />
+              </div>
+              <div class="desc">
+                Welcome bei 1440×900. Hero-Logo, „Welcome to zkCoins"-Headline, drei
+                Feature-Bullets, CREATE-WALLET-Button, Restore-Link, Footer mit
+                Doku/API/Explorer/Blog/Status/GitHub/Network.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">welcome-mobile</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts#L33"
+                    >L33</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/01-welcome-mobile.png" alt="Welcome mobile" />
+              </div>
+              <div class="desc">
+                Welcome bei 375×812. Identische Komposition, vertikal gestapelt. Keine Bottom-Nav
+                (kein Account vorhanden).
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">welcome-tablet</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts#L40"
+                    >L40</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/01-welcome-tablet.png" alt="Welcome tablet" />
+              </div>
+              <div class="desc">
+                Welcome bei 768×1024. Zwischen Desktop und Mobile — bewahrt die Hero-Card-Geometrie.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">welcome-create-hover</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts#L47"
+                    >L47</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/01-welcome-create-hover.png" alt="Create hover" />
+              </div>
+              <div class="desc">
+                Hover auf CREATE WALLET — der Button wechselt von <code>bg-bitcoin</code> (#f7931a)
+                zu <code>bg-bitcoin-hover</code> (#ffae40), ein dezenter Hue-Shift. Restore-Link
+                bleibt grau.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">welcome-restore-hover</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts#L59"
+                    >L59</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/01-welcome-restore-hover.png" alt="Restore hover" />
+              </div>
+              <div class="desc">
+                Hover auf „Restore existing wallet" — der Link wechselt von
+                <code>text-ink2</code> (grau) zu <code>text-bitcoin</code> (Orange). Klar sichtbarer
+                Wechsel.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SPEC 02 -->
+        <section id="spec-02" class="spec">
+          <div class="spec-head">
+            <div class="lhs">
+              <h2><span class="num">02</span>Wallet erstellen — Seed Phrase</h2>
+              <div class="file">e2e/02-create-seed.spec.ts</div>
+            </div>
+            <div class="rhs">
+              <b>10 Tests · 9 Baselines</b>
+              <div class="links">
+                <a href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts"
+                  >Spec ↗</a
+                >
+                <a
+                  href="https://github.com/zk-coins/app/tree/develop/e2e/02-create-seed.spec.ts-snapshots"
+                  >Baselines ↗</a
+                >
+              </div>
+            </div>
+          </div>
+          <p class="spec-intro">
+            Der primäre Onboarding-Pfad. Vom WASM-generierten 12-Wort-Mnemonic über die Reveal-Stage
+            (versteckt → sichtbar → bestätigt) bis zur lokalen AES-256-GCM-Verschlüsselung mit einem
+            User-Passwort, das in PBKDF2 (600k Iterationen) den Schlüssel ableitet.
+            <span class="tag mvp">MVP</span>
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">seed-generating</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts#L38"
+                    >L38</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/02-seed-generating.png" alt="seed generating" />
+              </div>
+              <div class="desc">
+                Kurzer Lade-State während <code>generateMnemonic()</code> im WASM 128 Bit Entropie
+                zieht und BIP-39 enkodiert.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">seed-reveal-hidden</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts#L52"
+                    >L52</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/02-seed-reveal-hidden.png" alt="seed hidden" />
+              </div>
+              <div class="desc">
+                12 Wörter generiert, aber visuell verdeckt durch ein „Tap to reveal"-Overlay.
+                Schützt vor versehentlichem Vorzeigen.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">seed-reveal-shown</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts#L58"
+                    >L58</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/02-seed-reveal-shown.png" alt="seed shown" />
+              </div>
+              <div class="desc">
+                Wörter aufgedeckt. 12 BIP-39-Words im 3-Spalten-Grid, nummeriert. Der Test maskiert
+                den Grid-Inhalt für Pixel-Diff, weil die Mnemonic pro Run anders ist.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">seed-acknowledged</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts#L65"
+                    >L65</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/02-seed-acknowledged.png" alt="seed acknowledged" />
+              </div>
+              <div class="desc">
+                User hat „I've written it down" geklickt — der Bestätigungs-Button wechselt visuell,
+                „Continue" wird freigeschaltet.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">password-empty</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts#L73"
+                    >L73</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/02-password-empty.png" alt="password empty" />
+              </div>
+              <div class="desc">Passwort-Setup-Stage. Zwei leere Eingaben, Submit disabled.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">password-filled</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts#L84"
+                    >L84</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/02-password-filled.png" alt="password filled" />
+              </div>
+              <div class="desc">
+                Beide Felder OK, Mindestlänge erfüllt, Mismatch passt — „Create wallet" wird
+                Bitcoin-Orange aktiv.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">password-too-short</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts#L96"
+                    >L96</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/02-password-too-short.png" alt="password too short" />
+              </div>
+              <div class="desc">Live-Feedback bei &lt; 8 Zeichen. Submit bleibt disabled.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">password-mismatch</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts#L111"
+                    >L111</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/02-password-mismatch.png" alt="password mismatch" />
+              </div>
+              <div class="desc">
+                Confirm-Feld weicht ab → Fehlermeldung in Rot. Schützt vor Vertippen.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">wallet-after-create</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts#L133"
+                    >L133</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/02-wallet-after-create.png" alt="wallet after create" />
+              </div>
+              <div class="desc">
+                Frische Wallet mit Balance 0, eindeutiger <code>{8hex}@zkcoins.app</code>-Adresse,
+                Bottom-Nav, „No transactions yet".
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">back-from-reveal</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/02-create-seed.spec.ts#L149"
+                    >L149</a
+                  ></span
+                >
+              </div>
+              <div class="img no-shot">
+                <p>
+                  Funktionaler Test ohne Screenshot — bestätigt nur, dass der Back-Button von der
+                  Reveal-Stage zurück zur Welcome-Page navigiert.
                 </p>
               </div>
+              <div class="desc">
+                No-Shot: lediglich State-Validation, keine neue Screen-Variante.
+              </div>
             </div>
-            <div class="screen">
+          </div>
+        </section>
+
+        <!-- SPEC 03 -->
+        <section id="spec-03" class="spec">
+          <div class="spec-head">
+            <div class="lhs">
+              <h2><span class="num">03</span>Wallet wiederherstellen — Seed Phrase</h2>
+              <div class="file">e2e/03-restore-seed.spec.ts</div>
+            </div>
+            <div class="rhs">
+              <b>10 Tests · 9 Baselines</b>
+              <div class="links">
+                <a href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts"
+                  >Spec ↗</a
+                >
+                <a
+                  href="https://github.com/zk-coins/app/tree/develop/e2e/03-restore-seed.spec.ts-snapshots"
+                  >Baselines ↗</a
+                >
+              </div>
+            </div>
+          </div>
+          <p class="spec-intro">
+            Der zweite Onboarding-Pfad — eine bestehende 12-Wort-Mnemonic importieren.
+            Live-Validation prüft Wortzahl, BIP-39-Listenmitgliedschaft und Checksum, bevor
+            „Continue" freigegeben wird. Auch hier wird ein neues lokales Passwort gesetzt.
+            <span class="tag mvp">MVP</span>
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">restore-entry-empty</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts#L43"
+                    >L43</a
+                  ></span
+                >
+              </div>
               <div class="img">
-                <img src="screenshots/11-receive-no-account-redirect.png" alt="Receive redirect" />
+                <img src="screenshots/03-restore-entry-empty.png" alt="restore empty" />
               </div>
-              <div class="cap">
-                <p class="title">/receive — kein Account</p>
-                <p class="desc">Identische Placeholder-Variante. Auch hier 100-ms-Redirect.</p>
+              <div class="desc">
+                Initial: leere Textarea, Submit disabled. Wörter durch Leerzeichen oder
+                Zeilenumbruch trennen.
               </div>
             </div>
-            <div class="screen">
+            <div class="test">
+              <div class="head">
+                <span class="name">restore-input-typed-valid</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts#L50"
+                    >L50</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/03-restore-input-typed-valid.png" alt="restore valid" />
+              </div>
+              <div class="desc">Gültige Mnemonic eingegeben — Submit wird Bitcoin-Orange.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">restore-input-wrong-count</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts#L60"
+                    >L60</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/03-restore-input-wrong-count.png" alt="wrong count" />
+              </div>
+              <div class="desc">
+                11 oder 13 Wörter → Fehler. Nur 12-Wort-Mnemonics werden akzeptiert (BIP-39 mit 128
+                Bit Entropie).
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">restore-input-bad-bip39</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts#L68"
+                    >L68</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/03-restore-input-bad-bip39.png" alt="bad bip39" />
+              </div>
+              <div class="desc">
+                Mindestens ein Wort ist nicht im BIP-39-Wordlist oder die Checksum stimmt nicht.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">restore-password-empty</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts#L79"
+                    >L79</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/03-restore-password-empty.png" alt="restore pw empty" />
+              </div>
+              <div class="desc">
+                Passwort-Setup nach erfolgreicher Mnemonic-Validierung — identische Regeln wie beim
+                Create-Flow.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">restore-password-filled</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts#L89"
+                    >L89</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/03-restore-password-filled.png" alt="restore pw filled" />
+              </div>
+              <div class="desc">Beide Felder OK — „Restore wallet" wird aktiv.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">restore-password-too-short</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts#L101"
+                    >L101</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/03-restore-password-too-short.png" alt="restore pw short" />
+              </div>
+              <div class="desc">&lt; 8 Zeichen → Fehler.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">restore-password-mismatch</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts#L116"
+                    >L116</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/03-restore-password-mismatch.png" alt="restore pw mismatch" />
+              </div>
+              <div class="desc">Confirm-Feld weicht ab.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">wallet-after-restore</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts#L137"
+                    >L137</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/03-wallet-after-restore.png" alt="wallet after restore" />
+              </div>
+              <div class="desc">
+                Wallet wiederhergestellt. Adresse deterministisch aus der Mnemonic abgeleitet —
+                identisch zur ursprünglichen Wallet.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">back-from-input</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/03-restore-seed.spec.ts#L158"
+                    >L158</a
+                  ></span
+                >
+              </div>
+              <div class="img no-shot">
+                <p>
+                  Funktionaler Test ohne Screenshot — Back-Navigation von der Restore-Input-Stage
+                  zurück zur Welcome-Page.
+                </p>
+              </div>
+              <div class="desc">No-Shot: State-Test, keine neue Variante.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SPEC 04 -->
+        <section id="spec-04" class="spec">
+          <div class="spec-head">
+            <div class="lhs">
+              <h2><span class="num">04</span>Wallet entsperren — Passwort</h2>
+              <div class="file">e2e/04-unlock-password.spec.ts</div>
+            </div>
+            <div class="rhs">
+              <b>5 Tests · 5 Baselines</b>
+              <div class="links">
+                <a
+                  href="https://github.com/zk-coins/app/blob/develop/e2e/04-unlock-password.spec.ts"
+                  >Spec ↗</a
+                >
+                <a
+                  href="https://github.com/zk-coins/app/tree/develop/e2e/04-unlock-password.spec.ts-snapshots"
+                  >Baselines ↗</a
+                >
+              </div>
+            </div>
+          </div>
+          <p class="spec-intro">
+            Bei jedem App-Start mit bereits liegender verschlüsselter Wallet zeigt die App den
+            Unlock-Screen. PBKDF2 leitet aus dem Passwort einen AES-Schlüssel ab; AES-GCM wirft bei
+            falschem Passwort einen Authentication-Tag-Mismatch, was die App als „Wrong password"
+            anzeigt. Schließt das frühere MVP-Triage-Gap.
+            <span class="tag mvp">MVP</span>
+            <span class="tag gap-closed">Gap closed</span>
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">unlock-empty</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/04-unlock-password.spec.ts#L41"
+                    >L41</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/04-unlock-empty.png" alt="unlock empty" />
+              </div>
+              <div class="desc">
+                „Welcome back"-Hero, leeres Passwort-Feld, „Unlock"-Button disabled.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">unlock-typed</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/04-unlock-password.spec.ts#L50"
+                    >L50</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/04-unlock-typed.png" alt="unlock typed" />
+              </div>
+              <div class="desc">
+                Passwort eingegeben — „Unlock" wird aktiv. Kein Validation auf Länge etc.; die Härte
+                des Passworts ist die ganze Sicherheit.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">unlock-unlocking</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/04-unlock-password.spec.ts#L59"
+                    >L59</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/04-unlock-unlocking.png" alt="unlocking" />
+              </div>
+              <div class="desc">
+                Lade-State während PBKDF2 läuft (200–400 ms je nach Gerät). Die Verzögerung ist
+                beabsichtigt und macht Brute-Force teuer.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">unlock-wrong-error</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/04-unlock-password.spec.ts#L74"
+                    >L74</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/04-unlock-wrong-error.png" alt="wrong password" />
+              </div>
+              <div class="desc">
+                AES-GCM-Tag-Mismatch → rote Fehlermeldung direkt unter dem Feld. Kein Rate-Limit,
+                kein Cooldown.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">unlock-success-wallet</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/04-unlock-password.spec.ts#L84"
+                    >L84</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/04-unlock-success-wallet.png" alt="unlocked" />
+              </div>
+              <div class="desc">
+                Erfolgreich entsperrt — Wallet öffnet sich mit aktuellem Stand.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SPEC 05 -->
+        <section id="spec-05" class="spec">
+          <div class="spec-head">
+            <div class="lhs">
+              <h2><span class="num">05</span>Disconnect Wallet</h2>
+              <div class="file">e2e/05-disconnect.spec.ts</div>
+            </div>
+            <div class="rhs">
+              <b>7 Tests · 7 Baselines</b>
+              <div class="links">
+                <a href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts"
+                  >Spec ↗</a
+                >
+                <a
+                  href="https://github.com/zk-coins/app/tree/develop/e2e/05-disconnect.spec.ts-snapshots"
+                  >Baselines ↗</a
+                >
+              </div>
+            </div>
+          </div>
+          <p class="spec-intro">
+            Wallet vom Gerät trennen. <strong>Irreversibel</strong> ohne Seed-Phrase. Eine
+            Browser-Native <code>window.confirm</code>-Dialog dient als Last-Chance-Check. Nach OK
+            werden IndexedDB-Wallet, Credentials und Auth-State gelöscht.
+            <span class="tag mvp">MVP</span>
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">wallet-to-settings-nav</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts#L33"
+                    >L33</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/05-wallet-to-settings-nav.png" alt="settings nav" />
+              </div>
+              <div class="desc">
+                Von der Wallet auf das Settings-Icon der Bottom-Nav klicken — clientseitige
+                Navigation.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">settings-desktop</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts#L42"
+                    >L42</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/05-settings-desktop.png" alt="settings desktop" />
+              </div>
+              <div class="desc">
+                Settings bei 1440×900: Network-Badge oben, Account-Sektion mit Adresse +
+                Auth-Methode, Preferences (planned toggles disabled), Resources, Disconnect-Button.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">settings-mobile</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts#L49"
+                    >L49</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/05-settings-mobile.png" alt="settings mobile" />
+              </div>
+              <div class="desc">Settings bei 375×812 — vertikal gestapelt.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">settings-disconnect-hover</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts#L56"
+                    >L56</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/05-settings-disconnect-hover.png" alt="disconnect hover" />
+              </div>
+              <div class="desc">
+                Hover auf Disconnect — visueller Hinweis auf die Destruktivität (Rot-Akzent).
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">disconnect-confirm-dialog</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts#L67"
+                    >L67</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/05-disconnect-confirm-dialog.png" alt="confirm dialog" />
+              </div>
+              <div class="desc">
+                Browser-natives <code>confirm()</code>: „Disconnect this wallet? Make sure you have
+                your seed phrase saved." mit OK/Cancel.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">disconnect-cancel-noop</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts#L96"
+                    >L96</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/05-disconnect-cancel-noop.png" alt="cancel noop" />
+              </div>
+              <div class="desc">
+                Cancel → keine Aktion. Wallet bleibt aktiv, Settings unverändert.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">post-disconnect-welcome</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts#L85"
+                    >L85</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/05-post-disconnect-welcome.png" alt="post disconnect" />
+              </div>
+              <div class="desc">
+                OK → IndexedDB gewiped, Zustand-Stores reset, Welcome-Page. Neuer Onboarding-Pfad
+                beginnt.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SPEC 06 -->
+        <section id="spec-06" class="spec">
+          <div class="spec-head">
+            <div class="lhs">
+              <h2><span class="num">06</span>Balance &amp; Wallet-Übersicht</h2>
+              <div class="file">e2e/06-balance.spec.ts</div>
+            </div>
+            <div class="rhs">
+              <b>6 Tests · 6 Baselines</b>
+              <div class="links">
+                <a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts"
+                  >Spec ↗</a
+                >
+                <a
+                  href="https://github.com/zk-coins/app/tree/develop/e2e/06-balance.spec.ts-snapshots"
+                  >Baselines ↗</a
+                >
+              </div>
+            </div>
+          </div>
+          <p class="spec-intro">
+            Der Wallet-Hauptscreen nach dem Login. Balance via 5-Sekunden-Polling von
+            <code>GET /api/balance</code>. Eye-Toggle versteckt den Betrag für
+            Streaming/Screenshots. Auf der leeren Wallet erscheint im DEV-Bundle der Faucet-Button
+            für 100k Test-Sats.
+            <span class="tag mvp">MVP · View balance</span>
+            <span class="tag mvp">MVP · Tx history</span>
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">balance-funded-desktop</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L21"
+                    >L21</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/06-balance-funded-desktop.png" alt="funded desktop" />
+              </div>
+              <div class="desc">
+                Voll befüllte Wallet bei 1440×900: Balance in BTC + USD, Adress-Chip,
+                Send/Receive-CTAs, Username-Claim-Input (DEV), Tx-Liste, Network-Chart, Footer.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">balance-funded-mobile</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L30"
+                    >L30</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/06-balance-funded-mobile.png" alt="funded mobile" />
+              </div>
+              <div class="desc">
+                Funded Wallet bei 375×812 — vertikal gestapelt, Bottom-Nav unten.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">balance-hidden</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L37"
+                    >L37</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/06-balance-hidden.png" alt="balance hidden" />
+              </div>
+              <div class="desc">
+                Klick aufs Auge-Icon ersetzt Beträge durch „••••••" — ideal für Screensharing.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">balance-zero-faucet-visible</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L49"
+                    >L49</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/06-balance-zero-faucet-visible.png" alt="zero faucet" />
+              </div>
+              <div class="desc">
+                Balance 0 → „Wallet is empty"-Banner ersetzt die Tx-Liste. DEV/Signet: Faucet-Button
+                für 100 000 sats. Auf Mainnet automatisch versteckt.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">balance-faucet-minting</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L57"
+                    >L57</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/06-balance-faucet-minting.png" alt="faucet minting" />
+              </div>
+              <div class="desc">
+                Faucet geklickt — Button zeigt Lade-State während <code>POST /api/mint</code> die
+                Test-Coins ausgibt.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">balance-copied-feedback</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L72"
+                    >L72</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/06-balance-copied-feedback.png" alt="copied" />
+              </div>
+              <div class="desc">
+                Klick auf den Adress-Chip kopiert die volle Adresse + zeigt kurz „Copied"-Feedback.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SPEC 07 -->
+        <section id="spec-07" class="spec">
+          <div class="spec-head">
+            <div class="lhs">
+              <h2><span class="num">07</span>Bitcoin senden — 2-Phasen-Proof</h2>
+              <div class="file">e2e/07-send.spec.ts</div>
+            </div>
+            <div class="rhs">
+              <b>13 Tests · 12 Baselines</b>
+              <div class="links">
+                <a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts"
+                  >Spec ↗</a
+                >
+                <a href="https://github.com/zk-coins/app/tree/develop/e2e/07-send.spec.ts-snapshots"
+                  >Baselines ↗</a
+                >
+              </div>
+            </div>
+          </div>
+          <p class="spec-intro">
+            Die zentralste und komplexeste Spec. Echte Alice → Bob Transaktion:
+            <code>signSendRequest</code> erzeugt Schnorr-Signatur →
+            <code>POST /api/send</code> reserviert Output-Coins → Client berechnet Commitment
+            <code>Schnorr(hash(state || coins))</code> → <code>POST /api/commit</code>
+            bestätigt. Empfänger als 64-Hex oder via Username-Resolver.
+            <span class="tag mvp">MVP · Send</span>
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">send-default</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L56"
+                    >L56</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-send-default.png" alt="send default" />
+              </div>
+              <div class="desc">
+                Initial: leere Recipient + Amount, „Set MAX"-Link, disabled Submit. Placeholder
+                „Address or @username".
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">send-no-funds-banner</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L63"
+                    >L63</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-send-no-funds-banner.png" alt="no funds" />
+              </div>
+              <div class="desc">
+                Send bei Balance 0: Top-Banner „Wallet is empty", Faucet-Hinweis (DEV), DFX-Buy-Link
+                (DEV).
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">recipient-valid-hex</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L71"
+                    >L71</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-recipient-valid-hex.png" alt="valid hex" />
+              </div>
+              <div class="desc">64-Hex-String akzeptiert, kein Resolve nötig, „Continue" frei.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">recipient-valid-username</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L83"
+                    >L83</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-recipient-valid-username.png" alt="valid username" />
+              </div>
+              <div class="desc">
+                @user oder $user → wird via <code>/api/username/resolve</code> beim Continue
+                aufgelöst (DEV-gated).
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">amount-typed</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L92"
+                    >L92</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-amount-typed.png" alt="amount typed" />
+              </div>
+              <div class="desc">Gültige sats-Eingabe. Live BTC + USD Gegenwert.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">amount-set-max-clicked</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L104"
+                    >L104</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-amount-set-max-clicked.png" alt="set max" />
+              </div>
+              <div class="desc">
+                „Set MAX" füllt das Feld mit der vollen Balance abzüglich minimaler Fee.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">amount-invalid-text</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L118"
+                    >L118</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-amount-invalid-text.png" alt="amount invalid" />
+              </div>
+              <div class="desc">
+                Buchstaben/Sonderzeichen → sofortiger Fehler, Submit blockiert.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">amount-insufficient</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L131"
+                    >L131</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-amount-insufficient.png" alt="insufficient" />
+              </div>
+              <div class="desc">Mehr als Balance → „Exceeds available balance".</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">confirm-dialog-desktop</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L144"
+                    >L144</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-confirm-dialog-desktop.png" alt="confirm desktop" />
+              </div>
+              <div class="desc">
+                Bestätigungs-Dialog bei 1440×900. Empfänger + Betrag + Fee nochmal sichtbar. Cancel
+                + „Send now".
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">confirm-dialog-mobile</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L157"
+                    >L157</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-confirm-dialog-mobile.png" alt="confirm mobile" />
+              </div>
+              <div class="desc">Bottom-Sheet-Variante auf 375×812.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">confirm-cancel-back</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L170"
+                    >L170</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-confirm-cancel-back.png" alt="cancel back" />
+              </div>
+              <div class="desc">Cancel schließt Dialog, Formular bleibt vorbefüllt.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">send-success</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L193"
+                    >L193</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/07-send-success.png" alt="send success" />
+              </div>
+              <div class="desc">
+                Nach erfolgreichem 2-Phasen-Commit: Proof-ID + Link zurück zur Wallet. Tx-Row in der
+                lokalen Liste sofort sichtbar.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">recovering-banner</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L217"
+                    >L217</a
+                  ></span
+                >
+              </div>
+              <div class="img no-shot">
+                <p>
+                  Funktionaler Test ohne Screenshot — bestätigt, dass ein abgebrochener Commit beim
+                  nächsten App-Start automatisch nachgereicht wird (in-flight Recovery, 3 Versuche).
+                </p>
+              </div>
+              <div class="desc">No-Shot: in-flight Recovery-Logik, kein neuer Screen.</div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SPEC 08 -->
+        <section id="spec-08" class="spec">
+          <div class="spec-head">
+            <div class="lhs">
+              <h2><span class="num">08</span>Bitcoin empfangen</h2>
+              <div class="file">e2e/08-receive.spec.ts</div>
+            </div>
+            <div class="rhs">
+              <b>4 Tests · 4 Baselines</b>
+              <div class="links">
+                <a href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts"
+                  >Spec ↗</a
+                >
+                <a
+                  href="https://github.com/zk-coins/app/tree/develop/e2e/08-receive.spec.ts-snapshots"
+                  >Baselines ↗</a
+                >
+              </div>
+            </div>
+          </div>
+          <p class="spec-intro">
+            Die <code>{8hex}@zkcoins.app</code>-Adresse als QR + Text. Sender sehen ausschließlich
+            das Output, das sie an dich schicken — keine Adresse, kein Betrag, keine Verbindung.
+            Auto-Rotate nach jedem Receive ist als „planned" markiert.
+            <span class="tag mvp">MVP</span>
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">receive-default-desktop</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts#L29"
+                    >L29</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/08-receive-default-desktop.png" alt="receive desktop" />
+              </div>
+              <div class="desc">
+                QR-Code mittig, Adresse monospace darunter, „Copy address"-Button, Privacy-Hinweis.
+                Kein Bottom-Nav (zeigt sub-page).
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">receive-default-mobile</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts#L35"
+                    >L35</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/08-receive-default-mobile.png" alt="receive mobile" />
+              </div>
+              <div class="desc">Mobile-Layout: QR groß, Copy-Button volle Breite.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">receive-after-copy</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts#L41"
+                    >L41</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/08-receive-after-copy.png" alt="after copy" />
+              </div>
+              <div class="desc">
+                Nach „Copy address": Button wechselt zu „Copied" mit Checkmark, Adresse in
+                Zwischenablage.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">receive-back-to-wallet</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts#L50"
+                    >L50</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/08-receive-back-to-wallet.png" alt="back to wallet" />
+              </div>
+              <div class="desc">
+                „Back" zurück zur Wallet — kein State-Verlust, Receive-Page hat keinen Edit-State.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SPEC 09 -->
+        <section id="spec-09" class="spec">
+          <div class="spec-head">
+            <div class="lhs">
+              <h2><span class="num">09</span>Network-Badge &amp; AppShell</h2>
+              <div class="file">e2e/09-network-and-shell.spec.ts</div>
+            </div>
+            <div class="rhs">
+              <b>6 Tests · 6 Baselines</b>
+              <div class="links">
+                <a
+                  href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts"
+                  >Spec ↗</a
+                >
+                <a
+                  href="https://github.com/zk-coins/app/tree/develop/e2e/09-network-and-shell.spec.ts-snapshots"
+                  >Baselines ↗</a
+                >
+              </div>
+            </div>
+          </div>
+          <p class="spec-intro">
+            Globale App-Shell: Bottom-Nav für die drei Hauptbereiche, Footer-Links (Row + Grid),
+            Network-Badge mit Live-Status aus <code>/api/info</code>. Network-Badge ist eine
+            MVP-Funktion; die anderen Tests covern den umgebenden Chrome.
+            <span class="tag mvp">MVP · Network Badge</span>
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">shell-bottomnav-wallet-active</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L23"
+                    >L23</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/09-shell-bottomnav-wallet-active.png" alt="nav wallet" />
+              </div>
+              <div class="desc">
+                Wallet-Tab aktiv (Default). Apps-Tab sichtbar (DEV-gated), Settings-Tab inaktiv.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">shell-bottomnav-settings-active</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L32"
+                    >L32</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/09-shell-bottomnav-settings-active.png" alt="nav settings" />
+              </div>
+              <div class="desc">
+                Settings-Tab aktiv — Bitcoin-Orange-Highlight, clientseitige Route.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">shell-footerlinks-row</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L40"
+                    >L40</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/09-shell-footerlinks-row.png" alt="footer row" />
+              </div>
+              <div class="desc">
+                Row-Variante des Footer unter Wallet: Docs, API, Explorer, Blog, Status, GitHub,
+                Network.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">shell-footerlinks-grid</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L47"
+                    >L47</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/09-shell-footerlinks-grid.png" alt="footer grid" />
+              </div>
+              <div class="desc">
+                Grid-Variante als „Resources"-Sektion in Settings. Volle Breite, klarere Hierarchie.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">network-badge-signet</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L55"
+                    >L55</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/09-network-badge-signet.png" alt="badge signet" />
+              </div>
+              <div class="desc">
+                DEV verbunden mit Bitcoin Signet — „signet"-Label + farbiger Dot.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">network-badge-loading</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L64"
+                    >L64</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/09-network-badge-loading.png" alt="badge loading" />
+              </div>
+              <div class="desc">
+                Spec interceptet <code>/api/info</code> mit 8 s Delay → Loading-State des Badges
+                sichtbar.
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SPEC 10 -->
+        <section id="spec-10" class="spec">
+          <div class="spec-head">
+            <div class="lhs">
+              <h2><span class="num">10</span>PWA-Installation</h2>
+              <div class="file">e2e/10-pwa.spec.ts</div>
+            </div>
+            <div class="rhs">
+              <b>4 Tests · 4 Baselines</b>
+              <div class="links">
+                <a href="https://github.com/zk-coins/app/blob/develop/e2e/10-pwa.spec.ts">Spec ↗</a>
+                <a href="https://github.com/zk-coins/app/tree/develop/e2e/10-pwa.spec.ts-snapshots"
+                  >Baselines ↗</a
+                >
+              </div>
+            </div>
+          </div>
+          <p class="spec-intro">
+            <code>PwaPrompt</code> deckt drei Detection-Modes ab — native (Chrome/Edge/Android), iOS
+            Safari (Share-Icon), manueller Desktop-Fallback — plus den Installing-Sub-State.
+            Schließt das zweite frühere MVP-Triage-Gap. Der native Browser-Install-Dialog selbst ist
+            nicht headless-exercisable und bleibt ein dokumentierter Accept-Gap.
+            <span class="tag mvp">MVP</span>
+            <span class="tag gap-closed">Gap closed</span>
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">pwa-native-mode</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/10-pwa.spec.ts#L63"
+                    >L63</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/10-pwa-native-mode.png" alt="native mode" />
+              </div>
+              <div class="desc">
+                Synthetisches <code>beforeinstallprompt</code>-Event nach Login dispatcht → Banner
+                zeigt „Install"-Button. Klick öffnet den nativen Dialog.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">pwa-native-installing</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/10-pwa.spec.ts#L69"
+                    >L69</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/10-pwa-native-installing.png" alt="installing" />
+              </div>
+              <div class="desc">
+                Während <code>event.prompt()</code> mit 5 s Delay läuft, ist der Button
+                „Installing…" + disabled.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">pwa-ios-mode</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/10-pwa.spec.ts#L90"
+                    >L90</a
+                  ></span
+                >
+              </div>
+              <div class="img"><img src="screenshots/10-pwa-ios-mode.png" alt="ios mode" /></div>
+              <div class="desc">
+                UA als Safari iOS gesetzt → Share-Icon-Anleitung statt Button („Tap the [Share] icon
+                …").
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">pwa-manual-mode</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/10-pwa.spec.ts#L105"
+                    >L105</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/10-pwa-manual-mode.png" alt="manual mode" />
+              </div>
+              <div class="desc">
+                Default Chromium UA ohne BIP-Event → Adressleisten-Icon-Hint („Click the install
+                icon in your browser's address bar …").
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- SPEC 11 -->
+        <section id="spec-11" class="spec">
+          <div class="spec-head">
+            <div class="lhs">
+              <h2><span class="num">11</span>Route-Guards</h2>
+              <div class="file">e2e/11-cross-spec-redirects.spec.ts</div>
+            </div>
+            <div class="rhs">
+              <b>3 Tests · 3 Baselines</b>
+              <div class="links">
+                <a
+                  href="https://github.com/zk-coins/app/blob/develop/e2e/11-cross-spec-redirects.spec.ts"
+                  >Spec ↗</a
+                >
+                <a
+                  href="https://github.com/zk-coins/app/tree/develop/e2e/11-cross-spec-redirects.spec.ts-snapshots"
+                  >Baselines ↗</a
+                >
+              </div>
+            </div>
+          </div>
+          <p class="spec-intro">
+            Wenn der User <code>/send</code>, <code>/receive</code> oder <code>/settings</code>
+            direkt aufruft ohne aktive Wallet, prüft die App 100 ms nach Mount den Store und ruft
+            <code>router.replace('/')</code>. Die Spec stretcht das 100-ms-Timeout zu 30 s, um den
+            Placeholder zu baselinen.
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">send-no-account-redirect</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/11-cross-spec-redirects.spec.ts#L40"
+                    >L40</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/11-send-no-account-redirect.png" alt="send redirect" />
+              </div>
+              <div class="desc">
+                /send ohne Account: Wallet-Icon + „Redirecting to wallet…" Placeholder.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">receive-no-account-redirect</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/11-cross-spec-redirects.spec.ts#L46"
+                    >L46</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="screenshots/11-receive-no-account-redirect.png" alt="receive redirect" />
+              </div>
+              <div class="desc">/receive ohne Account: identischer Placeholder.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">settings-no-account-redirect</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/11-cross-spec-redirects.spec.ts#L52"
+                    >L52</a
+                  ></span
+                >
+              </div>
               <div class="img">
                 <img
                   src="screenshots/11-settings-no-account-redirect.png"
-                  alt="Settings redirect"
+                  alt="settings redirect"
                 />
               </div>
-              <div class="cap">
-                <p class="title">/settings — kein Account</p>
-                <p class="desc">
-                  Settings hat keine Redirect-Placeholder — die Conditional-Sektionen verschwinden
-                  einfach. Nach 100 ms erfolgt der Redirect zur Welcome-Page.
-                </p>
+              <div class="desc">
+                /settings ohne Account: Settings-Header bleibt, conditional Sektionen sind
+                versteckt.
               </div>
             </div>
           </div>
@@ -1723,68 +2147,71 @@
 
         <hr class="sep" />
 
-        <!-- 12. COVERAGE -->
+        <!-- COVERAGE -->
         <section id="coverage">
-          <h2>Test-Abdeckung &amp; Qualität</h2>
-          <p class="lede">
-            Jeder Screenshot in diesem Guide ist gleichzeitig eine Visual-Regression-Baseline. Wenn
-            dieser Guide aktuell ist, dann ist die App auch in CI grün.
+          <h2 style="margin-top: 48px">Abdeckung &amp; Triage</h2>
+          <p>
+            Jede der 10 MVP-Funktionen aus
+            <a href="https://github.com/zk-coins/app/blob/develop/README.md"
+              >README.md § Features</a
+            >
+            ist durch mindestens einen Test mit Visual-Baseline abgedeckt.
           </p>
 
           <table>
             <thead>
               <tr>
                 <th>MVP-Funktion</th>
-                <th>E2E-Spec</th>
+                <th>Spec</th>
                 <th>Tests</th>
                 <th>Baselines</th>
               </tr>
             </thead>
             <tbody>
               <tr>
-                <td>Wallet erstellen — Seed</td>
+                <td>Create wallet — seed</td>
                 <td><code>02-create-seed</code></td>
                 <td>10</td>
                 <td><span class="ok">9</span></td>
               </tr>
               <tr>
-                <td>Wallet wiederherstellen — Seed</td>
+                <td>Restore wallet — seed</td>
                 <td><code>03-restore-seed</code></td>
                 <td>10</td>
                 <td><span class="ok">9</span></td>
               </tr>
               <tr>
-                <td>Wallet entsperren — Passwort</td>
+                <td>Unlock wallet — password</td>
                 <td><code>04-unlock-password</code></td>
                 <td>5</td>
                 <td><span class="ok">5</span></td>
               </tr>
               <tr>
-                <td>Disconnect Wallet</td>
+                <td>Disconnect wallet</td>
                 <td><code>05-disconnect</code></td>
                 <td>7</td>
                 <td><span class="ok">7</span></td>
               </tr>
               <tr>
-                <td>Balance ansehen</td>
+                <td>View balance</td>
                 <td><code>06-balance</code></td>
                 <td>6</td>
                 <td><span class="ok">6</span></td>
               </tr>
               <tr>
-                <td>Tx-History anzeigen</td>
-                <td><code>07-send</code> (Post-Send-Rows)</td>
+                <td>Tx history</td>
+                <td><code>07-send</code> (Post-Send Rows)</td>
                 <td>—</td>
                 <td><span class="ok">in 12</span></td>
               </tr>
               <tr>
-                <td>Bitcoin senden (2-phase)</td>
+                <td>Send Bitcoin (2-phase)</td>
                 <td><code>07-send</code></td>
                 <td>13</td>
                 <td><span class="ok">12</span></td>
               </tr>
               <tr>
-                <td>Bitcoin empfangen (Adresse + QR)</td>
+                <td>Receive Bitcoin</td>
                 <td><code>08-receive</code></td>
                 <td>4</td>
                 <td><span class="ok">4</span></td>
@@ -1829,27 +2256,50 @@
           <h3>Unit-Coverage</h3>
           <p>
             Auf der MVP-Surface (<code>src/lib/**</code> + <code>src/stores/**</code>):
-            <strong>100 %</strong> Lines, Statements, Branches, Functions. CI failt bei jedem Drop.
+            <strong>100 % Lines · 100 % Statements · 100 % Functions · 100 % Branches</strong>. CI
+            failt bei jedem Drop.
           </p>
 
-          <h3>Integration in CI</h3>
-          <p>Vier required Branch-Protection-Checks auf <code>develop</code>:</p>
+          <h3>Required CI-Checks auf <code>develop</code></h3>
           <ul>
             <li><code>Lint &amp; Build</code></li>
             <li><code>Unit Tests</code></li>
             <li><code>Rust Crypto Tests</code></li>
-            <li><code>E2E Tests</code> — 73 Tests inkl. 70 Visual-Baseline-Vergleiche</li>
+            <li><code>E2E Tests</code> — alle 73 Tests inkl. 70 Visual-Baseline-Vergleiche</li>
           </ul>
+
+          <h3>Baselines-Regeneration</h3>
           <p>
-            Keine PR mergt rot. Wenn das UI sich ändert, wird die Baseline über den dedizierten
-            <em>Regenerate Visual Baselines</em>-Workflow neu generiert.
+            Wenn UI absichtlich verändert wird, regeneriert man die Baselines via
+            <code
+              >gh workflow run "Regenerate Visual Baselines" --ref develop -f branch=develop</code
+            >. Der Workflow öffnet einen Side-Branch-PR mit den neuen PNGs, der per
+            <code>gh pr merge --admin --squash</code> gemergt wird. Niemals Baseline-PNGs manuell
+            editieren. Vollständiger Plan in
+            <a href="https://github.com/zk-coins/app/blob/develop/e2e/README.md">e2e/README.md</a>.
           </p>
+
+          <h3>Triage-Gaps (explizit nicht abgedeckt)</h3>
+          <ul>
+            <li>
+              <strong>Passkey-Flows</strong> (gated) — funktional via
+              <code>webauthn.spec.ts</code> getestet, keine Visual-Baseline.
+            </li>
+            <li>
+              <strong>Network Activity Chart</strong> (keep) — simulierte Daten brechen Pixel-Diff,
+              kein dedizierter Test.
+            </li>
+            <li><strong>Nativer Browser-Install-Dialog</strong> — nicht headless exerzierbar.</li>
+            <li>
+              <strong>Dev-Routes</strong> (<code>/reset</code>, <code>/simulate</code>) — Dev-only.
+            </li>
+          </ul>
 
           <div class="callout">
             <p>
-              <b>Stand:</b> 2026-05-16. Vollständiger Plan und Implementierungs-Details in
-              <code>e2e/README.md</code>. Live unter
-              <a href="https://zkcoins.app" style="color: var(--bitcoin)">zkcoins.app</a>.
+              <b>Stand:</b> 2026-05-16. Live unter
+              <a href="https://zkcoins.app">zkcoins.app</a> (PRD) und
+              <a href="https://dev.zkcoins.app">dev.zkcoins.app</a> (DEV).
             </p>
           </div>
         </section>

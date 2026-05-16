@@ -21,3 +21,8 @@ coverage/
 # e2e/_global-setup.ts. They contain test-only secrets but should never
 # be committed.
 e2e/.fixtures/
+
+# Handbook screenshots are derived artifacts — `scripts/sync-handbook-baselines.mjs`
+# hardlinks them from e2e/*.spec.ts-snapshots/ at predev/prebuild time.
+# Keep the canonical baselines in e2e/ as the single source of truth.
+public/handbook/screenshots/
