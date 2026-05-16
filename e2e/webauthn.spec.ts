@@ -47,7 +47,7 @@ test.describe('WebAuthn Passkey', () => {
     });
     authenticatorId = result.authenticatorId;
 
-    await page.reload({ waitUntil: 'domcontentloaded' });
+    await page.reload({ waitUntil: 'networkidle' });
   });
 
   test.afterEach(async () => {

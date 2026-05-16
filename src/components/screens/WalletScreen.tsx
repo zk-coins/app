@@ -103,6 +103,7 @@ export function WalletScreen() {
           </h1>
           <button
             data-testid="balance-toggle-btn"
+            data-hidden={hidden || undefined}
             onClick={() => setHidden((h) => !h)}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-line2 text-ink3 transition-colors hover:border-ink2 hover:text-ink"
             aria-label={hidden ? 'Show balance' : 'Hide balance'}

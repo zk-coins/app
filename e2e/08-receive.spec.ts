@@ -8,10 +8,7 @@
  *   - Apps tab in BottomNav (hidden via showNav=false on receive page)
  *   - none of the WalletScreen gated UI — receive page is sparse.
  *
- * Locators: testid-based. The Back link is the only non-testid locator
- * left here — Receive renders it as the only top-bar link with text
- * "Back"; once i18n lands, give it a `data-testid="receive-back-link"`
- * and update the assertion.
+ * Locators: testid-based throughout.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -55,10 +52,7 @@ test.describe('Receive Bitcoin', () => {
   test('receive-back-to-wallet', async ({ page }) => {
     await setViewport(page, 'desktop');
     await goToReceive(page);
-    // i18n-todo: the Back link is the only link on the top bar with
-    // text "Back"; give it a testid in a follow-up so this stops being
-    // translation-sensitive.
-    await page.getByRole('link', { name: /^Back$/ }).click();
+    await page.getByTestId('receive-back-link').click();
     // The chip is the most reliable marker for WalletScreen.
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 10_000,

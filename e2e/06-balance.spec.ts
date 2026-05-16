@@ -47,10 +47,10 @@ test.describe('View balance', () => {
     // Hidden state shows the "••••" placeholder — the default mask
     // covers the balance-value testid wrapper, so this baseline
     // captures the surrounding chrome change (icon, BTC line, layout).
-    // After click the aria-label toggles between Show/Hide — assert
-    // the button is still present and reachable rather than pinning
-    // the localised aria text.
-    await expect(page.getByTestId('balance-toggle-btn')).toBeVisible();
+    // Assert the hidden flag flipped via `data-hidden`, which is the
+    // i18n-stable replacement for the previous `aria-label='Show balance'`
+    // role-based check.
+    await expect(page.getByTestId('balance-toggle-btn')).toHaveAttribute('data-hidden', 'true');
     await snap(page, '06-balance-hidden');
   });
 
