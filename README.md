@@ -351,7 +351,7 @@ The `pkg/` directory is committed to git (not gitignored) for Docker builds.
 docker build -t zkcoin/app .
 docker run -p 3090:3090 \
   -e NEXT_PUBLIC_API_URL=https://api.zkcoins.app \
-  -e NEXT_PUBLIC_EXPLORER_URL=https://explorer.zkcoins.app \
+  -e NEXT_PUBLIC_EXPLORER_URL=https://zkcoins.space \
   zkcoin/app
 ```
 
@@ -369,7 +369,7 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 ## Open Tasks
 
 - [ ] Account backup/restore
-- [ ] Explorer app (`explorer.zkcoins.app`)
+- [ ] Explorer app (`zkcoins.space`)
 - [ ] Wire up the three Settings toggles currently marked `planned` (Auto-lock, Auto-rotate, Tor)
 
 ## Related
