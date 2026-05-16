@@ -555,7 +555,7 @@
           </ol>
         </nav>
 
-        <div class="toc-label">Specs (73 Tests · 70 Baselines)</div>
+        <div class="toc-label">Specs (71 Tests · 68 Baselines)</div>
         <nav class="toc">
           <ol>
             <li>
@@ -614,7 +614,7 @@
             <span>🟢 <b>PRD:</b> <a href="https://zkcoins.app">zkcoins.app</a></span>
             <span>🟡 <b>DEV:</b> <a href="https://dev.zkcoins.app">dev.zkcoins.app</a></span>
             <span>📂 <b>Code:</b> <a href="https://github.com/zk-coins/app">zk-coins/app</a></span>
-            <span>🧪 <b>Specs:</b> 11 · 73 Tests · 70 Baselines</span>
+            <span>🧪 <b>Specs:</b> 11 · 71 Tests · 68 Baselines</span>
           </div>
         </section>
 
@@ -637,11 +637,11 @@
 
           <div class="callout info">
             <p>
-              <b>DEV- vs. PRD-Bundle:</b> die Suite läuft gegen <code>dev.zkcoins.app</code> (DEV),
-              weil nur dort der Faucet (<code>POST /api/mint</code>) verfügbar ist. Das DEV-Bundle
-              zeigt zusätzlich den Apps-Tab in der Bottom-Nav und den Faucet-Button im
-              Wallet-Empty-State — beides Build-Time-Flags, im PRD-Build per Dead-Code-Elimination
-              entfernt. Die 10 MVP-Funktionen sind in beiden Bundles identisch.
+              <b>DEV spiegelt PRD.</b> Beide Deployments bauen mit denselben
+              <code>NEXT_PUBLIC_ENABLE_*</code>-Defaults (alle aus). Dead-Code-Elimination strippt
+              jeden gated Pfad identisch. Was du in diesem Handbuch siehst, ist das, was auch live
+              ist — kein Feature im Screenshot versteckt sich in Produktion hinter einem Flag.
+              Feature-Flags gibt es nur lokal via <code>.env.local</code>.
             </p>
           </div>
         </section>
@@ -1505,7 +1505,7 @@
                 <div class="file">e2e/06-balance.spec.ts</div>
               </div>
               <div class="rhs">
-                <b>6 Tests · 6 Baselines</b>
+                <b>5 Tests · 5 Baselines</b>
                 <div class="links">
                   <a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts"
                     >Spec ↗</a
@@ -1521,8 +1521,8 @@
           <p class="spec-intro">
             Der Wallet-Hauptscreen nach dem Login. Balance via 5-Sekunden-Polling von
             <code>GET /api/balance</code>. Eye-Toggle versteckt den Betrag für
-            Streaming/Screenshots. Auf der leeren Wallet erscheint im DEV-Bundle der Faucet-Button
-            für 100k Test-Sats.
+            Streaming/Screenshots. Auf der leeren Wallet ersetzt das No-Funds-Banner die
+            Transaktionsliste.
             <span class="tag mvp">MVP · View balance</span>
             <span class="tag mvp">MVP · Tx history</span>
           </p>
@@ -1545,7 +1545,7 @@
               </div>
               <div class="desc">
                 Voll befüllte Wallet bei 1440×900: Balance in BTC + USD, Adress-Chip,
-                Send/Receive-CTAs, Username-Claim-Input (DEV), Tx-Liste, Network-Chart, Footer.
+                Send/Receive-CTAs, Tx-Liste, Network-Chart, Footer.
               </div>
             </div>
             <div class="test">
@@ -1582,42 +1582,22 @@
             </div>
             <div class="test">
               <div class="head">
-                <span class="name">balance-zero-faucet-visible</span
+                <span class="name">balance-zero-empty-banner</span
                 ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L49"
-                    >L49</a
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L48"
+                    >L48</a
                   ></span
                 >
               </div>
               <div class="img">
                 <img
-                  src="/handbook/screenshots/06-balance-zero-faucet-visible.png"
-                  alt="zero faucet"
+                  src="/handbook/screenshots/06-balance-zero-empty-banner.png"
+                  alt="zero empty banner"
                 />
               </div>
               <div class="desc">
-                Balance 0 → „Wallet is empty"-Banner ersetzt die Tx-Liste. DEV/Signet: Faucet-Button
-                für 100 000 sats. Auf Mainnet automatisch versteckt.
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">balance-faucet-minting</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L57"
-                    >L57</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img
-                  src="/handbook/screenshots/06-balance-faucet-minting.png"
-                  alt="faucet minting"
-                />
-              </div>
-              <div class="desc">
-                Faucet geklickt — Button zeigt Lade-State während <code>POST /api/mint</code> die
-                Test-Coins ausgibt.
+                Balance 0 → „Wallet is empty"-Banner ersetzt die Tx-Liste. Bob frisch geminted,
+                keine Balance.
               </div>
             </div>
             <div class="test">
@@ -1648,7 +1628,7 @@
                 <div class="file">e2e/07-send.spec.ts</div>
               </div>
               <div class="rhs">
-                <b>13 Tests · 12 Baselines</b>
+                <b>12 Tests · 11 Baselines</b>
                 <div class="links">
                   <a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts"
                     >Spec ↗</a
@@ -1665,8 +1645,8 @@
             Die zentralste und komplexeste Spec. Echte Alice → Bob Transaktion:
             <code>signSendRequest</code> erzeugt Schnorr-Signatur →
             <code>POST /api/send</code> reserviert Output-Coins → Client berechnet Commitment
-            <code>Schnorr(hash(state || coins))</code> → <code>POST /api/commit</code>
-            bestätigt. Empfänger als 64-Hex oder via Username-Resolver.
+            <code>Schnorr(hash(state || coins))</code> → <code>POST /api/commit</code> bestätigt.
+            Empfänger als 64-Hex-Adresse.
             <span class="tag mvp">MVP · Send</span>
           </p>
 
@@ -1685,7 +1665,7 @@
               </div>
               <div class="desc">
                 Initial: leere Recipient + Amount, „Set MAX"-Link, disabled Submit. Placeholder
-                „Address or @username".
+                „0x…".
               </div>
             </div>
             <div class="test">
@@ -1701,8 +1681,8 @@
                 <img src="/handbook/screenshots/07-send-no-funds-banner.png" alt="no funds" />
               </div>
               <div class="desc">
-                Send bei Balance 0: Top-Banner „Wallet is empty", Faucet-Hinweis (DEV), DFX-Buy-Link
-                (DEV).
+                Send bei Balance 0: Top-Banner „Wallet is empty". Get sats nur via Receive — Faucet-
+                und DFX-Links sind gated und nicht im Bundle.
               </div>
             </div>
             <div class="test">
@@ -1718,26 +1698,6 @@
                 <img src="/handbook/screenshots/07-recipient-valid-hex.png" alt="valid hex" />
               </div>
               <div class="desc">64-Hex-String akzeptiert, kein Resolve nötig, „Continue" frei.</div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">recipient-valid-username</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L83"
-                    >L83</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img
-                  src="/handbook/screenshots/07-recipient-valid-username.png"
-                  alt="valid username"
-                />
-              </div>
-              <div class="desc">
-                @user oder $user → wird via <code>/api/username/resolve</code> beim Continue
-                aufgelöst (DEV-gated).
-              </div>
             </div>
             <div class="test">
               <div class="head">
@@ -2041,7 +2001,8 @@
                 />
               </div>
               <div class="desc">
-                Wallet-Tab aktiv (Default). Apps-Tab sichtbar (DEV-gated), Settings-Tab inaktiv.
+                Wallet-Tab aktiv (Default). Settings-Tab inaktiv. Apps-Tab ist gated und nicht im
+                Bundle.
               </div>
             </div>
             <div class="test">
@@ -2383,20 +2344,20 @@
               <tr>
                 <td>View balance</td>
                 <td><code>06-balance</code></td>
-                <td>6</td>
-                <td><span class="ok">6</span></td>
+                <td>5</td>
+                <td><span class="ok">5</span></td>
               </tr>
               <tr>
                 <td>Tx history</td>
                 <td><code>07-send</code> (Post-Send Rows)</td>
                 <td>—</td>
-                <td><span class="ok">in 12</span></td>
+                <td><span class="ok">in 11</span></td>
               </tr>
               <tr>
                 <td>Send Bitcoin (2-phase)</td>
                 <td><code>07-send</code></td>
-                <td>13</td>
-                <td><span class="ok">12</span></td>
+                <td>12</td>
+                <td><span class="ok">11</span></td>
               </tr>
               <tr>
                 <td>Receive Bitcoin</td>
@@ -2418,8 +2379,8 @@
               </tr>
               <tr>
                 <td colspan="2"><strong>Σ MVP</strong></td>
-                <td><strong>65</strong></td>
-                <td><strong class="ok">62</strong></td>
+                <td><strong>63</strong></td>
+                <td><strong class="ok">60</strong></td>
               </tr>
               <tr>
                 <td>+ Welcome / Onboarding</td>
@@ -2435,8 +2396,8 @@
               </tr>
               <tr>
                 <td colspan="2"><strong>Σ gesamt</strong></td>
-                <td><strong>73</strong></td>
-                <td><strong class="ok">70</strong></td>
+                <td><strong>71</strong></td>
+                <td><strong class="ok">68</strong></td>
               </tr>
             </tbody>
           </table>
@@ -2453,7 +2414,7 @@
             <li><code>Lint &amp; Build</code></li>
             <li><code>Unit Tests</code></li>
             <li><code>Rust Crypto Tests</code></li>
-            <li><code>E2E Tests</code> — alle 73 Tests inkl. 70 Visual-Baseline-Vergleiche</li>
+            <li><code>E2E Tests</code> — alle 71 Tests inkl. 68 Visual-Baseline-Vergleiche</li>
           </ul>
 
           <h3>Baselines-Regeneration</h3>
