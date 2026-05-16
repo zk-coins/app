@@ -65,7 +65,7 @@ jobs:
         # `--update-snapshots=all` is mandatory because newer Playwright
         # parses the bare `--update-snapshots` as taking the next CLI arg
         # as its mode value (and would greedily consume the file pattern).
-        run: npx playwright test --project=chromium --update-snapshots=all e2e/0*.spec.ts
+        run: npx playwright test --project=chromium --update-snapshots=all e2e/0*.spec.ts e2e/1*.spec.ts
 
       - name: Commit, push to a side branch, open auto-merge PR
         env:
