@@ -8,6 +8,12 @@ const nextConfig = {
     };
     return config;
   },
+  // Serve the static user handbook (public/handbook/index.html) at the
+  // clean URL /handbook. The screenshots subfolder is reached normally
+  // via /handbook/screenshots/*.
+  async rewrites() {
+    return [{ source: '/handbook', destination: '/handbook/index.html' }];
+  },
 };
 
 module.exports = nextConfig;
