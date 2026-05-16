@@ -37,7 +37,7 @@ test.describe('View balance', () => {
   });
 
   test('balance-hidden', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await aliceLogin(page);
     await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
     await page.getByTestId('balance-toggle-btn').click();
@@ -46,7 +46,7 @@ test.describe('View balance', () => {
   });
 
   test('balance-zero-empty-banner', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await bobLogin(page);
     await expect(page.getByTestId('wallet-empty-banner')).toBeVisible({ timeout: 30_000 });
     // FEATURES.FAUCET is off in PRD-equivalent DEV — the faucet button
@@ -57,7 +57,7 @@ test.describe('View balance', () => {
   });
 
   test('balance-copied-feedback', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await aliceLogin(page);
     await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);

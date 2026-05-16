@@ -39,7 +39,7 @@ test.describe('Receive Bitcoin', () => {
   });
 
   test('receive-after-copy', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
     await goToReceive(page);
     await page.getByTestId('receive-copy-btn').click();
@@ -50,7 +50,7 @@ test.describe('Receive Bitcoin', () => {
   });
 
   test('receive-back-to-wallet', async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await goToReceive(page);
     await page.getByTestId('receive-back-link').click();
     // The chip is the most reliable marker for WalletScreen.
