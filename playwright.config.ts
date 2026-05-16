@@ -31,7 +31,8 @@ export default defineConfig({
   //   05-disconnect.spec.ts         (PR #22)
   //   06-balance.spec.ts            (PR #23)
   //   07-send.spec.ts               (PR #24)
-  testIgnore: process.env.E2E_REGENERATING === 'true' ? [] : ['08-receive.spec.ts'],
+  //   08-receive.spec.ts            (PR #25)
+  testIgnore: process.env.E2E_REGENERATING === 'true' ? [] : ['09-network-and-shell.spec.ts'],
   // Seed Alice + Bob once before any worker starts; remove the fixture
   // file afterwards. See e2e/_global-setup.ts and e2e/_global-teardown.ts.
   globalSetup: require.resolve('./e2e/_global-setup.ts'),
