@@ -32,7 +32,7 @@ const STRETCH_REDIRECT_TIMEOUT = `
 
 test.describe('Cross-route redirects — no account', () => {
   test.beforeEach(async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await clearWalletState(page);
     // Stretch the 100 ms `router.replace('/')` timer so the placeholder
     // remains stable for the screenshot.

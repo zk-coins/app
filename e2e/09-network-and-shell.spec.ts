@@ -18,7 +18,7 @@ import { snap, setViewport } from './_helpers/screenshot';
 
 test.describe('Network badge + AppShell', () => {
   test.beforeEach(async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
     await aliceLogin(page);
   });
 

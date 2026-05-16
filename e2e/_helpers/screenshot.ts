@@ -71,6 +71,9 @@ export const VIEWPORTS = {
   tablet: { width: 768, height: 1024 },
 } as const;
 
-export async function setViewport(page: Page, vp: keyof typeof VIEWPORTS): Promise<void> {
+export async function setViewport(
+  page: Page,
+  vp: keyof typeof VIEWPORTS = 'mobile',
+): Promise<void> {
   await page.setViewportSize(VIEWPORTS[vp]);
 }

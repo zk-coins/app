@@ -42,7 +42,7 @@ async function arriveAtUnlock(page: Page): Promise<void> {
 
 test.describe('Unlock wallet — password', () => {
   test.beforeEach(async ({ page }) => {
-    await setViewport(page, 'desktop');
+    await setViewport(page, 'mobile');
   });
 
   test('unlock-empty', async ({ page }) => {
