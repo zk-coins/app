@@ -25,13 +25,15 @@ import { snap, setViewport } from './_helpers/screenshot';
 
 const PASSWORD = 'TestPass123!';
 
-/** Walk Welcome → CREATE WALLET → OTHER LOGIN OPTIONS into SeedFlow. */
+/** Walk Welcome → CREATE WALLET → SeedFlow. Skips a PasskeyFlow intro
+ *  screen if FEATURES.PASSKEY is on (local dev only after issue #30). */
 async function enterSeedFlow(page: Page): Promise<void> {
   await page.goto('/');
   await page.getByTestId('onboarding-create-btn').click();
-  // DEV-bundle artefact: passkey-intro screen. Click through without
-  // taking a baseline (see § 8.0 (a) in e2e/README.md).
-  await page.getByTestId('passkey-other-options-btn').click();
+  const passkeySkip = page.getByTestId('passkey-other-options-btn');
+  if (await passkeySkip.isVisible({ timeout: 1500 }).catch(() => false)) {
+    await passkeySkip.click();
+  }
   await expect(page.getByTestId('seed-flow')).toBeVisible({ timeout: 15_000 });
 }
 
@@ -50,7 +52,10 @@ test.describe('Create wallet — seed phrase', () => {
     });
     await page.goto('/');
     await page.getByTestId('onboarding-create-btn').click();
-    await page.getByTestId('passkey-other-options-btn').click();
+    const passkeySkip = page.getByTestId('passkey-other-options-btn');
+    if (await passkeySkip.isVisible({ timeout: 1500 }).catch(() => false)) {
+      await passkeySkip.click();
+    }
     await expect(page.getByTestId('seed-generating')).toBeVisible({ timeout: 5_000 });
     await snap(page, '02-seed-generating');
   });
