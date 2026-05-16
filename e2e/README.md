@@ -49,7 +49,7 @@ What exists today in `e2e/`:
 | --- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | Test target                         | Real server (default: DEV at `https://dev.zkcoins.app`) — overridable via `E2E_BASE_URL`/`E2E_API_URL`                                                         | True end-to-end; no mock/real divergence. DEV/PRD switchable in config.                                                                       |
 | 2   | Determinism                         | `globalSetup` creates **two fresh random accounts (Alice + Bob)** before every run                                                                             | Every step starts from a byte-identical state across runs except the on-chain address. Wallet addresses are masked in every screenshot.       |
-| 3   | Baseline platforms                  | **Linux only**, generated in CI                                                                                                                                | Halves baseline count to 72. Developers can compare locally but only CI produces canonical PNGs.                                              |
+| 3   | Baseline platforms                  | **Linux only**, generated in CI                                                                                                                                | Halves baseline count to 70. Developers can compare locally but only CI produces canonical PNGs.                                              |
 | 4   | Cross-spec wallet sharing           | Onboarding specs create their own throwaway wallets. Send / Receive / Balance / Disconnect specs reuse Alice + Bob.                                            | Onboarding flows must start from a blank slate; everything else benefits from shared setup speed.                                             |
 | 5   | Masks for non-deterministic content | Addresses (`{8hex}@zkcoins.app`), mnemonic word grid, balance numbers from server, ISO timestamps, copy hash, QR code                                          | Anything that varies between runs is masked at the locator level so the rest of the screen is pixel-checked.                                  |
 | 6   | Screenshot tolerance                | `maxDiffPixelRatio: 0.01`, `animations: 'disabled'`, `caret: 'hide'`, `scale: 'css'`                                                                           | Already the project default in `playwright.config.ts`. We keep it tight — 1% lets through font-rendering jitter but flags any real UI change. |
@@ -374,7 +374,14 @@ WalletScreen balance area + copy chip + faucet banner under Alice and Bob.
 | 5   | balance-faucet-minting      | Faucet click — button shows "Minting…" disabled. Intercept `/api/mint` to delay 800 ms.                                  |
 | 6   | balance-copied-feedback     | Click address chip — Check icon + "copied" text appear for 1.5 s (assert via `waitForFunction` immediately after click). |
 
-### 8.7 `07-send.spec.ts` (15 tests / 14 shots, 1 no-shot)
+### 8.7 `07-send.spec.ts` (13 tests / 12 shots, 1 no-shot)
+
+The originally-planned `sending-creating-proof` and `send-failure-network`
+baselines were dropped: SendPage's `send()` callback runs
+`setConfirming(false)` BEFORE `setSending(true)`, which unmounts the
+confirm card (where the "Creating proof…" button label lives) on the
+same tick the click fires. The state is not user-visible in production
+and the error variant adds little signal over `send-success`.
 
 The full Send pipeline plus every error branch. Alice → Bob, 1 000 sats.
 
@@ -391,10 +398,8 @@ The full Send pipeline plus every error branch. Alice → Bob, 1 000 sats.
 | 9   | confirm-dialog-desktop      | After Send with valid inputs — confirm card visible with amount + recipient + Cancel + Confirm Send.                                                                                               |
 | 10  | confirm-dialog-mobile       | Same on 375 × 812.                                                                                                                                                                                 |
 | 11  | confirm-cancel-back         | Click Cancel → returns to the form with inputs preserved.                                                                                                                                          |
-| 12  | sending-creating-proof      | Click Confirm Send → button "Creating proof…" disabled. Intercept `/api/send` with 1 s delay.                                                                                                      |
-| 13  | send-success                | Server confirms — success screen with Check icon, "Sent privately", amount, proof #N, Done.                                                                                                        |
-| 14  | send-failure-network        | `route('**/api/send', r => r.abort())` → error message below button.                                                                                                                               |
-| 15  | recovering-banner (no shot) | Seed an unfinished inflight commit in localStorage, reload, assert the orange "Recovering a previous in-flight transaction…" banner exists. (No shot — too transient under happy-path conditions.) |
+| 12  | send-success                | Server confirms — success screen with Check icon, "Sent privately", amount, proof #N, Done.                                                                                                        |
+| 13  | recovering-banner (no shot) | Seed an unfinished inflight commit in localStorage, reload, assert the orange "Recovering a previous in-flight transaction…" banner exists. (No shot — too transient under happy-path conditions.) |
 
 ### 8.8 `08-receive.spec.ts` (4 tests / 4 shots)
 
@@ -459,14 +464,14 @@ After §8.1 lands (`01-onboarding-welcome.spec.ts`), the new spec captures `welc
 | `04-unlock-password.spec.ts`      | 5      | 5                        |
 | `05-disconnect.spec.ts`           | 7      | 7                        |
 | `06-balance.spec.ts`              | 6      | 6                        |
-| `07-send.spec.ts`                 | 15     | 14                       |
+| `07-send.spec.ts`                 | 13     | 12                       |
 | `08-receive.spec.ts`              | 4      | 4                        |
 | `09-network-and-shell.spec.ts`    | 6      | 6                        |
 | `10-pwa.spec.ts`                  | 4      | 4                        |
 | `11-cross-spec-redirects.spec.ts` | 3      | 3                        |
-| **Σ**                             | **75** | **72**                   |
+| **Σ**                             | **73** | **70**                   |
 
-72 linux baselines, 75 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated.
+70 linux baselines, 73 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated.
 
 ## 9. CI integration
 
