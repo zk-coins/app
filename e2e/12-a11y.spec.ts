@@ -9,10 +9,13 @@
  * `(rule id, route, reason)` tuple — different routes can independently
  * allow or disallow the same rule.
  *
- * The initial allowlist is populated with the violations the first CI
- * run surfaced against DEV. Per issue #68: "Fixes go in follow-up PRs,
- * one per route." When a follow-up lands and the route comes clean,
- * remove the corresponding entry below.
+ * The allowlist below mirrors the violations the spec surfaced on
+ * the first CI run against DEV. The same PR fixes them in the code
+ * (palette bump + `aria-hidden` on decorative indexes + QR `title`),
+ * but the spec runs against `dev.zkcoins.app` which only picks up
+ * the fix after this PR merges to `develop` and the deploy-dev
+ * workflow rolls. The follow-up PR linked in each `reason` empties
+ * the array once DEV is live.
  *
  * No screenshots, no visual baseline — these are purely functional
  * axe checks. The spec runs in the regular E2E job; the visual-baseline
@@ -33,36 +36,37 @@ const KNOWN_VIOLATIONS: Array<{ id: string; route: string; reason: string }> = [
     id: 'color-contrast',
     route: '/',
     reason:
-      'Wallet home (Alice) — muted ink2/ink3 text on dark surface falls below 4.5:1 on a handful of nodes. Tracked: follow-up issue.',
+      "Wallet home (Alice) — ink3@4.04:1 on dark surface. Fixed by this PR's ink3 palette bump; entry removed in the follow-up PR after the DEV deploy.",
   },
   {
     id: 'color-contrast',
     route: '/ (seed-reveal)',
     reason:
-      'Onboarding seed-reveal — muted helper text + revealed mnemonic cells. Tracked: follow-up issue.',
+      'Onboarding seed-reveal — ink3 helper text + ink4 mnemonic-index labels. Fixed by this PR (palette bump + aria-hidden on indexes); entry removed in the follow-up after the DEV deploy.',
   },
   {
     id: 'color-contrast',
     route: '/send',
     reason:
-      'Send page — placeholder text and the "BTC" suffix sit below 4.5:1 on the dark input surface. Tracked: follow-up issue.',
+      "Send page — ink3 back link, header, BTC suffix. Fixed by this PR's ink3 palette bump; entry removed in the follow-up after the DEV deploy.",
   },
   {
     id: 'color-contrast',
     route: '/receive',
-    reason: 'Receive page — same muted-text palette as wallet home. Tracked: follow-up issue.',
+    reason:
+      "Receive page — ink3 back link + header. Fixed by this PR's ink3 palette bump; entry removed in the follow-up after the DEV deploy.",
   },
   {
     id: 'svg-img-alt',
     route: '/receive',
     reason:
-      'QR code <svg> is rendered without an accessible name. Tracked: follow-up issue (add aria-label="Receive address QR code").',
+      'QR <svg> missing accessible name. Fixed by this PR (qrcode.react `title` prop); entry removed in the follow-up after the DEV deploy.',
   },
   {
     id: 'color-contrast',
     route: '/settings',
     reason:
-      'Settings page — section headers and the Disconnect button border/text fall below 4.5:1 on the dark surface. Tracked: follow-up issue.',
+      "Settings page — ink3 section headers + body text + address row. Fixed by this PR's ink3 palette bump; entry removed in the follow-up after the DEV deploy.",
   },
 ];
 
