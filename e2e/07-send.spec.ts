@@ -58,6 +58,11 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'mobile');
     await aliceGoToSend(page);
     await expect(page.getByTestId('send-submit-btn')).toBeDisabled();
+    // Available-balance block must be present and resolved (no loading state).
+    await expect(page.getByTestId('send-available')).toBeVisible();
+    await expect(page.getByTestId('send-available')).not.toHaveAttribute('data-loading', 'true', {
+      timeout: 30_000,
+    });
     await snap(page, '07-send-default');
   });
 
@@ -192,6 +197,9 @@ test.describe('Send Bitcoin', () => {
     await page.getByTestId('send-confirm-btn').click();
     await expect(page.getByTestId('send-success-heading')).toBeVisible({ timeout: 90_000 });
     await snap(page, '07-send-success');
+    // Done returns to wallet — exercises the only post-success button.
+    await page.getByTestId('send-done-btn').click();
+    await expect(page.getByTestId('wallet-send-btn')).toBeVisible({ timeout: 10_000 });
   });
 
   // Dropped: the err-banner state on /send is unreachable for the
