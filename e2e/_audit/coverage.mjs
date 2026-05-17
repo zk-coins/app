@@ -36,6 +36,11 @@ const MVP_EXEMPT_TESTIDS = new Set([
   // reliably catch them without artificially slowing WASM calls.
   'seed-creating-btn',
   'seed-import-restoring-btn',
+  // TODO(#74): remove after DEV redeploy + spec swap to getByTestId in
+  // 02-create-seed back-from-reveal and 03-restore-seed back-from-input.
+  // E2E runs against https://dev.zkcoins.app — the spec change cannot
+  // ship in the same PR as the App-side testid.
+  'onboarding-step-back-btn',
 ]);
 
 // Generic wrapper components are allowed to expose <button> without testid
@@ -43,7 +48,6 @@ const MVP_EXEMPT_TESTIDS = new Set([
 const MVP_EXEMPT_FILES = new Set([
   'src/components/PwaPrompt.tsx', // shared Dismiss-X across PWA variants
   'src/app/settings/page.tsx', // generic Toggle component
-  'src/components/onboarding/Onboarding.tsx', // contains MVP + PASSKEY buttons; see line-level allowlist
 ]);
 
 // Buttons sitting inside a `{FEATURES.X && (...)}` JSX block are dead-
@@ -54,6 +58,12 @@ const MVP_EXEMPT_FILES = new Set([
 const MVP_EXEMPT_BUTTON_SNIPPETS = [
   // WalletScreen username-claim button — FEATURES.USERNAMES gated.
   { file: 'src/components/screens/WalletScreen.tsx', snippet: 'api.claimUsername' },
+  // PasskeyFlow register button — FEATURES.PASSKEY gated, dead-stripped from PRD bundle.
+  { file: 'src/components/onboarding/Onboarding.tsx', snippet: 'onClick={register}' },
+  // PasskeyRestoreFlow authenticate button — FEATURES.PASSKEY gated, dead-stripped from PRD bundle.
+  // Pinned to the unique button label rather than `onClick={restore}`, which also appears on the
+  // SeedImport submit button (that one has its own `seed-import-submit-btn` testid).
+  { file: 'src/components/onboarding/Onboarding.tsx', snippet: 'Authenticate with passkey' },
 ];
 
 const args = new Set(process.argv.slice(2));

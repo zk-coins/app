@@ -31,6 +31,7 @@ function StepHeader({ onBack }: { onBack?: () => void }) {
       </div>
       {onBack && (
         <button
+          data-testid="onboarding-step-back-btn"
           onClick={onBack}
           className="inline-flex items-center gap-1.5 text-[13px] text-ink3 transition-colors hover:text-ink"
         >
