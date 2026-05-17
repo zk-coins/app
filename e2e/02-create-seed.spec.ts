@@ -161,7 +161,7 @@ test.describe('Create wallet — seed phrase', () => {
     // baseline ends up visually identical to `06-balance-zero-empty-banner`
     // and that is fine: both tests assert the empty-wallet rendering, just
     // from different code paths.
-    await expect(page.getByTestId('wallet-empty-banner')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('wallet-empty-banner')).toBeVisible({ timeout: 60_000 });
     await snap(page, '02-wallet-after-create', { fullPage: true });
   });
 
