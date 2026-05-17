@@ -178,3 +178,31 @@ export async function disconnect(page: Page): Promise<void> {
   // CTA is the most stable anchor that the onboarding screen is rendered.
   await expect(page.getByTestId('onboarding-create-btn')).toBeVisible({ timeout: 10_000 });
 }
+
+/**
+ * Block until WalletScreen's `useEffect(api.info, …)` has resolved and
+ * `networkName` is populated in the zustand store. Polling the store
+ * directly (rather than the DOM badge) eliminates the in-app-navigation
+ * race that previously required +30 s DOM-visibility timeouts: as soon
+ * as `api.info()` returns, any subsequent navigation that gates UI on
+ * `networkName !== ''` is deterministic — the badge renders on first
+ * paint of the target route.
+ *
+ * The store is exposed on `window.__useNetworkStore` by
+ * `src/stores/network.ts` precisely for this purpose.
+ */
+type NetworkStoreShim = {
+  getState: () => { networkName: string };
+};
+export async function waitForNetworkInfo(page: Page, timeout = 15_000): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const w = window as unknown as { __useNetworkStore?: NetworkStoreShim };
+          return w.__useNetworkStore?.getState().networkName ?? '';
+        }),
+      { timeout },
+    )
+    .not.toBe('');
+}
