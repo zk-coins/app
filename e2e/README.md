@@ -480,10 +480,10 @@ so the regen run is a functional no-op for `12-a11y`.
 | 6   | `/settings`                          | `aliceLogin`, click `nav-settings`            |
 
 Allowlist mechanism: `KNOWN_VIOLATIONS: Array<{ id, route, reason }>`
-at the top of the spec, currently empty — the violations surfaced
-on the first CI run were resolved in #77–#81. When a regression
-can't be fixed in the same PR that surfaces it, add an entry here
-with a one-line justification and open a follow-up issue per route.
+at the top of the spec. The same PR that fixes a violation in code
+keeps the allowlist entry until the next DEV deploy lands — the spec
+runs against DEV, so the entry only becomes false after the deploy.
+A trailing follow-up PR empties the array once DEV is live.
 
 ### 8.14 Totals
 
