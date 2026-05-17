@@ -315,7 +315,10 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
           >
             {mnemonic.map((word, i) => (
               <div key={i} className="flex items-center gap-2 rounded-sm bg-bg px-2.5 py-2">
-                <span className="mono w-4 text-right text-[10px] text-ink4 tabular-nums">
+                <span
+                  aria-hidden="true"
+                  className="mono w-4 text-right text-[10px] text-ink4 tabular-nums"
+                >
                   {i + 1}
                 </span>
                 <span
