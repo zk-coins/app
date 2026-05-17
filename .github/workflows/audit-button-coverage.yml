@@ -35,15 +35,15 @@ jobs:
         with:
           node-version: '22'
 
-      - name: Run audit (report-only — flip to --strict once backlog cleared)
+      - name: Run audit (strict — backlog cleared)
         id: audit
         run: |
           {
             echo 'report<<AUDIT_EOF'
-            node e2e/_audit/coverage.mjs --markdown --report-only
+            node e2e/_audit/coverage.mjs --markdown
             echo 'AUDIT_EOF'
           } >> "$GITHUB_OUTPUT"
-          node e2e/_audit/coverage.mjs --report-only
+          node e2e/_audit/coverage.mjs
 
       - name: Post sticky PR comment
         if: github.event_name == 'pull_request'
