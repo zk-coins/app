@@ -69,37 +69,49 @@ test.describe('Network badge + AppShell', () => {
     await snap(page, '09-network-badge-signet');
   });
 
-  test.fixme('network-badge-loading', async ({ page }) => {
-    // Marked fixme — the previous body captured the steady-state badge,
-    // not the loading state, because `aliceLogin`'s WalletScreen
-    // useEffect already populated `networkName` in the store before
-    // the route intercept could fire. The proper body needs to clear
-    // the store via `window.__useNetworkStore.setState({ networkName:
-    // '' })` after the route intercept is set:
+  test('network-badge-loading', async ({ page }) => {
+    // Capture the absent-badge loading state on Settings.
     //
-    //   await page.route('**/api/info', async (route) => {
-    //     await new Promise((r) => setTimeout(r, 8_000));
-    //     await route.continue();
-    //   });
-    //   await page.evaluate(() => {
-    //     (window as any).__useNetworkStore?.setState?.({ networkName: '' });
-    //   });
-    //   await page.getByTestId('nav-settings').click();
-    //   await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
-    //   await expect(page.getByTestId('settings-network-badge')).toHaveCount(0);
-    //   await snap(page, '09-network-badge-loading');
-    //
-    // The `window.__useNetworkStore` expose ships in this PR
-    // (`src/stores/network.ts`) but only takes effect on
-    // `dev.zkcoins.app` once this PR has merged to `develop` and the
-    // `Deploy DEV` workflow has run. Re-enable the test (drop the
-    // `.fixme`) in the follow-up PR after that deploy lands.
+    // `aliceLogin` mounts WalletScreen, whose `useEffect(api.info, …)`
+    // fires immediately and populates `networkName` in the store.
+    // Wait for that first roundtrip to settle BEFORE installing the
+    // route block — otherwise the in-flight response sneaks past the
+    // intercept and writes `networkName` back to its real value as
+    // soon as Settings has rendered, re-introducing the badge and
+    // turning `toHaveCount(0)` into a flake.
+    type StoreShim = {
+      getState: () => { networkName: string };
+      setState: (s: Record<string, unknown>) => void;
+    };
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const w = window as unknown as { __useNetworkStore?: StoreShim };
+            return w.__useNetworkStore?.getState().networkName ?? '';
+          }),
+        { timeout: 10_000 },
+      )
+      .not.toBe('');
+
+    // Block any further /api/info call from racing past us. The store
+    // is exposed on `window.__useNetworkStore` in `src/stores/network.ts`
+    // for this purpose.
     await page.route('**/api/info', async (route) => {
       await new Promise((r) => setTimeout(r, 8_000));
       await route.continue();
     });
+    await page.evaluate(() => {
+      const w = window as unknown as { __useNetworkStore?: StoreShim };
+      w.__useNetworkStore?.setState({ networkName: '' });
+    });
     await page.getByTestId('nav-settings').click();
     await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
+    // The whole point of this baseline is that the badge is NOT visible.
+    // If this assertion fails, the test is no longer capturing the
+    // loading state and the resulting baseline would silently match
+    // `network-badge-signet` again.
+    await expect(page.getByTestId('settings-network-badge')).toHaveCount(0);
     await snap(page, '09-network-badge-loading');
   });
 });

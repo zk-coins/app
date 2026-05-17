@@ -154,10 +154,14 @@ test.describe('Create wallet — seed phrase', () => {
       timeout: 30_000,
     });
     // Empty banner is the *correct* end state — this is a brand-new
-    // wallet, no faucet, balance is genuinely zero. The baseline ends
-    // up visually identical to `06-balance-zero-empty-banner` and
-    // that is fine: both tests assert the empty-wallet rendering, just
+    // wallet, no faucet, balance is genuinely zero. The banner renders
+    // only after the first /api/balance tick resolves with 0 (see
+    // WalletScreen's `balance === 0` guard), so wait for it explicitly
+    // before snap — otherwise the test races the polling tick. The
+    // baseline ends up visually identical to `06-balance-zero-empty-banner`
+    // and that is fine: both tests assert the empty-wallet rendering, just
     // from different code paths.
+    await expect(page.getByTestId('wallet-empty-banner')).toBeVisible({ timeout: 60_000 });
     await snap(page, '02-wallet-after-create', { fullPage: true });
   });
 

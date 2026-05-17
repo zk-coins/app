@@ -31,11 +31,19 @@ async function goToSend(page: Page): Promise<void> {
 /**
  * Wait for Alice's `/api/balance` polling tick to land so the in-store
  * balance reflects her on-chain funds. Without this, the Send-page
- * `handleConfirm` sees `account.balance === 0` and rejects every amount
- * with "Insufficient balance" — the confirm dialog never opens.
+ * `handleConfirm` sees `balance === null` (the post-#49 loading state)
+ * and rejects every amount with "Balance not loaded yet" — the confirm
+ * dialog never opens.
+ *
+ * Use the `data-loading` marker on `balance-amount-usd` rather than
+ * `wallet-empty-banner not visible`: the banner is also absent during
+ * the loading state (it only renders for `balance === 0`), so banner-
+ * absence is no longer a reliable funded-balance signal.
  */
 async function waitForAliceBalanceLoaded(page: Page): Promise<void> {
-  await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('balance-amount-usd')).not.toHaveAttribute('data-loading', 'true', {
+    timeout: 30_000,
+  });
 }
 
 /** Common Alice setup: log in, wait for balance, navigate to /send. */
@@ -49,6 +57,12 @@ test.describe('Send Bitcoin', () => {
   test('send-default', async ({ page }) => {
     await setViewport(page, 'mobile');
     await aliceGoToSend(page);
+    // Available balance is loaded (data-loading flips false once the
+    // /api/balance tick lands). Same source as the wallet-screen value;
+    // this is the only spec that asserts the send-page rendering of it.
+    await expect(page.getByTestId('send-available')).not.toHaveAttribute('data-loading', 'true', {
+      timeout: 10_000,
+    });
     await expect(page.getByTestId('send-submit-btn')).toBeDisabled();
     await snap(page, '07-send-default');
   });

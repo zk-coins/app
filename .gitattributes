@@ -1,0 +1,4 @@
+# Force git to treat these as text for diff/merge.
+*.mjs   text
+*.ts    text
+*.tsx   text

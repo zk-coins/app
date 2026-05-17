@@ -43,6 +43,32 @@ function defaultMasks(page: Page): Locator[] {
   ];
 }
 
+// Pin variable-content elements to a stable rendered width before snapshot.
+// Playwright's mask box is exactly the element's rendered width; without
+// this, a value like "$6.20" vs "$620.00" yields different mask widths and
+// the visual diff exceeds the tolerance. The pinned widths are conservative
+// upper bounds for realistic test states (faucet outputs, transaction
+// amounts, proof ids) and only affect snapshot rendering.
+const STABILIZE_CSS = `
+  [data-testid="balance-amount-usd"] { min-width: 280px; }
+  [data-testid="balance-amount-btc"] { display: inline-block; min-width: 220px; }
+  [data-testid="tx-row-amount"] { display: inline-block; min-width: 96px; text-align: right; }
+  [data-testid="proof-id"] { display: inline-block; min-width: 80px; }
+`;
+
+async function applyStabilizer(page: Page): Promise<void> {
+  await page.evaluate((css) => {
+    const id = '__e2e_stabilize__';
+    let style = document.getElementById(id) as HTMLStyleElement | null;
+    if (!style) {
+      style = document.createElement('style');
+      style.id = id;
+      document.head.appendChild(style);
+    }
+    style.textContent = css;
+  }, STABILIZE_CSS);
+}
+
 /**
  * Take a screenshot and compare against the baseline.
  *
@@ -60,6 +86,7 @@ function defaultMasks(page: Page): Locator[] {
 export async function snap(page: Page, name: string, opts: SnapOptions = {}): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
   await page.evaluate(() => document.fonts?.ready);
+  await applyStabilizer(page);
   const masks = [...defaultMasks(page), ...(opts.mask ?? [])];
   await expect(page).toHaveScreenshot(`${name}.png`, {
     fullPage: opts.fullPage ?? false,

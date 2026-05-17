@@ -56,6 +56,21 @@ describe('api.balance', () => {
     );
     expect(result.balance).toBe(42000);
   });
+
+  it('maps 404 (unknown address) to balance: 0 instead of throwing', async () => {
+    // The server returns HTTP 404 with `{balance: 0}` for addresses it
+    // has never seen. The client surfaces that as a clean 0 so callers
+    // (Onboarding, WalletScreen) can render the "Wallet is empty"
+    // state for brand-new wallets instead of staying in loading.
+    mockResponse({ balance: 0 }, 404);
+    const result = await api.balance('unknown-address');
+    expect(result.balance).toBe(0);
+  });
+
+  it('still throws on non-404 errors', async () => {
+    mockResponse({ error: 'server down' }, 500);
+    await expect(api.balance('any')).rejects.toThrow(/API error 500/);
+  });
 });
 
 describe('api.send', () => {

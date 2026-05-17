@@ -71,6 +71,7 @@ test.describe('PwaPrompt — native mode', () => {
 
   test('pwa-native-mode', async ({ page }) => {
     await dispatchBeforeInstallPrompt(page, 50);
+    await expect(page.getByTestId('pwa-prompt-native')).toBeVisible({ timeout: 5_000 });
     await expect(page.getByTestId('pwa-install-btn')).toBeVisible({ timeout: 5_000 });
     await snap(page, '10-pwa-native-mode', { fullPage: true });
   });
