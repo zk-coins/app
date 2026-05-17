@@ -15,20 +15,13 @@ COPY . .
 ENV NEXT_PUBLIC_API_URL=NEXT_PUBLIC_API_URL_PLACEHOLDER
 ENV NEXT_PUBLIC_EXPLORER_URL=NEXT_PUBLIC_EXPLORER_URL_PLACEHOLDER
 
-# Feature gates — inlined at build time, dead-code-eliminated when "false".
-# Code behind a disabled gate is removed from the production bundle, so it
-# cannot load, crash, or be exploited at runtime. Default off (fail-closed).
-ARG ENABLE_PASSKEY=false
-ARG ENABLE_FAUCET=false
-ARG ENABLE_USERNAMES=false
-ARG ENABLE_APPS_DIRECTORY=false
-ARG ENABLE_DEV_ROUTES=false
-ENV NEXT_PUBLIC_ENABLE_PASSKEY=$ENABLE_PASSKEY
-ENV NEXT_PUBLIC_ENABLE_FAUCET=$ENABLE_FAUCET
-ENV NEXT_PUBLIC_ENABLE_USERNAMES=$ENABLE_USERNAMES
-ENV NEXT_PUBLIC_ENABLE_APPS_DIRECTORY=$ENABLE_APPS_DIRECTORY
-ENV NEXT_PUBLIC_ENABLE_DEV_ROUTES=$ENABLE_DEV_ROUTES
-
+# Feature gates (`NEXT_PUBLIC_ENABLE_*`) are intentionally not declared here.
+# They are a local-developer convenience read from `.env.local` to preview
+# work-in-progress UI; the deployed image must not ship any gated branch.
+# Without an ENV in this stage, `process.env.NEXT_PUBLIC_ENABLE_*` is undefined
+# at build time, every `FEATURES.X` resolves to `false`, and Next.js DCE
+# strips the gated branches from the bundle. When a feature is ready to
+# ship, the gate is dropped from the code — never enabled via env var.
 RUN npm run build
 
 FROM base AS runner
