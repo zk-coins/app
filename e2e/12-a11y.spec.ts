@@ -9,10 +9,10 @@
  * `(rule id, route, reason)` tuple — different routes can independently
  * allow or disallow the same rule.
  *
- * The initial allowlist is populated with the violations the first CI
- * run surfaced against DEV. Per issue #68: "Fixes go in follow-up PRs,
- * one per route." When a follow-up lands and the route comes clean,
- * remove the corresponding entry below.
+ * The allowlist is currently empty: every violation the spec surfaced
+ * on the first CI run was fixed in the same follow-up PR (#77–#81).
+ * Future regressions land here as new entries with a linked follow-up
+ * issue per route.
  *
  * No screenshots, no visual baseline — these are purely functional
  * axe checks. The spec runs in the regular E2E job; the visual-baseline
@@ -28,43 +28,7 @@ import { aliceLogin } from './_helpers/fixtures';
 import { clearWalletState } from './_helpers/wallet';
 
 /** See file header for the allowlist policy. */
-const KNOWN_VIOLATIONS: Array<{ id: string; route: string; reason: string }> = [
-  {
-    id: 'color-contrast',
-    route: '/',
-    reason:
-      'Wallet home (Alice) — muted ink2/ink3 text on dark surface falls below 4.5:1 on a handful of nodes. Tracked: follow-up issue.',
-  },
-  {
-    id: 'color-contrast',
-    route: '/ (seed-reveal)',
-    reason:
-      'Onboarding seed-reveal — muted helper text + revealed mnemonic cells. Tracked: follow-up issue.',
-  },
-  {
-    id: 'color-contrast',
-    route: '/send',
-    reason:
-      'Send page — placeholder text and the "BTC" suffix sit below 4.5:1 on the dark input surface. Tracked: follow-up issue.',
-  },
-  {
-    id: 'color-contrast',
-    route: '/receive',
-    reason: 'Receive page — same muted-text palette as wallet home. Tracked: follow-up issue.',
-  },
-  {
-    id: 'svg-img-alt',
-    route: '/receive',
-    reason:
-      'QR code <svg> is rendered without an accessible name. Tracked: follow-up issue (add aria-label="Receive address QR code").',
-  },
-  {
-    id: 'color-contrast',
-    route: '/settings',
-    reason:
-      'Settings page — section headers and the Disconnect button border/text fall below 4.5:1 on the dark surface. Tracked: follow-up issue.',
-  },
-];
+const KNOWN_VIOLATIONS: Array<{ id: string; route: string; reason: string }> = [];
 
 const AXE_TAGS = ['wcag2a', 'wcag2aa'];
 const BLOCKING_IMPACTS = ['serious', 'critical'] as const;
