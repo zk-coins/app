@@ -14,6 +14,7 @@ const SHARED: LinkEntry[] = [{ label: 'GitHub', href: 'https://github.com/zk-coi
 const ADDONS: LinkEntry[] = [{ label: 'Network', href: '/network', internal: true }];
 
 const PRD_LINKS: LinkEntry[] = [
+  { label: 'About', href: 'https://zkcoins.info' },
   { label: 'Whitepaper', href: 'https://zkcoins.com' },
   { label: 'Docs', href: 'https://docs.zkcoins.app' },
   { label: 'API', href: 'https://github.com/DFXswiss/api' },
@@ -25,6 +26,7 @@ const PRD_LINKS: LinkEntry[] = [
 ];
 
 const DEV_LINKS: LinkEntry[] = [
+  { label: 'About', href: 'https://dev.zkcoins.info' },
   { label: 'Whitepaper', href: 'https://dev.zkcoins.com' },
   { label: 'Docs', href: 'https://dev-docs.zkcoins.app' },
   { label: 'API', href: 'https://github.com/DFXswiss/api' },

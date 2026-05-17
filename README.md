@@ -370,11 +370,24 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 
 ## Related
 
-| Repo                                                      | Purpose                                                      |
-| --------------------------------------------------------- | ------------------------------------------------------------ |
-| [zk-coins/server](https://github.com/zk-coins/server)     | Rust backend (API, ZK proofs, Bitcoin scanner)               |
-| [zk-coins/docs](https://github.com/zk-coins/docs)         | Documentation ([docs.zkcoins.app](https://docs.zkcoins.app)) |
-| [zk-coins/research](https://github.com/zk-coins/research) | Protocol research, upstream repos, paper PDF                 |
+### Code repos
+
+| Repo                                                              | Purpose                                                                |
+| ----------------------------------------------------------------- | ---------------------------------------------------------------------- |
+| [zk-coins/server](https://github.com/zk-coins/server)             | Rust backend (API, ZK proofs, Bitcoin scanner)                         |
+| [zk-coins/docs](https://github.com/zk-coins/docs)                 | Documentation ([docs.zkcoins.app](https://docs.zkcoins.app))           |
+| [zk-coins/landing-page](https://github.com/zk-coins/landing-page) | Whitepaper / Shielded CSV landing ([zkcoins.com](https://zkcoins.com)) |
+| [zk-coins/research](https://github.com/zk-coins/research)         | Protocol research, upstream repos, paper PDF                           |
+
+### Brand family
+
+| Domain                                       | Product                                     |
+| -------------------------------------------- | ------------------------------------------- |
+| [zkcoins.app](https://zkcoins.app)           | Wallet (this repo)                          |
+| [zkcoins.exchange](https://zkcoins.exchange) | Trading Venue (planned — Perpetual Futures) |
+| [zkcoins.space](https://zkcoins.space)       | Explorer (planned)                          |
+| [zkcoins.com](https://zkcoins.com)           | Whitepaper / Shielded CSV                   |
+| [zkcoins.info](https://zkcoins.info)         | Brand-Hub / Overview (planned)              |
 
 ## Protocol
 
