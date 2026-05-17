@@ -195,7 +195,24 @@ export const api = {
       body: JSON.stringify(data),
     }),
 
-  balance: (address: string) => request<BalanceResponse>(`/api/balance?address=${address}`),
+  balance: async (address: string): Promise<BalanceResponse> => {
+    try {
+      return await request<BalanceResponse>(`/api/balance?address=${address}`);
+    } catch (err) {
+      // The server returns HTTP 404 for addresses it has never seen
+      // (no mint / no incoming send yet) but the body itself is the
+      // correct `{balance: 0}`. Surface that 0 instead of propagating
+      // the throw so freshly created or restored wallets actually
+      // render the "Wallet is empty" banner instead of the loading
+      // placeholder. Backend issue tracked separately — once the
+      // server returns 200 for unknown addresses, this branch becomes
+      // dead code and can be removed.
+      if (err instanceof Error && err.message.startsWith('API error 404')) {
+        return { balance: 0 };
+      }
+      throw err;
+    }
+  },
 
   info: () => request<InfoResponse>('/api/info'),
 
