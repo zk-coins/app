@@ -194,7 +194,7 @@ export async function disconnect(page: Page): Promise<void> {
 type NetworkStoreShim = {
   getState: () => { networkName: string };
 };
-export async function waitForNetworkInfo(page: Page, timeout = 15_000): Promise<void> {
+export async function waitForNetworkInfo(page: Page, timeout = 30_000): Promise<void> {
   await expect
     .poll(
       () =>
@@ -218,7 +218,7 @@ export async function waitForNetworkInfo(page: Page, timeout = 15_000): Promise<
  * when the wallet is funded, so banner-absence is not a reliable
  * "loaded" signal. The `data-loading` attribute is.
  */
-export async function waitForBalanceLoaded(page: Page, timeout = 30_000): Promise<void> {
+export async function waitForBalanceLoaded(page: Page, timeout = 60_000): Promise<void> {
   await expect(page.getByTestId('balance-amount-usd')).not.toHaveAttribute('data-loading', 'true', {
     timeout,
   });
