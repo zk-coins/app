@@ -72,19 +72,21 @@ User-facing functions, their activation status, and the tests that cover them.
 ¹ Faucet additionally checks `/api/info` at runtime and stays hidden if the connected server reports `network = mainnet`, even if the flag is on. Defence in depth.
 ² Empty (default) → `/network` shows simulated data with a "Preview · simulated" badge. URL set → live chart fetched from the explorer.
 
-### Build-time feature flags
+### Local-dev feature flags
 
-All flags are inlined by Next.js at build time via `process.env.NEXT_PUBLIC_*`. The branches against `false` are removed by dead-code elimination — the gated code path does not ship in the production bundle. Default off (fail-closed): any value other than the literal string `"true"`, including missing, leaves the flag off.
+Each flag is inlined by Next.js at build time via `process.env.NEXT_PUBLIC_*`. When unset (the default in every container build), the gated branch is removed by dead-code elimination and ships nothing.
 
-| Build arg / env         | Gates                                                                   |
-| ----------------------- | ----------------------------------------------------------------------- |
-| `ENABLE_PASSKEY`        | The three passkey flows (create / restore / unlock)                     |
-| `ENABLE_FAUCET`         | The Mint button on `/` (plus the runtime mainnet check, see ²)          |
-| `ENABLE_USERNAMES`      | Username claim on `/`, `@`/`$` resolver in Send, "@zkcoins.app" UI      |
-| `ENABLE_APPS_DIRECTORY` | `/apps` route, the Apps tab in the bottom nav, DFX link on empty Wallet |
-| `ENABLE_DEV_ROUTES`     | `/reset` and `/simulate` pages                                          |
+These flags are **local-dev only**: a developer can opt a gated UI in by setting the variable in `.env.local` to preview work-in-progress. They are deliberately not wired up in `deploy-dev.yaml` or `deploy-prd.yaml`, and the `Dockerfile` declares no matching `ARG` — DEV mirrors PRD, both bundles contain only the ungated code. When a feature is ready to ship, the gate is removed from the source, **not** flipped on for a deploy.
 
-The image built by `deploy-dev.yaml` sets every flag to `true` for testing. The image built by `deploy-prd.yaml` passes no build args, so every flag defaults to `false` and the PRD bundle contains only MVP code paths. The two API URL placeholders (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_EXPLORER_URL`) are still substituted at container start by `entrypoint.sh`, unchanged.
+| `.env.local` var (`NEXT_PUBLIC_*`) | Gates                                                                   |
+| ---------------------------------- | ----------------------------------------------------------------------- |
+| `ENABLE_PASSKEY`                   | The three passkey flows (create / restore / unlock)                     |
+| `ENABLE_FAUCET`                    | The Mint button on `/` (plus the runtime mainnet check, see ²)          |
+| `ENABLE_USERNAMES`                 | Username claim on `/`, `@`/`$` resolver in Send, "@zkcoins.app" UI      |
+| `ENABLE_APPS_DIRECTORY`            | `/apps` route, the Apps tab in the bottom nav, DFX link on empty Wallet |
+| `ENABLE_DEV_ROUTES`                | `/reset` and `/simulate` pages                                          |
+
+The two API URL placeholders (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_EXPLORER_URL`) follow a different, runtime-injection pattern via `entrypoint.sh`, unchanged.
 
 ### Triage gaps
 
@@ -237,18 +239,18 @@ Reachable by direct URL, not in the nav. Not intended for end users.
 
 ### Configuration
 
-| Variable                            | When read         | Default                   | Effect                                                                     |
-| ----------------------------------- | ----------------- | ------------------------- | -------------------------------------------------------------------------- |
-| `NEXT_PUBLIC_API_URL`               | container start   | `https://api.zkcoins.app` | Backend API base URL. Substituted at startup by `entrypoint.sh`            |
-| `NEXT_PUBLIC_EXPLORER_URL`          | container start   | _(empty)_                 | Live network activity source. Empty → `/network` shows simulated data      |
-| `NEXT_PUBLIC_ENABLE_PASSKEY`        | image build       | `false`                   | Enables the three passkey flows. Inlined by Next.js — DCE removes when off |
-| `NEXT_PUBLIC_ENABLE_FAUCET`         | image build       | `false`                   | Enables the Mint button                                                    |
-| `NEXT_PUBLIC_ENABLE_USERNAMES`      | image build       | `false`                   | Enables username claim/resolve and `@zkcoins.app` UI                       |
-| `NEXT_PUBLIC_ENABLE_APPS_DIRECTORY` | image build       | `false`                   | Enables `/apps` and the Apps tab in nav                                    |
-| `NEXT_PUBLIC_ENABLE_DEV_ROUTES`     | image build       | `false`                   | Enables `/reset` and `/simulate`                                           |
-| `E2E_BASE_URL`                      | playwright invoke | `https://dev.zkcoins.app` | Playwright target URL — test-time only, not consumed by the running app    |
+| Variable                            | When read                 | Default                   | Effect                                                                  |
+| ----------------------------------- | ------------------------- | ------------------------- | ----------------------------------------------------------------------- |
+| `NEXT_PUBLIC_API_URL`               | container start           | `https://api.zkcoins.app` | Backend API base URL. Substituted at startup by `entrypoint.sh`         |
+| `NEXT_PUBLIC_EXPLORER_URL`          | container start           | _(empty)_                 | Live network activity source. Empty → `/network` shows simulated data   |
+| `NEXT_PUBLIC_ENABLE_PASSKEY`        | local `npm run dev` build | `false`                   | Local-dev only: previews the three passkey flows                        |
+| `NEXT_PUBLIC_ENABLE_FAUCET`         | local `npm run dev` build | `false`                   | Local-dev only: previews the Mint button                                |
+| `NEXT_PUBLIC_ENABLE_USERNAMES`      | local `npm run dev` build | `false`                   | Local-dev only: previews username claim/resolve and `@zkcoins.app` UI   |
+| `NEXT_PUBLIC_ENABLE_APPS_DIRECTORY` | local `npm run dev` build | `false`                   | Local-dev only: previews `/apps` and the Apps tab in nav                |
+| `NEXT_PUBLIC_ENABLE_DEV_ROUTES`     | local `npm run dev` build | `false`                   | Local-dev only: previews `/reset` and `/simulate`                       |
+| `E2E_BASE_URL`                      | playwright invoke         | `https://dev.zkcoins.app` | Playwright target URL — test-time only, not consumed by the running app |
 
-Image build vs. container start: the two `_URL` placeholders are baked at build with a sentinel value (`NEXT_PUBLIC_API_URL_PLACEHOLDER`) and replaced at container start, so the same image can point at any backend. The `_ENABLE_*` flags are inlined as actual booleans at build time and **cannot be flipped after** — a different value requires rebuilding the image. This is intentional: the disabled feature code is removed from the bundle and cannot be re-enabled at runtime.
+Container vs. local: the two `_URL` placeholders are baked at build with a sentinel value (`NEXT_PUBLIC_API_URL_PLACEHOLDER`) and replaced at container start, so the same image can point at any backend. The `_ENABLE_*` flags are **not declared in the `Dockerfile`** and are never set in `deploy-{dev,prd}.yaml` — both shipped images contain only the ungated code. A developer can put any of these flags in `.env.local` to preview a gated UI under `npm run dev`. Shipping a gated feature means dropping its gate from the source.
 
 ### Tests
 
