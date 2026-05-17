@@ -88,7 +88,7 @@ export default function ReceivePage() {
         {/* Address */}
         <div>
           <label className="mb-1.5 block text-[12px] font-medium text-ink2">Your address</label>
-          <div className="rounded-md border border-line2 bg-surface px-4 py-3 mono text-[14px] text-ink">
+          <div className="rounded-md border border-line2 bg-surface px-4 py-3 mono text-center text-[14px] text-ink">
             {zkAddress}
           </div>
           <button
