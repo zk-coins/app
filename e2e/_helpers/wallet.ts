@@ -206,3 +206,20 @@ export async function waitForNetworkInfo(page: Page, timeout = 15_000): Promise<
     )
     .not.toBe('');
 }
+
+/**
+ * Block until WalletScreen's first `/api/balance` tick has resolved.
+ * Polls the `data-loading` marker on `balance-amount-usd`, which is
+ * `true` while `balance === null` (post-mount loading) and absent once
+ * the first tick lands — regardless of the value (zero or funded).
+ *
+ * Use this in test setup instead of `wallet-empty-banner` visibility:
+ * the banner only renders for `balance === 0` and is genuinely absent
+ * when the wallet is funded, so banner-absence is not a reliable
+ * "loaded" signal. The `data-loading` attribute is.
+ */
+export async function waitForBalanceLoaded(page: Page, timeout = 30_000): Promise<void> {
+  await expect(page.getByTestId('balance-amount-usd')).not.toHaveAttribute('data-loading', 'true', {
+    timeout,
+  });
+}
