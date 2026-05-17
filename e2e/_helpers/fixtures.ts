@@ -16,7 +16,12 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Page } from '@playwright/test';
-import { clearWalletState, DEFAULT_PASSWORD, restoreSeedWallet } from './wallet';
+import {
+  clearWalletState,
+  DEFAULT_PASSWORD,
+  restoreSeedWallet,
+  waitForNetworkInfo,
+} from './wallet';
 
 export interface Account {
   mnemonic: string[];
@@ -59,6 +64,10 @@ export async function aliceLogin(
   const { alice } = readAccounts();
   await clearWalletState(page);
   await restoreSeedWallet(page, alice.mnemonic, password);
+  // Block on the WalletScreen `api.info` roundtrip so any subsequent
+  // navigation to /settings (or other routes that gate UI on the network
+  // store) is race-free. See `waitForNetworkInfo` for the rationale.
+  await waitForNetworkInfo(page);
   return alice;
 }
 
@@ -67,5 +76,6 @@ export async function bobLogin(page: Page, password: string = DEFAULT_PASSWORD):
   const { bob } = readAccounts();
   await clearWalletState(page);
   await restoreSeedWallet(page, bob.mnemonic, password);
+  await waitForNetworkInfo(page);
   return bob;
 }
