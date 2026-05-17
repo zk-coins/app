@@ -4,18 +4,28 @@
  * data-testid (or testid prop on a Card-style wrapper) AND be referenced
  * by an e2e spec. This script reports the gap.
  *
- * Three sections in the output:
+ * Internally the audit collects three groups of findings:
  *   A. testids defined in src/ that no e2e spec touches.
  *   B. testids referenced in e2e/ that don't appear in src/ -- usually
- *      template-literal ids; we list resolved prefixes so true ghosts stand out.
+ *      template-literal ids; resolved prefixes are tracked so true ghosts
+ *      stand out.
  *   C. <button>/onClick handlers in src/ with no testid and no aria-label.
+ *
+ * Output policy:
+ *   - On pass ([OK]): a one-paragraph "all clear" summary. No per-section
+ *     lists, no exempt-noise -- exempt entries are an implementation detail
+ *     of this script, not a reviewer's problem.
+ *   - On fail ([FAIL]): only the actionable findings (non-exempt A/C plus
+ *     ghost B entries), so the PR comment lists exactly what to fix.
  *
  * Exit codes:
  *   0 -- no uncovered MVP testids and no fully unlabeled MVP buttons.
  *   1 -- at least one section A finding outside MVP_EXEMPT_TESTIDS, or one
- *       section C finding outside MVP_EXEMPT_FILES.
+ *       section C finding outside MVP_EXEMPT_FILES / MVP_EXEMPT_BUTTON_SNIPPETS.
  *
- * Output respects --markdown (sticky PR comment format) and --json.
+ * Output respects --markdown (sticky PR comment format) and --json. The
+ * --json mode always emits all three sections so tooling/debugging keeps
+ * access to the full picture.
  */
 
 import fs from 'node:fs';
@@ -219,10 +229,29 @@ if (FORMAT_JSON) {
 const lines = [];
 const h = FORMAT_MARKDOWN ? '## ' : '=== ';
 const sub = FORMAT_MARKDOWN ? '### ' : '--- ';
-const tick = passed ? '[OK]' : '[FAIL]';
 
+if (passed) {
+  // Short success message — no per-section lists, no exempt-noise.
+  if (FORMAT_MARKDOWN) {
+    lines.push('<!-- audit:button-coverage -->');
+    lines.push('# [OK] Button-Inventory-Audit — all clear');
+    lines.push('');
+    lines.push(
+      `Checked ${srcLiteralIds.size} testid(s) in \`src/\` against ${e2eIds.size} reference(s) in \`e2e/\`. Nothing to do.`,
+    );
+  } else {
+    lines.push('[OK] Button-Inventory-Audit — all clear');
+    lines.push(
+      `Checked ${srcLiteralIds.size} src testid(s) against ${e2eIds.size} e2e reference(s).`,
+    );
+  }
+  console.log(lines.join('\n'));
+  process.exit(exitCode);
+}
+
+// Failure path: show only the actionable findings (no exempt entries).
 lines.push(
-  `${FORMAT_MARKDOWN ? '<!-- audit:button-coverage -->\n# ' : ''}${tick} Button-Inventory-Audit`,
+  `${FORMAT_MARKDOWN ? '<!-- audit:button-coverage -->\n# ' : ''}[FAIL] Button-Inventory-Audit`,
 );
 lines.push('');
 lines.push(
@@ -231,62 +260,44 @@ lines.push(
 lines.push(`e2e/ testids referenced: ${e2eIds.size}`);
 lines.push('');
 
-lines.push(`${h}A. testids in src/, not referenced in e2e/`);
-if (sectionA.length === 0) {
-  lines.push('_None._');
-} else {
-  for (const { id, locs, exempt } of sectionA) {
-    const tag = exempt ? ' _(MVP-exempt)_' : '';
+if (fails.uncoveredTestids.length > 0) {
+  lines.push(`${h}testids in src/ not referenced in e2e/`);
+  for (const { id, locs } of fails.uncoveredTestids) {
     const loc = locs[0];
-    lines.push(`- \`${id}\`${tag} -- \`${loc.file}:${loc.line}\``);
+    lines.push(`- \`${id}\` -- \`${loc.file}:${loc.line}\``);
   }
+  lines.push('');
 }
-lines.push('');
 
-lines.push(`${h}B. testids in e2e/, no literal in src/`);
-if (sectionB.length === 0) {
-  lines.push('_None._');
-} else {
-  for (const { id, resolvedFrom } of sectionB) {
-    if (resolvedFrom) {
-      lines.push(`- \`${id}\` -- generated from template literal \`${resolvedFrom}\``);
-    } else {
-      lines.push(`- \`${id}\` -- **GHOST** (no matching template prefix; broken selector?)`);
-    }
+const ghosts = sectionB.filter((e) => !e.resolvedFrom);
+if (ghosts.length > 0) {
+  lines.push(`${h}ghost testids in e2e/ (no matching src literal or template)`);
+  for (const { id } of ghosts) {
+    lines.push(`- \`${id}\` -- broken selector?`);
   }
+  lines.push('');
 }
-lines.push('');
 
-lines.push(`${h}C. <button>/onClick without testid or aria-label`);
-if (sectionC.length === 0) {
-  lines.push('_None._');
-} else {
-  for (const entry of sectionC) {
-    const { file, line, snippet } = entry;
-    const exempt = MVP_EXEMPT_FILES.has(file)
-      ? ' _(wrapper-exempt)_'
-      : isFeatureGatedExempt(entry)
-        ? ' _(feature-gated-exempt)_'
-        : '';
-    lines.push(`- \`${file}:${line}\`${exempt} -- \`${snippet.slice(0, 80)}\``);
+if (fails.unlabeledButtons.length > 0) {
+  lines.push(`${h}<button>/onClick without testid or aria-label`);
+  for (const { file, line, snippet } of fails.unlabeledButtons) {
+    lines.push(`- \`${file}:${line}\` -- \`${snippet.slice(0, 80)}\``);
   }
+  lines.push('');
 }
-lines.push('');
 
-if (!passed) {
-  lines.push(`${sub}Summary`);
-  lines.push(`- ${fails.uncoveredTestids.length} uncovered MVP testid(s)`);
-  lines.push(`- ${fails.unlabeledButtons.length} unlabeled MVP button(s)`);
+lines.push(`${sub}Summary`);
+lines.push(`- ${fails.uncoveredTestids.length} uncovered MVP testid(s)`);
+lines.push(`- ${fails.unlabeledButtons.length} unlabeled MVP button(s)`);
+lines.push('');
+lines.push(
+  'Add a `getByTestId(...)` assertion in the relevant spec, or -- if intentionally out-of-scope -- add the id to `MVP_EXEMPT_TESTIDS` / file to `MVP_EXEMPT_FILES` in `e2e/_audit/coverage.mjs` with a one-line justification.',
+);
+if (REPORT_ONLY) {
   lines.push('');
   lines.push(
-    'Add a `getByTestId(...)` assertion in the relevant spec, or -- if intentionally out-of-scope -- add the id to `MVP_EXEMPT_TESTIDS` / file to `MVP_EXEMPT_FILES` in `e2e/_audit/coverage.mjs` with a one-line justification.',
+    '_Running in `--report-only` mode: findings are reported but the check passes. Switch to `--strict` once the backlog is cleared._',
   );
-  if (REPORT_ONLY) {
-    lines.push('');
-    lines.push(
-      '_Running in `--report-only` mode: findings are reported but the check passes. Switch to `--strict` once the backlog is cleared._',
-    );
-  }
 }
 
 console.log(lines.join('\n'));
