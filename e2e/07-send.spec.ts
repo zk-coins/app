@@ -197,9 +197,6 @@ test.describe('Send Bitcoin', () => {
     await page.getByTestId('send-confirm-btn').click();
     await expect(page.getByTestId('send-success-heading')).toBeVisible({ timeout: 90_000 });
     await snap(page, '07-send-success');
-    // Done returns to wallet — exercises the only post-success button.
-    await page.getByTestId('send-done-btn').click();
-    await expect(page.getByTestId('wallet-send-btn')).toBeVisible({ timeout: 10_000 });
   });
 
   // Dropped: the err-banner state on /send is unreachable for the

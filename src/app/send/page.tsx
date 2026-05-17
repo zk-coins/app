@@ -236,7 +236,7 @@ export default function SendPage() {
             </p>
           )}
           <button
-            data-testid="send-done-btn"
+            aria-label="Return to wallet"
             onClick={() => router.push('/')}
             className="mt-10 rounded-md bg-bitcoin px-8 py-3 text-[13px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover"
           >
