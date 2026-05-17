@@ -1,5 +1,24 @@
+import type { ZodType, z } from 'zod';
 import { useNetworkStore } from '@/stores/network';
 import { initWasm } from '@zkcoins/wasm';
+import {
+  BalanceResponseSchema,
+  ClaimUsernameResponseSchema,
+  CommitResponseSchema,
+  InfoResponseSchema,
+  MintResponseSchema,
+  ResolveUsernameResponseSchema,
+  SendResponseSchema,
+  UsernameResponseSchema,
+} from './schemas';
+
+// Response types are inferred from the schemas in `./schemas.ts` so the
+// schema is the single source of truth. The public names match the
+// pre-Zod interface names callers already import — no churn for them.
+export type SendResponse = z.infer<typeof SendResponseSchema>;
+export type BalanceResponse = z.infer<typeof BalanceResponseSchema>;
+export type UsernameResponse = z.infer<typeof UsernameResponseSchema>;
+export type InfoResponse = z.infer<typeof InfoResponseSchema>;
 
 function getApiUrl(): string {
   return useNetworkStore.getState().apiUrl;
@@ -7,7 +26,7 @@ function getApiUrl(): string {
 
 const REQUEST_TIMEOUT_MS = 120_000; // 2 minutes (proof generation can be slow)
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+async function request<T>(path: string, schema: ZodType<T>, options?: RequestInit): Promise<T> {
   const controller = new AbortController();
   /* c8 ignore next — 2-minute timeout callback, not triggered in unit tests */
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -22,7 +41,7 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       const text = await res.text();
       throw new Error(`API error ${res.status}: ${text}`);
     }
-    return res.json();
+    return schema.parse(await res.json());
   } finally {
     clearTimeout(timeoutId);
   }
@@ -42,27 +61,10 @@ export interface SignedSendRequest extends SendRequest {
   timestamp: number;
 }
 
-export interface BalanceResponse {
-  balance: number;
-  username?: string;
-}
-
-export interface UsernameResponse {
-  username: string;
-  address: string;
-}
-
 export interface ClaimUsernameParams {
   username: string;
   address: string;
   xpriv: string;
-}
-
-export interface SendResponse {
-  success: boolean;
-  proof_id?: number | null;
-  account_state_hash?: string;
-  output_coins_root?: string;
 }
 
 export interface CommitRequest {
@@ -70,10 +72,6 @@ export interface CommitRequest {
   public_key: string;
   signature: string;
   message: string;
-}
-
-export interface InfoResponse {
-  network: string;
 }
 
 /**
@@ -170,34 +168,34 @@ async function signClaimRequest(
 
 export const api = {
   mint: (address: string, amount: number = 10_000) =>
-    request<SendResponse>('/api/mint', {
+    request('/api/mint', MintResponseSchema, {
       method: 'POST',
       body: JSON.stringify({ account_address: address, amount }),
     }),
 
   send: (data: SendRequest) =>
-    request<SendResponse>('/api/send', {
+    request('/api/send', SendResponseSchema, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
   sendSigned: async (data: SendRequest, xpriv: string, numPubkeys: number) => {
     const signed = await signSendRequest(data, xpriv, numPubkeys);
-    return request<SendResponse>('/api/send', {
+    return request('/api/send', SendResponseSchema, {
       method: 'POST',
       body: JSON.stringify(signed),
     });
   },
 
   commit: (data: CommitRequest) =>
-    request<SendResponse>('/api/commit', {
+    request('/api/commit', CommitResponseSchema, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
   balance: async (address: string): Promise<BalanceResponse> => {
     try {
-      return await request<BalanceResponse>(`/api/balance?address=${address}`);
+      return await request(`/api/balance?address=${address}`, BalanceResponseSchema);
     } catch (err) {
       // The server returns HTTP 404 for addresses it has never seen
       // (no mint / no incoming send yet) but the body itself is the
@@ -214,11 +212,11 @@ export const api = {
     }
   },
 
-  info: () => request<InfoResponse>('/api/info'),
+  info: () => request('/api/info', InfoResponseSchema),
 
   claimUsername: async (params: ClaimUsernameParams) => {
     const signed = await signClaimRequest(params);
-    return request<UsernameResponse>('/api/username/claim', {
+    return request('/api/username/claim', ClaimUsernameResponseSchema, {
       method: 'POST',
       body: JSON.stringify({
         username: params.username,
@@ -231,5 +229,5 @@ export const api = {
   },
 
   resolveUsername: (username: string) =>
-    request<UsernameResponse>(`/api/username/resolve/${encodeURIComponent(username)}`),
+    request(`/api/username/resolve/${encodeURIComponent(username)}`, ResolveUsernameResponseSchema),
 };

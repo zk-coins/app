@@ -1,5 +1,12 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { z } from 'zod';
 import { api } from '@/lib/api/client';
+import {
+  BalanceResponseSchema,
+  InfoResponseSchema,
+  MintResponseSchema,
+  SendResponseSchema,
+} from '@/lib/api/schemas';
 import { useNetworkStore } from '@/stores/network';
 
 const mockFetch = vi.fn();
@@ -15,7 +22,14 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-function mockResponse(data: unknown, status = 200) {
+/**
+ * Typed mock helper. Forcing the caller to pick a `z.infer<typeof
+ * Schema>` makes any drift between the test's stub response and the
+ * schema (and therefore the real server's expected shape) a TS error,
+ * not a runtime surprise. Mirrors the `createMockWasm` pattern in
+ * `src/__tests__/_mocks/wasm.ts`.
+ */
+function mockJsonResponse<T>(data: T, status = 200): void {
   mockFetch.mockResolvedValueOnce({
     ok: status >= 200 && status < 300,
     status,
@@ -26,7 +40,8 @@ function mockResponse(data: unknown, status = 200) {
 
 describe('api.mint', () => {
   it('sends POST to /api/mint with address and default amount', async () => {
-    mockResponse({ success: true, proof_id: 1 });
+    const stub: z.infer<typeof MintResponseSchema> = { success: true, proof_id: 1 };
+    mockJsonResponse(stub);
     const result = await api.mint('abc123');
     expect(mockFetch).toHaveBeenCalledWith(
       'https://test-api.zkcoins.app/api/mint',
@@ -35,11 +50,11 @@ describe('api.mint', () => {
         body: JSON.stringify({ account_address: 'abc123', amount: 10_000 }),
       }),
     );
-    expect(result).toEqual({ success: true, proof_id: 1 });
+    expect(result).toEqual(stub);
   });
 
   it('sends custom amount', async () => {
-    mockResponse({ success: true, proof_id: 2 });
+    mockJsonResponse<z.infer<typeof MintResponseSchema>>({ success: true, proof_id: 2 });
     await api.mint('abc123', 5000);
     const body = JSON.parse(mockFetch.mock.calls[0][1].body);
     expect(body.amount).toBe(5000);
@@ -48,7 +63,7 @@ describe('api.mint', () => {
 
 describe('api.balance', () => {
   it('sends GET to /api/balance with address query param', async () => {
-    mockResponse({ balance: 42000 });
+    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 42000 });
     const result = await api.balance('myaddress');
     expect(mockFetch).toHaveBeenCalledWith(
       'https://test-api.zkcoins.app/api/balance?address=myaddress',
@@ -62,20 +77,24 @@ describe('api.balance', () => {
     // has never seen. The client surfaces that as a clean 0 so callers
     // (Onboarding, WalletScreen) can render the "Wallet is empty"
     // state for brand-new wallets instead of staying in loading.
-    mockResponse({ balance: 0 }, 404);
+    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 0 }, 404);
     const result = await api.balance('unknown-address');
     expect(result.balance).toBe(0);
   });
 
   it('still throws on non-404 errors', async () => {
-    mockResponse({ error: 'server down' }, 500);
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve(JSON.stringify({ error: 'server down' })),
+    });
     await expect(api.balance('any')).rejects.toThrow(/API error 500/);
   });
 });
 
 describe('api.send', () => {
   it('sends POST to /api/send with send request', async () => {
-    mockResponse({ success: true, proof_id: 3 });
+    mockJsonResponse<z.infer<typeof SendResponseSchema>>({ success: true, proof_id: 3 });
     const sendData = {
       account_address: 'sender',
       recipient: 'receiver',
@@ -97,7 +116,7 @@ describe('api.send', () => {
 
 describe('api.commit', () => {
   it('sends POST to /api/commit with commit request', async () => {
-    mockResponse({ success: true, proof_id: 4 });
+    mockJsonResponse<z.infer<typeof SendResponseSchema>>({ success: true, proof_id: 4 });
     const commitData = {
       proof_id: 4,
       public_key: 'pk',
@@ -118,7 +137,7 @@ describe('api.commit', () => {
 
 describe('api.info', () => {
   it('sends GET to /api/info', async () => {
-    mockResponse({ network: 'Mutinynet' });
+    mockJsonResponse<z.infer<typeof InfoResponseSchema>>({ network: 'Mutinynet' });
     const result = await api.info();
     expect(mockFetch).toHaveBeenCalledWith(
       'https://test-api.zkcoins.app/api/info',
@@ -151,12 +170,25 @@ describe('error handling', () => {
     mockFetch.mockRejectedValueOnce(new Error('Network error'));
     await expect(api.info()).rejects.toThrow('Network error');
   });
+
+  it('throws on schema mismatch (server drift)', async () => {
+    // Force a payload that no longer matches the schema (renamed field).
+    // This is the load-bearing assertion for issue #68 W3 — drift now
+    // throws at the boundary instead of leaking a half-typed object.
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ networkName: 'Mutinynet' }),
+      text: () => Promise.resolve('{"networkName":"Mutinynet"}'),
+    });
+    await expect(api.info()).rejects.toThrow();
+  });
 });
 
 describe('api url from store', () => {
   it('uses apiUrl from network store', async () => {
     useNetworkStore.setState({ apiUrl: 'https://custom-api.example.com' });
-    mockResponse({ network: 'test' });
+    mockJsonResponse<z.infer<typeof InfoResponseSchema>>({ network: 'test' });
     await api.info();
     expect(mockFetch).toHaveBeenCalledWith(
       'https://custom-api.example.com/api/info',
