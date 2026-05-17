@@ -330,6 +330,17 @@ rust/client/             # Rust WASM crate (BIP32, Schnorr, secp256k1)
 public/                  # PWA manifest, service worker, icons
 ```
 
+## API Client
+
+All HTTP requests to the Rust backend go through `src/lib/api/client.ts`. Every response is parsed through a [Zod](https://zod.dev) schema declared in [`src/lib/api/schemas.ts`](src/lib/api/schemas.ts) before it leaves the boundary — drift between the server's shape and what the client expects throws a `ZodError` at the call site instead of leaking through as `undefined` deep inside a render.
+
+There are two layers of contract checking:
+
+- **Compile-time** — the test mocks in `src/__tests__/lib/api/client*.test.ts` are typed via `z.infer<typeof Schema>`, so any change to a schema that the mocks no longer satisfy fails TypeScript.
+- **Runtime, opt-in** — `src/__tests__/lib/api/contract.live.test.ts` is skipped by default and runs only when `RUN_API_CONTRACT=true`. It probes the three endpoints that don't need a signed payload (`/api/info`, `/api/mint`, `/api/balance`) against `E2E_API_URL` (default `https://dev-api.zkcoins.app`) and feeds the responses through the schemas. `SendResponseSchema` and `CommitResponseSchema` are aliases of `MintResponseSchema`, so the mint shape covers them too. The `api-contract.yml` workflow runs it on every push to `main` (release-time drift probe), on a weekly cron, and on `workflow_dispatch`.
+
+When the server gains a new field, the client needs no change — `z.object()` defaults to `strip` mode and silently drops unknown keys. When a field is renamed or removed, the schema must change in lock-step with the server release.
+
 ## WASM Crypto Module
 
 Real WASM integration with BIP-32 HD wallet, BIP-39 mnemonics, Schnorr signing, public key derivation, and commitment creation. Falls back to JS crypto if WASM fails to load.

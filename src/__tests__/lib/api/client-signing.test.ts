@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { z } from 'zod';
 import { api } from '@/lib/api/client';
+import { SendResponseSchema } from '@/lib/api/schemas';
 import { useNetworkStore } from '@/stores/network';
 
 const mockFetch = vi.fn();
@@ -17,10 +19,11 @@ afterEach(() => {
 
 describe('api.sendSigned', () => {
   it('signs request and includes signature + timestamp', async () => {
+    const stub: z.infer<typeof SendResponseSchema> = { success: true, proof_id: 42 };
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ success: true, proof_id: 42 }),
+      json: () => Promise.resolve(stub),
     });
 
     const sendData = {
@@ -55,10 +58,11 @@ describe('api.sendSigned', () => {
     const { initWasm } = await import('@zkcoins/wasm');
     const wasm = await initWasm();
 
+    const stub: z.infer<typeof SendResponseSchema> = { success: true, proof_id: null };
     mockFetch.mockResolvedValueOnce({
       ok: true,
       status: 200,
-      json: () => Promise.resolve({ success: true, proof_id: null }),
+      json: () => Promise.resolve(stub),
     });
 
     await api.sendSigned(
