@@ -37,37 +37,34 @@ The same rule applies to `zk-coins/server` (gated Cargo features are excluded fr
 
 User-facing functions, their activation status, and the tests that cover them.
 
-**Status legend** (current behaviour): `always` = hard-coded on · `env` = build-time flag, dead-code-eliminated when off · `settings` = togglable via in-app Settings · `planned` = UI present but disabled.
+**Status legend** (current behaviour): `always` = hard-coded on · `env` = build-time flag, dead-code-eliminated when off · `settings` = togglable via in-app Settings.
 
-**Triage legend** (MVP testing decision): `mvp` = in MVP scope, must reach full test coverage before launch · `gate` = not in MVP scope; hidden behind a build-time flag, default off, no test coverage required · `planned` = not in scope for MVP · `keep` = current gating already adequate, no migration needed.
+**Triage legend** (MVP testing decision): `mvp` = in MVP scope, must reach full test coverage before launch · `gate` = not in MVP scope; hidden behind a build-time flag, default off, no test coverage required · `keep` = current gating already adequate, no migration needed.
 
 **Coverage legend:** unit % refers to Vitest line coverage of the lowest-covered involved file in `src/lib/**` + `src/stores/**` (Components are excluded from coverage scope). `e2e` means a Playwright spec covers the flow. `—` means no test exists.
 
-| Feature                        | Status                                    | Triage  | Tests                 |
-| ------------------------------ | ----------------------------------------- | ------- | --------------------- |
-| Create wallet — seed phrase    | always                                    | mvp     | 100% · e2e            |
-| Create wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate    | 14% · e2e             |
-| Restore wallet — seed phrase   | always                                    | mvp     | 100% · e2e            |
-| Restore wallet — passkey       | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate    | 14% · e2e             |
-| Unlock wallet — password       | always                                    | mvp     | 100% · e2e            |
-| Unlock wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate    | 14% · e2e             |
-| Disconnect wallet              | always                                    | mvp     | 100% · e2e            |
-| View balance                   | always                                    | mvp     | 100% · e2e            |
-| View transaction history       | always                                    | mvp     | 100% · e2e            |
-| Send Bitcoin (2-phase)         | always                                    | mvp     | 100% · e2e            |
-| Receive Bitcoin (address + QR) | always                                    | mvp     | 100% · e2e            |
-| Mint test BTC (faucet)         | env (`NEXT_PUBLIC_ENABLE_FAUCET`)¹        | gate    | 100% · e2e (indirect) |
-| Claim username                 | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | gate    | 100% · e2e (visual)   |
-| Resolve username (in Send)     | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | gate    | 100% · e2e (visual)   |
-| Network info badge             | always                                    | mvp     | 100% · e2e            |
-| Network activity chart         | env (`NEXT_PUBLIC_EXPLORER_URL`)²         | keep    | 0% · —                |
-| Install as PWA                 | always                                    | mvp     | — · e2e               |
-| Apps directory                 | env (`NEXT_PUBLIC_ENABLE_APPS_DIRECTORY`) | gate    | e2e (visual only)     |
-| Auto-lock                      | planned                                   | planned | —                     |
-| Auto-rotate addresses          | planned                                   | planned | —                     |
-| Tor routing                    | planned                                   | planned | —                     |
-| `/reset` — wipe local state    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | gate    | —                     |
-| `/simulate` — demo populate    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | gate    | —                     |
+| Feature                        | Status                                    | Triage | Tests                 |
+| ------------------------------ | ----------------------------------------- | ------ | --------------------- |
+| Create wallet — seed phrase    | always                                    | mvp    | 100% · e2e            |
+| Create wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate   | 14% · e2e             |
+| Restore wallet — seed phrase   | always                                    | mvp    | 100% · e2e            |
+| Restore wallet — passkey       | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate   | 14% · e2e             |
+| Unlock wallet — password       | always                                    | mvp    | 100% · e2e            |
+| Unlock wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate   | 14% · e2e             |
+| Disconnect wallet              | always                                    | mvp    | 100% · e2e            |
+| View balance                   | always                                    | mvp    | 100% · e2e            |
+| View transaction history       | always                                    | mvp    | 100% · e2e            |
+| Send Bitcoin (2-phase)         | always                                    | mvp    | 100% · e2e            |
+| Receive Bitcoin (address + QR) | always                                    | mvp    | 100% · e2e            |
+| Mint test BTC (faucet)         | env (`NEXT_PUBLIC_ENABLE_FAUCET`)¹        | gate   | 100% · e2e (indirect) |
+| Claim username                 | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | gate   | 100% · e2e (visual)   |
+| Resolve username (in Send)     | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | gate   | 100% · e2e (visual)   |
+| Network info badge             | always                                    | mvp    | 100% · e2e            |
+| Network activity chart         | env (`NEXT_PUBLIC_EXPLORER_URL`)²         | keep   | 0% · —                |
+| Install as PWA                 | always                                    | mvp    | — · e2e               |
+| Apps directory                 | env (`NEXT_PUBLIC_ENABLE_APPS_DIRECTORY`) | gate   | e2e (visual only)     |
+| `/reset` — wipe local state    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | gate   | —                     |
+| `/simulate` — demo populate    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | gate   | —                     |
 
 ¹ Faucet additionally checks `/api/info` at runtime and stays hidden if the connected server reports `network = mainnet`, even if the flag is on. Defence in depth.
 ² Empty (default) → `/network` shows simulated data with a "Preview · simulated" badge. URL set → live chart fetched from the explorer.
@@ -220,14 +217,6 @@ MVP-scoped files. Two historical gaps were:
 - **UI:** `src/app/apps/page.tsx` (static list with external links: DFX, OpenCryptoPay)
 - **Tests:** indirectly via the BottomNav `Apps` tab visible in every WalletScreen/Settings baseline; no dedicated functional spec for the link destinations (triage `gate`)
 
-#### Planned (UI present, disabled)
-
-The Settings screen renders three toggles with `disabled={true}` and a `Planned` badge. They have no runtime effect:
-
-- **Auto-lock** — would clear in-memory keys after inactivity
-- **Auto-rotate addresses** — would derive a fresh receiving pubkey per send
-- **Tor routing** — would proxy all server traffic through Tor
-
 #### Dev/demo routes
 
 Reachable by direct URL, not in the nav. Not intended for end users.
@@ -370,7 +359,6 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 
 - [ ] Account backup/restore
 - [ ] Explorer app (`zkcoins.space`)
-- [ ] Wire up the three Settings toggles currently marked `planned` (Auto-lock, Auto-rotate, Tor)
 
 ## Related
 
