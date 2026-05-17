@@ -24,7 +24,7 @@ import { FEATURES } from '@/lib/features';
 const HIDDEN = '••••';
 
 export function WalletScreen() {
-  const { account, transactions, setBalance, setUsername } = useWalletStore();
+  const { account, balance, transactions, setBalance, setUsername } = useWalletStore();
   const { networkName, setNetworkName } = useNetworkStore();
   // Faucet is gated at build time by `NEXT_PUBLIC_ENABLE_FAUCET`. When that
   // flag is off, the entire button — including the mint API call — is dead
@@ -83,9 +83,9 @@ export function WalletScreen() {
     );
   }, [account, zkAddress]);
 
-  const sats = account?.balance ?? 0;
-  const btc = formatBtc(sats);
-  const usd = formatUsd(sats);
+  const balanceLoaded = balance !== null;
+  const btc = balanceLoaded ? formatBtc(balance) : '—';
+  const usd = balanceLoaded ? formatUsd(balance) : '—';
 
   return (
     <section className="space-y-7">
@@ -100,6 +100,7 @@ export function WalletScreen() {
         <div className="flex items-center gap-3">
           <h1
             data-testid="balance-amount-usd"
+            data-loading={!balanceLoaded || undefined}
             className="text-[56px] font-bold leading-none -tracking-[0.02em] text-ink tabular-nums"
           >
             {hidden ? HIDDEN : `$${usd}`}
@@ -116,6 +117,7 @@ export function WalletScreen() {
         </div>
         <p
           data-testid="balance-amount-btc"
+          data-loading={!balanceLoaded || undefined}
           className="mt-2 mono text-[14px] text-ink2 tabular-nums"
         >
           {hidden ? HIDDEN : `${btc} BTC`}
@@ -199,8 +201,10 @@ export function WalletScreen() {
         <PrimaryButton href="/receive" disabled={!account} icon="receive" label="Receive" />
       </div>
 
-      {/* No-balance helper + faucet (faucet button only on testnet) */}
-      {account && sats <= 0 && (
+      {/* No-balance helper + faucet (faucet button only on testnet).
+          Only render once the first /api/balance tick has resolved — otherwise
+          the post-unlock loading frame would briefly flash this banner. */}
+      {account && balance === 0 && (
         <div
           data-testid="wallet-empty-banner"
           className="flex items-start gap-3 rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3"

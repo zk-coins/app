@@ -33,7 +33,7 @@ function getInflightCommit(): CommitRequest | null {
 
 export default function SendPage() {
   const router = useRouter();
-  const { account, setBalance, incrementPubkeys, addTransaction } = useWalletStore();
+  const { account, balance, setBalance, incrementPubkeys, addTransaction } = useWalletStore();
 
   // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {
@@ -79,13 +79,17 @@ export default function SendPage() {
       return;
     }
     const sats = Math.round(btcNum * SATS_PER_BTC);
-    if (sats > account.balance) {
+    if (balance === null) {
+      setError('Balance not loaded yet');
+      return;
+    }
+    if (sats > balance) {
       setError('Insufficient balance');
       return;
     }
     setError(null);
     setConfirming(true);
-  }, [account, recipient, amount]);
+  }, [account, balance, recipient, amount]);
 
   const send = useCallback(async () => {
     if (!account) return;
@@ -277,11 +281,17 @@ export default function SendPage() {
         {/* Available */}
         <div className="rounded-md border border-line bg-surface p-3 text-[12px]">
           <span className="text-ink3">Available </span>
-          <span className="mono text-ink tabular-nums">{formatBtc(account.balance)} BTC</span>
+          <span
+            data-testid="send-available"
+            data-loading={balance === null || undefined}
+            className="mono text-ink tabular-nums"
+          >
+            {balance === null ? '— BTC' : `${formatBtc(balance)} BTC`}
+          </span>
         </div>
 
-        {/* No-balance banner */}
-        {account.balance <= 0 && (
+        {/* No-balance banner — only after the first balance tick, never during loading. */}
+        {balance === 0 && (
           <div
             data-testid="send-no-funds-banner"
             className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3 text-[12px] leading-relaxed text-ink2"
@@ -339,8 +349,11 @@ export default function SendPage() {
           </div>
           <button
             data-testid="send-setmax-btn"
-            onClick={() => setAmount(formatBtc(account.balance))}
-            className="mt-2 text-[12px] font-medium text-bitcoin transition-colors hover:text-bitcoin-hover"
+            onClick={() => {
+              if (balance !== null && balance > 0) setAmount(formatBtc(balance));
+            }}
+            disabled={balance === null || balance === 0}
+            className="mt-2 text-[12px] font-medium text-bitcoin transition-colors hover:text-bitcoin-hover disabled:cursor-not-allowed disabled:text-ink4"
           >
             Set max
           </button>

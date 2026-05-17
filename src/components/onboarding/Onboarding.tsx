@@ -266,7 +266,6 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       const ad = await wasm.createAccountFromMnemonic(phrase);
       setAccount({
         address: ad.address,
-        balance: 0,
         numPubkeys: ad.numPubkeys,
         xpriv: ad.xpriv,
       });
@@ -280,7 +279,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
         const { balance } = await api.balance(ad.address);
         setBalance(balance);
       } catch {
-        // Non-fatal — wallet is created with 0 balance.
+        // Non-fatal — WalletScreen will keep its loading placeholder.
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create wallet');
@@ -456,7 +455,6 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
 
       setAccount({
         address: ad.address,
-        balance: 0,
         numPubkeys: ad.numPubkeys,
         xpriv: ad.xpriv,
       });
@@ -477,7 +475,7 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
         const { balance } = await api.balance(ad.address);
         setBalance(balance);
       } catch {
-        // Non-fatal — wallet is created with 0 balance.
+        // Non-fatal — WalletScreen will keep its loading placeholder.
       }
     } catch (err) {
       if (err instanceof PasskeyPrfUnsupportedError) {
@@ -625,7 +623,6 @@ function SeedImportFlow({
       const ad = await wasm.createAccountFromMnemonic(trimmed);
       setAccount({
         address: ad.address,
-        balance: 0,
         numPubkeys: ad.numPubkeys,
         xpriv: ad.xpriv,
       });
@@ -636,7 +633,7 @@ function SeedImportFlow({
         const { balance } = await api.balance(ad.address);
         setBalance(balance);
       } catch {
-        // Non-fatal.
+        // Non-fatal — WalletScreen will keep its loading placeholder.
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to restore wallet');
@@ -778,7 +775,6 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
 
       setAccount({
         address: ad.address,
-        balance: 0,
         numPubkeys: ad.numPubkeys,
         xpriv: ad.xpriv,
       });
