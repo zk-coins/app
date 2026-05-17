@@ -36,11 +36,6 @@ const MVP_EXEMPT_TESTIDS = new Set([
   // reliably catch them without artificially slowing WASM calls.
   'seed-creating-btn',
   'seed-import-restoring-btn',
-  // TODO(#74): remove after DEV redeploy + spec swap to getByTestId in
-  // 02-create-seed back-from-reveal and 03-restore-seed back-from-input.
-  // E2E runs against https://dev.zkcoins.app — the spec change cannot
-  // ship in the same PR as the App-side testid.
-  'onboarding-step-back-btn',
 ]);
 
 // Generic wrapper components are allowed to expose <button> without testid
