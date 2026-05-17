@@ -88,7 +88,7 @@ All flags are inlined by Next.js at build time via `process.env.NEXT_PUBLIC_*`. 
 | `ENABLE_TOR_ROUTING`      | Settings → Privacy "Tor routing" toggle (stub³)                         |
 | `ENABLE_DEV_ROUTES`       | `/reset` and `/simulate` pages                                          |
 
-The image built by `deploy-dev.yaml` sets every flag to `true` for testing. The image built by `deploy-prd.yaml` passes no build args, so every flag defaults to `false` and the PRD bundle contains only MVP code paths. The two API URL placeholders (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_EXPLORER_URL`) are still substituted at container start by `entrypoint.sh`, unchanged.
+Neither `deploy-dev.yaml` nor `deploy-prd.yaml` passes feature-flag build args — DEV mirrors PRD, every flag stays at its `false` default, and both bundles contain only MVP code paths. Feature flags are for local developer setups via `.env.local`; see issue #30 for the migration rationale. The two API URL placeholders (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_EXPLORER_URL`) are still substituted at container start by `entrypoint.sh`, unchanged.
 
 ### Triage gaps
 
