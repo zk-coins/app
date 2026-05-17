@@ -57,6 +57,12 @@ test.describe('Send Bitcoin', () => {
   test('send-default', async ({ page }) => {
     await setViewport(page, 'mobile');
     await aliceGoToSend(page);
+    // Available balance is loaded (data-loading flips false once the
+    // /api/balance tick lands). Same source as the wallet-screen value;
+    // this is the only spec that asserts the send-page rendering of it.
+    await expect(page.getByTestId('send-available')).not.toHaveAttribute('data-loading', 'true', {
+      timeout: 10_000,
+    });
     await expect(page.getByTestId('send-submit-btn')).toBeDisabled();
     await snap(page, '07-send-default');
   });
