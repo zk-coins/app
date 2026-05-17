@@ -164,19 +164,18 @@ test.describe('Create wallet — seed phrase', () => {
 
   test('back-from-reveal (no shot)', async ({ page }) => {
     await enterSeedFlow(page);
-    // The StepHeader back button is the first `<button>` rendered.
     // In the DEV bundle SeedFlow's `onBack` goes to PasskeyFlow (not
     // straight to Welcome — see § 8.0 (a)), so click back twice to
     // land on Welcome. PRD only needs one click; both paths are
     // accepted via the final assertion.
-    await page.locator('button').first().click();
+    await page.getByTestId('onboarding-step-back-btn').click();
     if (
       await page
         .getByTestId('passkey-other-options-btn')
         .isVisible()
         .catch(() => false)
     ) {
-      await page.locator('button').first().click();
+      await page.getByTestId('onboarding-step-back-btn').click();
     }
     await expect(page.getByTestId('welcome-heading')).toBeVisible({ timeout: 10_000 });
   });

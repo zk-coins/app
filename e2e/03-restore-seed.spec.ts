@@ -165,8 +165,7 @@ test.describe('Restore wallet — seed phrase', () => {
 
   test('back-from-input (no shot)', async ({ page }) => {
     await enterImportFlow(page);
-    // StepHeader back is the only `<button>` before the textarea.
-    await page.locator('button').first().click();
+    await page.getByTestId('onboarding-step-back-btn').click();
     await expect(page.getByTestId('welcome-heading')).toBeVisible({ timeout: 10_000 });
   });
 });
