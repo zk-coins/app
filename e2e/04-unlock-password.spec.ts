@@ -64,12 +64,21 @@ test.describe('Unlock wallet — password', () => {
   });
 
   test('unlock-unlocking', async ({ page }) => {
-    // Stall the post-unlock /api/balance round-trip so the "Unlocking…"
-    // disabled-button state has time to render before Home swaps to
-    // WalletScreen.
+    // Stub /api/balance with a deterministic non-zero balance. The
+    // restore flow persists the account with balance=0 in IDB, so on
+    // every unlock WalletScreen briefly renders the "Wallet is empty"
+    // banner (sats<=0) until the first /api/balance tick resolves —
+    // and the banner adds enough vertical layout shift to fail the
+    // pixel-diff. Returning a fixed non-zero balance keeps the snap
+    // shape stable; the actual amount is masked by defaultMasks
+    // (balance-value testid). The "Unlocking…" disabled-button frame
+    // resolves faster than the snap triggers anyway, so this test
+    // covers the post-unlock landing rather than the spinner itself.
     await page.route('**/api/balance**', async (route) => {
-      await new Promise((r) => setTimeout(r, 2_500));
-      await route.continue();
+      await route.fulfill({
+        contentType: 'application/json',
+        body: JSON.stringify({ balance: 100_000 }),
+      });
     });
     await arriveAtUnlock(page);
     await page.getByTestId('unlock-password-input').fill(PASSWORD);
