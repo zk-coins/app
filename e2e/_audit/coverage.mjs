@@ -36,6 +36,9 @@ const MVP_EXEMPT_TESTIDS = new Set([
   // reliably catch them without artificially slowing WASM calls.
   'seed-creating-btn',
   'seed-import-restoring-btn',
+  // Native browser install prompt cannot be exercised headless; deferred-
+  // prompt save path is covered in 10-pwa.spec.ts. See e2e/README.md § 10.
+  'pwa-prompt-native',
 ]);
 
 // Generic wrapper components are allowed to expose <button> without testid
@@ -45,6 +48,16 @@ const MVP_EXEMPT_FILES = new Set([
   'src/app/settings/page.tsx', // generic Toggle component
   'src/components/onboarding/Onboarding.tsx', // contains MVP + PASSKEY buttons; see line-level allowlist
 ]);
+
+// Buttons sitting inside a `{FEATURES.X && (...)}` JSX block are dead-
+// stripped from the PRD bundle by Next.js DCE when the corresponding
+// NEXT_PUBLIC_ENABLE_* flag is off, and are therefore out of MVP scope.
+// We pin them by the snippet substring (not line number) so the allowlist
+// survives unrelated reflows of the surrounding code.
+const MVP_EXEMPT_BUTTON_SNIPPETS = [
+  // WalletScreen username-claim button — FEATURES.USERNAMES gated.
+  { file: 'src/components/screens/WalletScreen.tsx', snippet: 'api.claimUsername' },
+];
 
 const args = new Set(process.argv.slice(2));
 const FORMAT_MARKDOWN = args.has('--markdown');
@@ -154,21 +167,40 @@ for (const file of walk(srcDir, ['.tsx'])) {
   const lines = fs.readFileSync(file, 'utf8').split('\n');
   for (let i = 0; i < lines.length; i++) {
     if (!BTN_RE.test(lines[i])) continue;
-    // window of +/-4 lines around the hit
-    const from = Math.max(0, i - 4);
-    const to = Math.min(lines.length, i + 6);
-    const window = lines.slice(from, to).join('\n');
-    if (/(data-)?testid=/.test(window)) continue;
-    if (/aria-label=/.test(window)) continue;
-    sectionC.push({ file: rel(file), line: i + 1, snippet: lines[i].trim() });
+    // Narrow window (+/-4) for testid/aria-label proximity check.
+    const fromNarrow = Math.max(0, i - 4);
+    const toNarrow = Math.min(lines.length, i + 6);
+    const narrowWindow = lines.slice(fromNarrow, toNarrow).join('\n');
+    if (/(data-)?testid=/.test(narrowWindow)) continue;
+    if (/aria-label=/.test(narrowWindow)) continue;
+    // Wider window (+/-12) for feature-gated-exempt snippet match. JSX
+    // blocks like `{FEATURES.X && (...)}` can wrap a button with its
+    // identifying call (e.g. `api.claimUsername`) several lines below.
+    const fromWide = Math.max(0, i - 12);
+    const toWide = Math.min(lines.length, i + 18);
+    const wideWindow = lines.slice(fromWide, toWide).join('\n');
+    sectionC.push({
+      file: rel(file),
+      line: i + 1,
+      snippet: lines[i].trim(),
+      window: wideWindow,
+    });
   }
 }
 
 // --- failure determination -------------------------------------------------
 
+function isFeatureGatedExempt(entry) {
+  return MVP_EXEMPT_BUTTON_SNIPPETS.some(
+    ({ file, snippet }) => entry.file === file && entry.window.includes(snippet),
+  );
+}
+
 const fails = {
   uncoveredTestids: sectionA.filter((e) => !e.exempt),
-  unlabeledButtons: sectionC.filter((e) => !MVP_EXEMPT_FILES.has(e.file)),
+  unlabeledButtons: sectionC.filter(
+    (e) => !MVP_EXEMPT_FILES.has(e.file) && !isFeatureGatedExempt(e),
+  ),
 };
 
 const passed = fails.uncoveredTestids.length === 0 && fails.unlabeledButtons.length === 0;
@@ -227,8 +259,13 @@ lines.push(`${h}C. <button>/onClick without testid or aria-label`);
 if (sectionC.length === 0) {
   lines.push('_None._');
 } else {
-  for (const { file, line, snippet } of sectionC) {
-    const exempt = MVP_EXEMPT_FILES.has(file) ? ' _(wrapper-exempt)_' : '';
+  for (const entry of sectionC) {
+    const { file, line, snippet } = entry;
+    const exempt = MVP_EXEMPT_FILES.has(file)
+      ? ' _(wrapper-exempt)_'
+      : isFeatureGatedExempt(entry)
+        ? ' _(feature-gated-exempt)_'
+        : '';
     lines.push(`- \`${file}:${line}\`${exempt} -- \`${snippet.slice(0, 80)}\``);
   }
 }

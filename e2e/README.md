@@ -679,13 +679,13 @@ A static-analysis check that complements the runtime suite: it walks `src/` for 
 node e2e/_audit/coverage.mjs              # strict: exit 1 on uncovered MVP testids or unlabeled MVP buttons
 node e2e/_audit/coverage.mjs --markdown   # output formatted for PR comments
 node e2e/_audit/coverage.mjs --json       # machine-readable
-node e2e/_audit/coverage.mjs --report-only # always exit 0 (CI's current default)
+node e2e/_audit/coverage.mjs --report-only # always exit 0 (escape hatch for transient debugging)
 ```
 
 **CI integration**
 
-`.github/workflows/audit-button-coverage.yml` runs the audit on every PR against `develop` and on every push to `develop`. The workflow posts a sticky comment (`audit-button-coverage`) with the findings. It currently runs with `--report-only` so the backlog of known gaps doesn't block merges — flip to `--strict` in the workflow once the items in section A and C of the report are cleared.
+`.github/workflows/audit-button-coverage.yml` runs the audit on every PR against `develop` and on every push to `develop`. The workflow posts a sticky comment (`audit-button-coverage`) with the findings and **fails the build** on any uncovered MVP testid or unlabeled MVP button.
 
 **Allowlisting**
 
-If a testid is intentionally out-of-scope (e.g. PASSKEY non-MVP code, transient loading states), add it to `MVP_EXEMPT_TESTIDS` in `e2e/_audit/coverage.mjs`. If a file contains generic wrapper components whose `<button>`s legitimately have no testid (the testid lives on the wrapper's usage site), add the file path to `MVP_EXEMPT_FILES`. Both lists demand a one-line comment justifying the exemption.
+If a testid is intentionally out-of-scope (e.g. PASSKEY non-MVP code, transient loading states, native PWA prompt), add it to `MVP_EXEMPT_TESTIDS` in `e2e/_audit/coverage.mjs`. If a file contains generic wrapper components whose `<button>`s legitimately have no testid (the testid lives on the wrapper's usage site), add the file path to `MVP_EXEMPT_FILES`. For a button sitting inside a `{FEATURES.X && (...)}` JSX block — dead-stripped from the PRD bundle — add it to `MVP_EXEMPT_BUTTON_SNIPPETS` pinned to a stable substring of the surrounding code. All three lists demand a one-line comment justifying the exemption.
