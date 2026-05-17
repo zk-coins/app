@@ -26,6 +26,25 @@
       }
       window.addEventListener('hashchange', openHashTarget);
       document.addEventListener('DOMContentLoaded', openHashTarget);
+
+      // Viewport switcher for screens with multiple baselines (mobile default).
+      document.addEventListener('DOMContentLoaded', function () {
+        document.querySelectorAll('[data-vp-toggle]').forEach(function (toggle) {
+          var card = toggle.closest('.test');
+          if (!card) return;
+          toggle.addEventListener('click', function (e) {
+            var btn = e.target.closest('button[data-vp]');
+            if (!btn) return;
+            var vp = btn.getAttribute('data-vp');
+            toggle.querySelectorAll('button[data-vp]').forEach(function (b) {
+              b.setAttribute('aria-pressed', b === btn ? 'true' : 'false');
+            });
+            card.querySelectorAll('[data-vp-target]').forEach(function (el) {
+              el.hidden = el.getAttribute('data-vp-target') !== vp;
+            });
+          });
+        });
+      });
     </script>
     <style>
       :root {
@@ -473,6 +492,43 @@
         margin-left: 8px;
       }
 
+      /* Viewport toggle (mobile default, switch to desktop/tablet) */
+      .vp-toggle {
+        display: inline-flex;
+        gap: 0;
+        background: var(--bg);
+        border: 1px solid var(--line);
+        border-radius: 4px;
+        padding: 2px;
+      }
+      .vp-toggle button {
+        background: transparent;
+        border: none;
+        color: var(--ink-3);
+        font-size: 10px;
+        font-family: inherit;
+        font-weight: 600;
+        padding: 3px 8px;
+        border-radius: 3px;
+        cursor: pointer;
+        letter-spacing: 0.05em;
+        text-transform: uppercase;
+        transition:
+          color 0.12s,
+          background 0.12s;
+      }
+      .vp-toggle button:hover {
+        color: var(--ink-2);
+      }
+      .vp-toggle button[aria-pressed='true'] {
+        background: var(--surface-2);
+        color: var(--bitcoin);
+      }
+      /* Ensure the hidden attribute wins over the .test .img/.desc/.src rules above. */
+      .test [data-vp-target][hidden] {
+        display: none;
+      }
+
       /* Callouts */
       .callout {
         border-left: 3px solid var(--bitcoin);
@@ -694,56 +750,65 @@
           <div class="tests cols-2">
             <div class="test">
               <div class="head">
-                <span class="name">welcome-desktop</span
-                ><span class="src"
-                  ><a
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts#L24"
-                    >L24</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/01-welcome-desktop.png" alt="Welcome desktop" />
-              </div>
-              <div class="desc">
-                Welcome bei 1440×900. Hero-Logo, „Welcome to zkCoins"-Headline, drei
-                Feature-Bullets, CREATE-WALLET-Button, Restore-Link, Footer mit
-                Doku/API/Explorer/Blog/Status/GitHub/Network.
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">welcome-mobile</span
-                ><span class="src"
-                  ><a
+                <span class="name">welcome</span>
+                <div class="vp-toggle" data-vp-toggle>
+                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
+                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
+                  <button type="button" data-vp="tablet" aria-pressed="false">Tablet</button>
+                </div>
+                <span class="src">
+                  <a
+                    data-vp-target="mobile"
                     href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts#L33"
                     >L33</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/01-welcome-mobile.png" alt="Welcome mobile" />
-              </div>
-              <div class="desc">
-                Welcome bei 375×812. Identische Komposition, vertikal gestapelt. Keine Bottom-Nav
-                (kein Account vorhanden).
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">welcome-tablet</span
-                ><span class="src"
-                  ><a
+                  >
+                  <a
+                    data-vp-target="desktop"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts#L24"
+                    hidden
+                    >L24</a
+                  >
+                  <a
+                    data-vp-target="tablet"
                     href="https://github.com/zk-coins/app/blob/develop/e2e/01-onboarding-welcome.spec.ts#L40"
+                    hidden
                     >L40</a
-                  ></span
-                >
+                  >
+                </span>
               </div>
               <div class="img">
-                <img src="/handbook/screenshots/01-welcome-tablet.png" alt="Welcome tablet" />
+                <img
+                  data-vp-target="mobile"
+                  src="/handbook/screenshots/01-welcome-mobile.png"
+                  alt="Welcome mobile"
+                />
+                <img
+                  data-vp-target="desktop"
+                  src="/handbook/screenshots/01-welcome-desktop.png"
+                  alt="Welcome desktop"
+                  hidden
+                />
+                <img
+                  data-vp-target="tablet"
+                  src="/handbook/screenshots/01-welcome-tablet.png"
+                  alt="Welcome tablet"
+                  hidden
+                />
               </div>
               <div class="desc">
-                Welcome bei 768×1024. Zwischen Desktop und Mobile — bewahrt die Hero-Card-Geometrie.
+                <span data-vp-target="mobile">
+                  Welcome bei 375×812. Identische Komposition wie Desktop, vertikal gestapelt. Keine
+                  Bottom-Nav (kein Account vorhanden).
+                </span>
+                <span data-vp-target="desktop" hidden>
+                  Welcome bei 1440×900. Hero-Logo, „Welcome to zkCoins"-Headline, drei
+                  Feature-Bullets, CREATE-WALLET-Button, Restore-Link, Footer mit
+                  Doku/API/Explorer/Blog/Status/GitHub/Network.
+                </span>
+                <span data-vp-target="tablet" hidden>
+                  Welcome bei 768×1024. Zwischen Desktop und Mobile — bewahrt die
+                  Hero-Card-Geometrie.
+                </span>
               </div>
             </div>
             <div class="test">
@@ -1396,36 +1461,46 @@
             </div>
             <div class="test">
               <div class="head">
-                <span class="name">settings-desktop</span
-                ><span class="src"
-                  ><a
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts#L42"
-                    >L42</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/05-settings-desktop.png" alt="settings desktop" />
-              </div>
-              <div class="desc">
-                Settings bei 1440×900: Network-Badge oben, Account-Sektion mit Adresse +
-                Auth-Methode, Preferences (planned toggles disabled), Resources, Disconnect-Button.
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">settings-mobile</span
-                ><span class="src"
-                  ><a
+                <span class="name">settings</span>
+                <div class="vp-toggle" data-vp-toggle>
+                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
+                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
+                </div>
+                <span class="src">
+                  <a
+                    data-vp-target="mobile"
                     href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts#L49"
                     >L49</a
-                  ></span
-                >
+                  >
+                  <a
+                    data-vp-target="desktop"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/05-disconnect.spec.ts#L42"
+                    hidden
+                    >L42</a
+                  >
+                </span>
               </div>
               <div class="img">
-                <img src="/handbook/screenshots/05-settings-mobile.png" alt="settings mobile" />
+                <img
+                  data-vp-target="mobile"
+                  src="/handbook/screenshots/05-settings-mobile.png"
+                  alt="settings mobile"
+                />
+                <img
+                  data-vp-target="desktop"
+                  src="/handbook/screenshots/05-settings-desktop.png"
+                  alt="settings desktop"
+                  hidden
+                />
               </div>
-              <div class="desc">Settings bei 375×812 — vertikal gestapelt.</div>
+              <div class="desc">
+                <span data-vp-target="mobile">Settings bei 375×812 — vertikal gestapelt.</span>
+                <span data-vp-target="desktop" hidden>
+                  Settings bei 1440×900: Network-Badge oben, Account-Sektion mit Adresse +
+                  Auth-Methode, Preferences (planned toggles disabled), Resources,
+                  Disconnect-Button.
+                </span>
+              </div>
             </div>
             <div class="test">
               <div class="head">
@@ -1543,38 +1618,46 @@
           <div class="tests cols-2">
             <div class="test">
               <div class="head">
-                <span class="name">balance-funded-desktop</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L21"
+                <span class="name">balance-funded</span>
+                <div class="vp-toggle" data-vp-toggle>
+                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
+                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
+                </div>
+                <span class="src">
+                  <a
+                    data-vp-target="mobile"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L30"
+                    >L30</a
+                  >
+                  <a
+                    data-vp-target="desktop"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L21"
+                    hidden
                     >L21</a
-                  ></span
-                >
+                  >
+                </span>
               </div>
               <div class="img">
                 <img
+                  data-vp-target="mobile"
+                  src="/handbook/screenshots/06-balance-funded-mobile.png"
+                  alt="funded mobile"
+                />
+                <img
+                  data-vp-target="desktop"
                   src="/handbook/screenshots/06-balance-funded-desktop.png"
                   alt="funded desktop"
+                  hidden
                 />
               </div>
               <div class="desc">
-                Voll befüllte Wallet bei 1440×900: Balance in BTC + USD, Adress-Chip,
-                Send/Receive-CTAs, Tx-Liste, Network-Chart, Footer.
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">balance-funded-mobile</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L30"
-                    >L30</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/06-balance-funded-mobile.png" alt="funded mobile" />
-              </div>
-              <div class="desc">
-                Funded Wallet bei 375×812 — vertikal gestapelt, Bottom-Nav unten.
+                <span data-vp-target="mobile">
+                  Funded Wallet bei 375×812 — vertikal gestapelt, Bottom-Nav unten.
+                </span>
+                <span data-vp-target="desktop" hidden>
+                  Voll befüllte Wallet bei 1440×900: Balance in BTC + USD, Adress-Chip,
+                  Send/Receive-CTAs, Tx-Liste, Network-Chart, Footer.
+                </span>
               </div>
             </div>
             <div class="test">
@@ -1774,40 +1857,45 @@
             </div>
             <div class="test">
               <div class="head">
-                <span class="name">confirm-dialog-desktop</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L144"
-                    >L144</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img
-                  src="/handbook/screenshots/07-confirm-dialog-desktop.png"
-                  alt="confirm desktop"
-                />
-              </div>
-              <div class="desc">
-                Bestätigungs-Dialog bei 1440×900. Empfänger + Betrag + Fee nochmal sichtbar. Cancel
-                + „Send now".
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">confirm-dialog-mobile</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L157"
+                <span class="name">confirm-dialog</span>
+                <div class="vp-toggle" data-vp-toggle>
+                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
+                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
+                </div>
+                <span class="src">
+                  <a
+                    data-vp-target="mobile"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L157"
                     >L157</a
-                  ></span
-                >
+                  >
+                  <a
+                    data-vp-target="desktop"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L144"
+                    hidden
+                    >L144</a
+                  >
+                </span>
               </div>
               <div class="img">
                 <img
+                  data-vp-target="mobile"
                   src="/handbook/screenshots/07-confirm-dialog-mobile.png"
                   alt="confirm mobile"
                 />
+                <img
+                  data-vp-target="desktop"
+                  src="/handbook/screenshots/07-confirm-dialog-desktop.png"
+                  alt="confirm desktop"
+                  hidden
+                />
               </div>
-              <div class="desc">Bottom-Sheet-Variante auf 375×812.</div>
+              <div class="desc">
+                <span data-vp-target="mobile">Bottom-Sheet-Variante auf 375×812.</span>
+                <span data-vp-target="desktop" hidden>
+                  Bestätigungs-Dialog bei 1440×900. Empfänger + Betrag + Fee nochmal sichtbar.
+                  Cancel + „Send now".
+                </span>
+              </div>
             </div>
             <div class="test">
               <div class="head">
@@ -1892,40 +1980,47 @@
           <div class="tests cols-2">
             <div class="test">
               <div class="head">
-                <span class="name">receive-default-desktop</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts#L29"
-                    >L29</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img
-                  src="/handbook/screenshots/08-receive-default-desktop.png"
-                  alt="receive desktop"
-                />
-              </div>
-              <div class="desc">
-                QR-Code mittig, Adresse monospace darunter, „Copy address"-Button, Privacy-Hinweis.
-                Kein Bottom-Nav (zeigt sub-page).
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">receive-default-mobile</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts#L35"
+                <span class="name">receive-default</span>
+                <div class="vp-toggle" data-vp-toggle>
+                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
+                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
+                </div>
+                <span class="src">
+                  <a
+                    data-vp-target="mobile"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts#L35"
                     >L35</a
-                  ></span
-                >
+                  >
+                  <a
+                    data-vp-target="desktop"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/08-receive.spec.ts#L29"
+                    hidden
+                    >L29</a
+                  >
+                </span>
               </div>
               <div class="img">
                 <img
+                  data-vp-target="mobile"
                   src="/handbook/screenshots/08-receive-default-mobile.png"
                   alt="receive mobile"
                 />
+                <img
+                  data-vp-target="desktop"
+                  src="/handbook/screenshots/08-receive-default-desktop.png"
+                  alt="receive desktop"
+                  hidden
+                />
               </div>
-              <div class="desc">Mobile-Layout: QR groß, Copy-Button volle Breite.</div>
+              <div class="desc">
+                <span data-vp-target="mobile"
+                  >Mobile-Layout: QR groß, Copy-Button volle Breite.</span
+                >
+                <span data-vp-target="desktop" hidden>
+                  QR-Code mittig, Adresse monospace darunter, „Copy address"-Button,
+                  Privacy-Hinweis. Kein Bottom-Nav (zeigt sub-page).
+                </span>
+              </div>
             </div>
             <div class="test">
               <div class="head">
