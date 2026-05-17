@@ -71,7 +71,7 @@ User-facing functions, their activation status, and the tests that cover them.
 
 ¹ Faucet additionally checks `/api/info` at runtime and stays hidden if the connected server reports `network = mainnet`, even if the flag is on. Defence in depth.
 ² Empty (default) → `/network` shows simulated data with a "Preview · simulated" badge. URL set → live chart fetched from the explorer.
-³ UI stub only: the toggle renders `disabled` with a `Planned` badge and has no runtime effect. The flag exists to keep the UI sketch in the repo for the future implementation; the deployed bundles never set it.
+³ UI stub only: the toggle renders `disabled` with a `Planned` badge and has no runtime effect. The flag exists so a local developer can inspect the UI sketch via `.env.local`. Activating these features is **not done by setting the flag in DEV or PRD** — when the feature is implemented, the gate is removed from the code rather than the env var being set on the deploy.
 
 ### Build-time feature flags
 
@@ -366,7 +366,7 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 
 - [ ] Account backup/restore
 - [ ] Explorer app (`zkcoins.space`)
-- [ ] Wire up the three env-gated Settings stubs (`ENABLE_AUTO_LOCK`, `ENABLE_ADDRESS_ROTATION`, `ENABLE_TOR_ROUTING`)
+- [ ] Implement the three Settings stubs (Auto-lock, Auto-rotate receive, Tor routing) — drop their `FEATURES.*` gates from `src/app/settings/page.tsx` once the real handler ships
 
 ## Related
 
