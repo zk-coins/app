@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/AppShell';
 import { FooterLinks } from '@/components/FooterLinks';
@@ -9,6 +9,54 @@ import { APP_VERSION } from '@/lib/format';
 import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
 import { deleteCredential } from '@/lib/crypto/storage';
+import { FEATURES } from '@/lib/features';
+
+function Toggle({
+  label,
+  description,
+  defaultOn = false,
+  disabled = false,
+  badge,
+}: {
+  label: string;
+  description?: string;
+  defaultOn?: boolean;
+  disabled?: boolean;
+  badge?: string;
+}) {
+  const [on, setOn] = useState(defaultOn);
+  return (
+    <div className="flex items-start justify-between gap-6 py-4">
+      <div className="min-w-0">
+        <div className="flex items-center gap-2">
+          <p className={`text-[13px] font-medium ${disabled ? 'text-ink2' : 'text-ink'}`}>
+            {label}
+          </p>
+          {badge && (
+            <span className="rounded-sm bg-line2 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider text-ink3 uppercase">
+              {badge}
+            </span>
+          )}
+        </div>
+        {description && <p className="mt-0.5 text-[12px] text-ink3">{description}</p>}
+      </div>
+      <button
+        onClick={() => !disabled && setOn((v) => !v)}
+        disabled={disabled}
+        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
+          disabled ? 'cursor-not-allowed bg-line opacity-50' : on ? 'bg-bitcoin' : 'bg-line2'
+        }`}
+        aria-pressed={on}
+      >
+        <span
+          className={`absolute top-0.5 h-4 w-4 rounded-full bg-ink transition-all ${
+            on ? 'left-[18px]' : 'left-0.5'
+          }`}
+        />
+      </button>
+    </div>
+  );
+}
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   const testid = `settings-section-${title.toLowerCase()}`;
@@ -108,7 +156,37 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
+          {FEATURES.AUTO_LOCK && (
+            <Toggle
+              label="Auto-lock"
+              description="Lock wallet after 5 minutes inactivity"
+              defaultOn
+              badge="Planned"
+              disabled
+            />
+          )}
         </Section>
+
+        {(FEATURES.ADDRESS_ROTATION || FEATURES.TOR_ROUTING) && (
+          <Section title="Privacy">
+            {FEATURES.ADDRESS_ROTATION && (
+              <Toggle
+                label="Auto-rotate receive address"
+                description="Generate a fresh address after each receive"
+                badge="Planned"
+                disabled
+              />
+            )}
+            {FEATURES.TOR_ROUTING && (
+              <Toggle
+                label="Tor routing"
+                description="Connect to backend over Tor"
+                badge="Planned"
+                disabled
+              />
+            )}
+          </Section>
+        )}
 
         <Section title="Resources">
           <div className="py-4">

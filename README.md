@@ -43,43 +43,50 @@ User-facing functions, their activation status, and the tests that cover them.
 
 **Coverage legend:** unit % refers to Vitest line coverage of the lowest-covered involved file in `src/lib/**` + `src/stores/**` (Components are excluded from coverage scope). `e2e` means a Playwright spec covers the flow. `—` means no test exists.
 
-| Feature                        | Status                                    | Triage | Tests                 |
-| ------------------------------ | ----------------------------------------- | ------ | --------------------- |
-| Create wallet — seed phrase    | always                                    | mvp    | 100% · e2e            |
-| Create wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate   | 14% · e2e             |
-| Restore wallet — seed phrase   | always                                    | mvp    | 100% · e2e            |
-| Restore wallet — passkey       | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate   | 14% · e2e             |
-| Unlock wallet — password       | always                                    | mvp    | 100% · e2e            |
-| Unlock wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)        | gate   | 14% · e2e             |
-| Disconnect wallet              | always                                    | mvp    | 100% · e2e            |
-| View balance                   | always                                    | mvp    | 100% · e2e            |
-| View transaction history       | always                                    | mvp    | 100% · e2e            |
-| Send Bitcoin (2-phase)         | always                                    | mvp    | 100% · e2e            |
-| Receive Bitcoin (address + QR) | always                                    | mvp    | 100% · e2e            |
-| Mint test BTC (faucet)         | env (`NEXT_PUBLIC_ENABLE_FAUCET`)¹        | gate   | 100% · e2e (indirect) |
-| Claim username                 | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | gate   | 100% · e2e (visual)   |
-| Resolve username (in Send)     | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)      | gate   | 100% · e2e (visual)   |
-| Network info badge             | always                                    | mvp    | 100% · e2e            |
-| Network activity chart         | env (`NEXT_PUBLIC_EXPLORER_URL`)²         | keep   | 0% · —                |
-| Install as PWA                 | always                                    | mvp    | — · e2e               |
-| Apps directory                 | env (`NEXT_PUBLIC_ENABLE_APPS_DIRECTORY`) | gate   | e2e (visual only)     |
-| `/reset` — wipe local state    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | gate   | —                     |
-| `/simulate` — demo populate    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)     | gate   | —                     |
+| Feature                        | Status                                       | Triage | Tests                 |
+| ------------------------------ | -------------------------------------------- | ------ | --------------------- |
+| Create wallet — seed phrase    | always                                       | mvp    | 100% · e2e            |
+| Create wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)           | gate   | 14% · e2e             |
+| Restore wallet — seed phrase   | always                                       | mvp    | 100% · e2e            |
+| Restore wallet — passkey       | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)           | gate   | 14% · e2e             |
+| Unlock wallet — password       | always                                       | mvp    | 100% · e2e            |
+| Unlock wallet — passkey        | env (`NEXT_PUBLIC_ENABLE_PASSKEY`)           | gate   | 14% · e2e             |
+| Disconnect wallet              | always                                       | mvp    | 100% · e2e            |
+| View balance                   | always                                       | mvp    | 100% · e2e            |
+| View transaction history       | always                                       | mvp    | 100% · e2e            |
+| Send Bitcoin (2-phase)         | always                                       | mvp    | 100% · e2e            |
+| Receive Bitcoin (address + QR) | always                                       | mvp    | 100% · e2e            |
+| Mint test BTC (faucet)         | env (`NEXT_PUBLIC_ENABLE_FAUCET`)¹           | gate   | 100% · e2e (indirect) |
+| Claim username                 | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)         | gate   | 100% · e2e (visual)   |
+| Resolve username (in Send)     | env (`NEXT_PUBLIC_ENABLE_USERNAMES`)         | gate   | 100% · e2e (visual)   |
+| Network info badge             | always                                       | mvp    | 100% · e2e            |
+| Network activity chart         | env (`NEXT_PUBLIC_EXPLORER_URL`)²            | keep   | 0% · —                |
+| Install as PWA                 | always                                       | mvp    | — · e2e               |
+| Apps directory                 | env (`NEXT_PUBLIC_ENABLE_APPS_DIRECTORY`)    | gate   | e2e (visual only)     |
+| Auto-lock (stub)               | env (`NEXT_PUBLIC_ENABLE_AUTO_LOCK`)³        | gate   | —                     |
+| Auto-rotate receive (stub)     | env (`NEXT_PUBLIC_ENABLE_ADDRESS_ROTATION`)³ | gate   | —                     |
+| Tor routing (stub)             | env (`NEXT_PUBLIC_ENABLE_TOR_ROUTING`)³      | gate   | —                     |
+| `/reset` — wipe local state    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)        | gate   | —                     |
+| `/simulate` — demo populate    | env (`NEXT_PUBLIC_ENABLE_DEV_ROUTES`)        | gate   | —                     |
 
 ¹ Faucet additionally checks `/api/info` at runtime and stays hidden if the connected server reports `network = mainnet`, even if the flag is on. Defence in depth.
 ² Empty (default) → `/network` shows simulated data with a "Preview · simulated" badge. URL set → live chart fetched from the explorer.
+³ UI stub only: the toggle renders `disabled` with a `Planned` badge and has no runtime effect. The flag exists to keep the UI sketch in the repo for the future implementation; the deployed bundles never set it.
 
 ### Build-time feature flags
 
 All flags are inlined by Next.js at build time via `process.env.NEXT_PUBLIC_*`. The branches against `false` are removed by dead-code elimination — the gated code path does not ship in the production bundle. Default off (fail-closed): any value other than the literal string `"true"`, including missing, leaves the flag off.
 
-| Build arg / env         | Gates                                                                   |
-| ----------------------- | ----------------------------------------------------------------------- |
-| `ENABLE_PASSKEY`        | The three passkey flows (create / restore / unlock)                     |
-| `ENABLE_FAUCET`         | The Mint button on `/` (plus the runtime mainnet check, see ²)          |
-| `ENABLE_USERNAMES`      | Username claim on `/`, `@`/`$` resolver in Send, "@zkcoins.app" UI      |
-| `ENABLE_APPS_DIRECTORY` | `/apps` route, the Apps tab in the bottom nav, DFX link on empty Wallet |
-| `ENABLE_DEV_ROUTES`     | `/reset` and `/simulate` pages                                          |
+| Build arg / env           | Gates                                                                   |
+| ------------------------- | ----------------------------------------------------------------------- |
+| `ENABLE_PASSKEY`          | The three passkey flows (create / restore / unlock)                     |
+| `ENABLE_FAUCET`           | The Mint button on `/` (plus the runtime mainnet check, see ²)          |
+| `ENABLE_USERNAMES`        | Username claim on `/`, `@`/`$` resolver in Send, "@zkcoins.app" UI      |
+| `ENABLE_APPS_DIRECTORY`   | `/apps` route, the Apps tab in the bottom nav, DFX link on empty Wallet |
+| `ENABLE_AUTO_LOCK`        | Settings → Security "Auto-lock" toggle (stub³)                          |
+| `ENABLE_ADDRESS_ROTATION` | Settings → Privacy "Auto-rotate receive address" toggle (stub³)         |
+| `ENABLE_TOR_ROUTING`      | Settings → Privacy "Tor routing" toggle (stub³)                         |
+| `ENABLE_DEV_ROUTES`       | `/reset` and `/simulate` pages                                          |
 
 The image built by `deploy-dev.yaml` sets every flag to `true` for testing. The image built by `deploy-prd.yaml` passes no build args, so every flag defaults to `false` and the PRD bundle contains only MVP code paths. The two API URL placeholders (`NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_EXPLORER_URL`) are still substituted at container start by `entrypoint.sh`, unchanged.
 
@@ -359,6 +366,7 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 
 - [ ] Account backup/restore
 - [ ] Explorer app (`zkcoins.space`)
+- [ ] Wire up the three env-gated Settings stubs (`ENABLE_AUTO_LOCK`, `ENABLE_ADDRESS_ROTATION`, `ENABLE_TOR_ROUTING`)
 
 ## Related
 
