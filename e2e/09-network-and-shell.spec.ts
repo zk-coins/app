@@ -70,20 +70,40 @@ test.describe('Network badge + AppShell', () => {
   });
 
   test('network-badge-loading', async ({ page }) => {
-    // Capture the absent-badge loading state on Settings. `aliceLogin`'s
-    // WalletScreen useEffect already populated `networkName` in the
-    // store, so we clear it manually before navigating — the route
-    // intercept then holds the re-fetch open for the duration of the
-    // snap. The store is exposed on `window.__useNetworkStore` in
-    // `src/stores/network.ts` for this purpose.
+    // Capture the absent-badge loading state on Settings.
+    //
+    // `aliceLogin` mounts WalletScreen, whose `useEffect(api.info, …)`
+    // fires immediately and populates `networkName` in the store.
+    // Wait for that first roundtrip to settle BEFORE installing the
+    // route block — otherwise the in-flight response sneaks past the
+    // intercept and writes `networkName` back to its real value as
+    // soon as Settings has rendered, re-introducing the badge and
+    // turning `toHaveCount(0)` into a flake.
+    type StoreShim = {
+      getState: () => { networkName: string };
+      setState: (s: Record<string, unknown>) => void;
+    };
+    await expect
+      .poll(
+        () =>
+          page.evaluate(() => {
+            const w = window as unknown as { __useNetworkStore?: StoreShim };
+            return w.__useNetworkStore?.getState().networkName ?? '';
+          }),
+        { timeout: 10_000 },
+      )
+      .not.toBe('');
+
+    // Block any further /api/info call from racing past us. The store
+    // is exposed on `window.__useNetworkStore` in `src/stores/network.ts`
+    // for this purpose.
     await page.route('**/api/info', async (route) => {
       await new Promise((r) => setTimeout(r, 8_000));
       await route.continue();
     });
     await page.evaluate(() => {
-      type StoreShim = { setState?: (s: Record<string, unknown>) => void };
-      const w = window as unknown as Record<string, StoreShim | undefined>;
-      w.__useNetworkStore?.setState?.({ networkName: '' });
+      const w = window as unknown as { __useNetworkStore?: StoreShim };
+      w.__useNetworkStore?.setState({ networkName: '' });
     });
     await page.getByTestId('nav-settings').click();
     await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
