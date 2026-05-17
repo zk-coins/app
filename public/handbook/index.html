@@ -654,6 +654,18 @@
               exist for local developer setups via <code>.env.local</code> only.
             </p>
           </div>
+
+          <div class="callout info">
+            <p>
+              <b>Viewports.</b> Screenshots default to mobile <code>375 × 812</code> — zkCoins is a
+              mobile-first PWA. Paired desktop <code>1440 × 900</code> variants are captured
+              explicitly for the five screens where the layout differs structurally on wider
+              viewports (welcome, settings, funded balance, send-confirm dialog, receive). The
+              Welcome screen additionally has a tablet <code>768 × 1024</code> baseline at the
+              <code>md:</code> breakpoint. Test-specific hover states stay desktop because
+              <code>:hover</code> is a desktop-only interaction.
+            </p>
+          </div>
         </section>
 
         <hr class="sep" />

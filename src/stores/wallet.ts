@@ -10,7 +10,6 @@ import {
 
 export interface Account {
   address: string;
-  balance: number;
   numPubkeys: number;
   xpriv: string;
   username?: string;
@@ -27,6 +26,10 @@ export interface Transaction {
 
 interface WalletState {
   account: Account | null;
+  // Server-state, never persisted. `null` = not fetched yet (post-unlock /
+  // post-restore, before the first /api/balance tick). `0` = empty wallet.
+  // Components must distinguish the two to avoid a "Wallet is empty" flash.
+  balance: number | null;
   transactions: Transaction[];
   isLoading: boolean;
   isLocked: boolean;
@@ -75,6 +78,7 @@ function saveTransactions(transactions: Transaction[]): void {
 
 export const useWalletStore = create<WalletState>((set, get) => ({
   account: null,
+  balance: null,
   transactions: loadTransactions(),
   isLoading: false,
   isLocked: false,
@@ -85,12 +89,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   setAccount: (account) => set({ account }),
 
-  setBalance: (balance) => {
-    const { account } = get();
-    if (account) {
-      set({ account: { ...account, balance } });
-    }
-  },
+  setBalance: (balance) => set({ balance }),
 
   setUsername: (username) => {
     const { account } = get();
@@ -174,6 +173,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     set({
       account: data.account,
+      balance: null,
       /* c8 ignore next — defensive fallback for malformed encrypted payloads */
       transactions: data.transactions || [],
       isLocked: false,
@@ -190,6 +190,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     set({
       account: data.account,
+      balance: null,
       /* c8 ignore next — defensive fallback for malformed encrypted payloads */
       transactions: data.transactions || [],
       isLocked: false,
@@ -200,6 +201,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const { account } = get();
     set({
       account: null,
+      balance: null,
       isLocked: true,
       storedAddress: account?.address ?? get().storedAddress,
     });
@@ -253,6 +255,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
             // Load legacy data directly (will be migrated on next save)
             set({
               account: data.account,
+              balance: null,
               transactions: data.transactions || [],
               isLocked: false,
               hasStoredWallet: false,
@@ -271,6 +274,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     localStorage.removeItem(TX_STORAGE_KEY);
     set({
       account: null,
+      balance: null,
       transactions: [],
       isLocked: false,
       hasStoredWallet: false,

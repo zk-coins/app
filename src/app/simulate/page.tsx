@@ -41,7 +41,6 @@ export default function SimulatePage() {
           const ad = await wasm.createAccount();
           acc = {
             address: ad.address,
-            balance: 0,
             numPubkeys: ad.numPubkeys,
             xpriv: ad.xpriv,
           };

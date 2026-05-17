@@ -644,6 +644,19 @@
               Feature-Flags gibt es nur lokal via <code>.env.local</code>.
             </p>
           </div>
+
+          <div class="callout info">
+            <p>
+              <b>Viewports.</b> Screenshots zeigen standardmäßig die Mobile-Ansicht
+              <code>375 × 812</code> — zkCoins ist eine Mobile-First-PWA. Paired Desktop-Varianten
+              <code>1440 × 900</code> sind für die fünf Bildschirme erfasst, deren Layout auf
+              breiteren Viewports strukturell anders aussieht (Welcome, Settings, Funded Balance,
+              Send-Confirm-Dialog, Receive). Welcome hat zusätzlich eine Tablet-Baseline
+              <code>768 × 1024</code> am <code>md:</code>-Breakpoint. Test-spezifische
+              Hover-Zustände bleiben Desktop, weil <code>:hover</code> eine Desktop-only-Interaktion
+              ist.
+            </p>
+          </div>
         </section>
 
         <hr class="sep" />
