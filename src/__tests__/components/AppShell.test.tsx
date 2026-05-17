@@ -51,12 +51,16 @@ beforeEach(() => {
 
 describe('AppShell — prop matrix', () => {
   it('renders children inside the column', () => {
+    // Use a text marker rather than a `data-testid` for the fixture —
+    // `e2e/_audit/coverage.mjs` walks the entire `src/` tree (including
+    // `src/__tests__/`) and would flag a test-only testid as an
+    // uncovered MVP id.
     render(
       <AppShell>
-        <p data-testid="shell-child">payload</p>
+        <p>shell-payload-marker</p>
       </AppShell>,
     );
-    expect(screen.getByTestId('shell-child')).toHaveTextContent('payload');
+    expect(screen.getByText('shell-payload-marker')).toBeInTheDocument();
   });
 
   it('renders BottomNav and FooterLinks by default', () => {
