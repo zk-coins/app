@@ -57,20 +57,34 @@ describe.skipIf(!RUN)('live API contract', () => {
     expect(typeof res.network).toBe('string');
   });
 
-  it('POST /api/mint parses against MintResponseSchema', async () => {
-    const minted = await api.mint(randomAddress());
-    expect(() => MintResponseSchema.parse(minted)).not.toThrow();
-    expect(minted.success).toBe(true);
-  });
+  // `/api/mint` triggers real ZK proof generation on the server — typical
+  // 10–20 s on DEV. Vitest's 5 s default would time out before the
+  // response lands. Same per-test override for any endpoint that
+  // depends on a fresh mint.
+  const MINT_TIMEOUT_MS = 120_000;
 
-  it('GET /api/balance parses against BalanceResponseSchema', async () => {
-    // Mint into a fresh address, then read its balance back. The
-    // 404→{balance:0} branch in `api.balance` is exercised on
-    // never-seen addresses; here we want a fully populated row.
-    const address = randomAddress();
-    await api.mint(address);
-    const res = await api.balance(address);
-    expect(() => BalanceResponseSchema.parse(res)).not.toThrow();
-    expect(res.balance).toBeGreaterThan(0);
-  });
+  it(
+    'POST /api/mint parses against MintResponseSchema',
+    async () => {
+      const minted = await api.mint(randomAddress());
+      expect(() => MintResponseSchema.parse(minted)).not.toThrow();
+      expect(minted.success).toBe(true);
+    },
+    MINT_TIMEOUT_MS,
+  );
+
+  it(
+    'GET /api/balance parses against BalanceResponseSchema',
+    async () => {
+      // Mint into a fresh address, then read its balance back. The
+      // 404→{balance:0} branch in `api.balance` is exercised on
+      // never-seen addresses; here we want a fully populated row.
+      const address = randomAddress();
+      await api.mint(address);
+      const res = await api.balance(address);
+      expect(() => BalanceResponseSchema.parse(res)).not.toThrow();
+      expect(res.balance).toBeGreaterThan(0);
+    },
+    MINT_TIMEOUT_MS,
+  );
 });
