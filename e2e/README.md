@@ -668,3 +668,24 @@ Things that the plan **does not** yet pin down — surface them in PR-1's descri
 - **Toast component**: every "copied" toast in the app currently uses the same pattern. If §8.6:balance-copied-feedback **or** §8.8:receive-after-copy catches a regression, look at the shared logic in `WalletScreen.tsx` and `app/receive/page.tsx`, not the spec.
 - **Faucet button is non-MVP** but the empty-balance flow makes it the most ergonomic way to test the empty-state. §8.6:balance-zero-faucet-visible captures the DEV-bundle banner. The PRD-bundle variant of this same screen (no Faucet button) is **not** covered here — add a PRD smoke spec later.
 - **`set max` button** in `07-send` mutates the amount input. If the formatting changes (e.g., trailing zeros) the screenshot will catch it.
+
+## 14. Button-Inventory-Audit (`_audit/coverage.mjs`)
+
+A static-analysis check that complements the runtime suite: it walks `src/` for `data-testid="…"`, the wrapper `testid="…"` prop, and template-literal forms (`testid={\`prefix-${var}-suffix\`}`), then compares against `getByTestId(...)`calls and`[data-testid="…"]`locator strings in`e2e/`. It also flags `<button>`/`onClick`handlers that have neither a testid nor an`aria-label` nearby.
+
+**Run locally**
+
+```bash
+node e2e/_audit/coverage.mjs              # strict: exit 1 on uncovered MVP testids or unlabeled MVP buttons
+node e2e/_audit/coverage.mjs --markdown   # output formatted for PR comments
+node e2e/_audit/coverage.mjs --json       # machine-readable
+node e2e/_audit/coverage.mjs --report-only # always exit 0 (CI's current default)
+```
+
+**CI integration**
+
+`.github/workflows/audit-button-coverage.yml` runs the audit on every PR against `develop` and on every push to `develop`. The workflow posts a sticky comment (`audit-button-coverage`) with the findings. It currently runs with `--report-only` so the backlog of known gaps doesn't block merges — flip to `--strict` in the workflow once the items in section A and C of the report are cleared.
+
+**Allowlisting**
+
+If a testid is intentionally out-of-scope (e.g. PASSKEY non-MVP code, transient loading states), add it to `MVP_EXEMPT_TESTIDS` in `e2e/_audit/coverage.mjs`. If a file contains generic wrapper components whose `<button>`s legitimately have no testid (the testid lives on the wrapper's usage site), add the file path to `MVP_EXEMPT_FILES`. Both lists demand a one-line comment justifying the exemption.
