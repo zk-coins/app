@@ -9,6 +9,7 @@ import { APP_VERSION } from '@/lib/format';
 import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
 import { deleteCredential } from '@/lib/crypto/storage';
+import { FEATURES } from '@/lib/features';
 
 function Toggle({
   label,
@@ -155,29 +156,37 @@ export default function SettingsPage() {
               </p>
             </div>
           </div>
-          <Toggle
-            label="Auto-lock"
-            description="Lock wallet after 5 minutes inactivity"
-            defaultOn
-            badge="Planned"
-            disabled
-          />
+          {FEATURES.AUTO_LOCK && (
+            <Toggle
+              label="Auto-lock"
+              description="Lock wallet after 5 minutes inactivity"
+              defaultOn
+              badge="Planned"
+              disabled
+            />
+          )}
         </Section>
 
-        <Section title="Privacy">
-          <Toggle
-            label="Auto-rotate receive address"
-            description="Generate a fresh address after each receive"
-            badge="Planned"
-            disabled
-          />
-          <Toggle
-            label="Tor routing"
-            description="Connect to backend over Tor"
-            badge="Planned"
-            disabled
-          />
-        </Section>
+        {(FEATURES.ADDRESS_ROTATION || FEATURES.TOR_ROUTING) && (
+          <Section title="Privacy">
+            {FEATURES.ADDRESS_ROTATION && (
+              <Toggle
+                label="Auto-rotate receive address"
+                description="Generate a fresh address after each receive"
+                badge="Planned"
+                disabled
+              />
+            )}
+            {FEATURES.TOR_ROUTING && (
+              <Toggle
+                label="Tor routing"
+                description="Connect to backend over Tor"
+                badge="Planned"
+                disabled
+              />
+            )}
+          </Section>
+        )}
 
         <Section title="Resources">
           <div className="py-4">

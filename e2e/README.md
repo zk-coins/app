@@ -354,12 +354,12 @@ Closes the **MVP triage gap**.
 
 ### 8.5 `05-disconnect.spec.ts` (7 tests / 7 shots)
 
-Settings page from Alice's wallet, all sections + every interactive widget the user can touch. The three Toggle widgets (Auto-lock, Auto-rotate, Tor routing) are all `disabled` and their `:hover` resolves to the same `cursor-not-allowed` style — a dedicated hover shot would be pixel-identical to `settings-desktop` and is omitted.
+Settings page from Alice's wallet, all sections + every interactive widget the user can touch.
 
 | #   | Step                      | Notes                                                                                                                                                                                                                                  |
 | --- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | 1   | wallet-to-settings-nav    | WalletScreen with the Settings tab in BottomNav highlighted on click (use `page.hover()` first).                                                                                                                                       |
-| 2   | settings-desktop          | Full settings render on 1440 × 900. Header with badge, all 4 Sections expanded, Disconnect button.                                                                                                                                     |
+| 2   | settings-desktop          | Full settings render on 1440 × 900. Header with badge, all 3 Sections expanded, Disconnect button.                                                                                                                                     |
 | 3   | settings-mobile           | Same on 375 × 812.                                                                                                                                                                                                                     |
 | 4   | settings-disconnect-hover | Hover on the "Disconnect Wallet" button — border colour shifts to bitcoin/40.                                                                                                                                                          |
 | 5   | disconnect-confirm-dialog | Click Disconnect → `window.confirm` dialog. Capture via `page.on('dialog', d => screenshot then d.accept())`. The dialog is browser-chrome; this row asserts the dialog's `.message()` text and screenshots the empty page underneath. |

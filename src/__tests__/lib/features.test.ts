@@ -8,14 +8,20 @@ describe('FEATURES', () => {
     expect(typeof FEATURES.USERNAMES).toBe('boolean');
     expect(typeof FEATURES.APPS_DIRECTORY).toBe('boolean');
     expect(typeof FEATURES.DEV_ROUTES).toBe('boolean');
+    expect(typeof FEATURES.AUTO_LOCK).toBe('boolean');
+    expect(typeof FEATURES.ADDRESS_ROTATION).toBe('boolean');
+    expect(typeof FEATURES.TOR_ROUTING).toBe('boolean');
   });
 
-  it('exposes exactly the five known flags', () => {
+  it('exposes exactly the eight known flags', () => {
     expect(Object.keys(FEATURES).sort()).toEqual([
+      'ADDRESS_ROTATION',
       'APPS_DIRECTORY',
+      'AUTO_LOCK',
       'DEV_ROUTES',
       'FAUCET',
       'PASSKEY',
+      'TOR_ROUTING',
       'USERNAMES',
     ]);
   });
