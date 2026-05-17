@@ -4,7 +4,6 @@ import type { Account, Transaction } from '@/stores/wallet';
 
 const testAccount: Account = {
   address: 'a'.repeat(64),
-  balance: 10000,
   numPubkeys: 0,
   xpriv: 'xprv9s21ZrQH143K3GJpoapnV8SFfuZcECe',
 };
@@ -20,6 +19,7 @@ beforeEach(() => {
   // Reset store
   useWalletStore.setState({
     account: null,
+    balance: null,
     transactions: [],
     isLoading: false,
     isLocked: false,
@@ -59,6 +59,7 @@ describe('wallet store — basic state', () => {
   it('has correct initial state', () => {
     const state = useWalletStore.getState();
     expect(state.account).toBeNull();
+    expect(state.balance).toBeNull();
     expect(state.transactions).toEqual([]);
     expect(state.isLoading).toBe(false);
     expect(state.isLocked).toBe(false);
@@ -93,15 +94,18 @@ describe('wallet store — basic state', () => {
 });
 
 describe('wallet store — balance and pubkeys', () => {
-  it('sets balance on existing account', () => {
-    useWalletStore.getState().setAccount(testAccount);
+  it('sets balance as a top-level value, independent of account', () => {
     useWalletStore.getState().setBalance(42000);
-    expect(useWalletStore.getState().account?.balance).toBe(42000);
+    expect(useWalletStore.getState().balance).toBe(42000);
+    expect(useWalletStore.getState().account).toBeNull();
   });
 
-  it('does nothing when setting balance without account', () => {
-    useWalletStore.getState().setBalance(42000);
-    expect(useWalletStore.getState().account).toBeNull();
+  it('keeps balance separate from account identity', () => {
+    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setBalance(7777);
+    const state = useWalletStore.getState();
+    expect(state.balance).toBe(7777);
+    expect(state.account).toEqual(testAccount);
   });
 
   it('increments pubkeys', () => {
@@ -133,7 +137,6 @@ describe('wallet store — balance and pubkeys', () => {
     useWalletStore.getState().setUsername('alice');
     const account = useWalletStore.getState().account;
     expect(account?.address).toBe(testAccount.address);
-    expect(account?.balance).toBe(testAccount.balance);
     expect(account?.numPubkeys).toBe(testAccount.numPubkeys);
     expect(account?.username).toBe('alice');
   });
@@ -302,11 +305,13 @@ describe('wallet store — PRF encryption', () => {
 });
 
 describe('wallet store — lock', () => {
-  it('clears account and sets isLocked', () => {
+  it('clears account, resets balance to null, and sets isLocked', () => {
     useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setBalance(50000);
     useWalletStore.getState().lock();
     const state = useWalletStore.getState();
     expect(state.account).toBeNull();
+    expect(state.balance).toBeNull();
     expect(state.isLocked).toBe(true);
     expect(state.storedAddress).toBe(testAccount.address);
   });
