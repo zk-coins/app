@@ -17,6 +17,24 @@ on:
         description: Branch to update baselines on
         required: true
         default: develop
+      spec_glob:
+        description: >-
+          Spec glob(s) to run, space-separated. Defaults to the full
+          exhaustive suite. Narrow this when only a few specs need
+          fresh baselines (e.g. after a UI change that only affects
+          the wallet header).
+        required: false
+        default: e2e/0*.spec.ts e2e/1*.spec.ts
+      tolerate_failures:
+        description: >-
+          Continue to the commit step even if some specs fail.
+          --update-snapshots=all still writes new PNGs for the specs
+          that did run; the commit step picks up only the actually
+          changed files. Use when an unrelated spec is flaky on DEV
+          and would otherwise block the regen.
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -71,7 +89,23 @@ jobs:
         # axe against the live DEV server — when a follow-up fix is
         # still en route, those checks would block the baseline refresh
         # that the fix actually needs.
-        run: npx playwright test --project=chromium --update-snapshots=all --grep-invert "Accessibility" e2e/0*.spec.ts e2e/1*.spec.ts
+        #
+        # `spec_glob` lets the caller narrow the run to specific files
+        # when only a few specs need fresh baselines.
+        #
+        # `tolerate_failures=true` appends `|| true` so an unrelated
+        # spec failure on DEV doesn't abort the workflow — the commit
+        # step inspects `git status` and only commits PNGs that
+        # actually changed, so partial regens are safe.
+        run: |
+          set -euo pipefail
+          CMD="npx playwright test --project=chromium --update-snapshots=all --grep-invert \"Accessibility\" ${{ inputs.spec_glob }}"
+          if [[ "${{ inputs.tolerate_failures }}" == "true" ]]; then
+            echo "[regen] tolerate_failures=true — appending '|| true'"
+            eval "$CMD || true"
+          else
+            eval "$CMD"
+          fi
 
       - name: Commit, push to a side branch, open auto-merge PR
         env:
