@@ -322,6 +322,7 @@ export default function SendPage() {
             type="text"
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
             spellCheck={false}
             autoComplete="off"
             placeholder={FEATURES.USERNAMES ? 'alice@zkcoins.app' : '0x…'}
@@ -339,6 +340,7 @@ export default function SendPage() {
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
+              onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
               spellCheck={false}
               autoComplete="off"
               placeholder="0.00000000"

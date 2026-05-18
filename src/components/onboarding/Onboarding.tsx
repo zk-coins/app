@@ -388,6 +388,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && create()}
             placeholder="Password (min 8 characters)"
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
@@ -396,6 +397,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
             type="password"
             value={passwordConfirm}
             onChange={(e) => setPasswordConfirm(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && create()}
             placeholder="Confirm password"
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
@@ -696,6 +698,7 @@ function SeedImportFlow({
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
+            onKeyDown={(e) => e.key === 'Enter' && restore()}
             placeholder="Password (min 8 characters)"
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />

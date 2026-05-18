@@ -70,6 +70,25 @@ export function WalletScreen() {
 
   const zkAddress = account ? toZkAddress(account.address) : '';
 
+  const claimUsername = useCallback(async () => {
+    if (!account || !claimInput || !account.xpriv) return;
+    setClaiming(true);
+    setClaimError(null);
+    try {
+      const res = await api.claimUsername({
+        username: claimInput,
+        address: account.address,
+        xpriv: account.xpriv,
+      });
+      setUsername(res.username);
+      setClaimInput('');
+    } catch (err) {
+      setClaimError(err instanceof Error ? err.message : 'Claim failed');
+    } finally {
+      setClaiming(false);
+    }
+  }, [account, claimInput, setUsername]);
+
   const copyAddress = useCallback(() => {
     if (!account) return;
     navigator.clipboard.writeText(zkAddress).then(
@@ -140,28 +159,12 @@ export function WalletScreen() {
                     setClaimInput(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''));
                     setClaimError(null);
                   }}
+                  onKeyDown={(e) => e.key === 'Enter' && claimUsername()}
                   placeholder="Claim a username"
                   className="flex-1 rounded-md border border-line2 bg-surface px-2.5 py-1.5 mono text-[11px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
                 />
                 <button
-                  onClick={async () => {
-                    if (!claimInput || !account.xpriv) return;
-                    setClaiming(true);
-                    setClaimError(null);
-                    try {
-                      const res = await api.claimUsername({
-                        username: claimInput,
-                        address: account.address,
-                        xpriv: account.xpriv,
-                      });
-                      setUsername(res.username);
-                      setClaimInput('');
-                    } catch (err) {
-                      setClaimError(err instanceof Error ? err.message : 'Claim failed');
-                    } finally {
-                      setClaiming(false);
-                    }
-                  }}
+                  onClick={claimUsername}
                   disabled={claiming || !claimInput}
                   className="rounded-md bg-bitcoin px-3 py-1.5 text-[11px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover disabled:opacity-50"
                 >
