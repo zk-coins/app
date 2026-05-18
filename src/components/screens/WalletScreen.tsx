@@ -70,6 +70,25 @@ export function WalletScreen() {
 
   const zkAddress = account ? toZkAddress(account.address) : '';
 
+  const claimUsername = useCallback(async () => {
+    if (!account || !claimInput || !account.xpriv) return;
+    setClaiming(true);
+    setClaimError(null);
+    try {
+      const res = await api.claimUsername({
+        username: claimInput,
+        address: account.address,
+        xpriv: account.xpriv,
+      });
+      setUsername(res.username);
+      setClaimInput('');
+    } catch (err) {
+      setClaimError(err instanceof Error ? err.message : 'Claim failed');
+    } finally {
+      setClaiming(false);
+    }
+  }, [account, claimInput, setUsername]);
+
   const copyAddress = useCallback(() => {
     if (!account) return;
     navigator.clipboard.writeText(zkAddress).then(
@@ -132,7 +151,13 @@ export function WalletScreen() {
                 : zkAddress}
             </p>
             {FEATURES.USERNAMES && !account.username && (
-              <div className="flex items-center gap-2">
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  claimUsername();
+                }}
+              >
                 <input
                   type="text"
                   value={claimInput}
@@ -144,30 +169,14 @@ export function WalletScreen() {
                   className="flex-1 rounded-md border border-line2 bg-surface px-2.5 py-1.5 mono text-[11px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
                 />
                 <button
-                  onClick={async () => {
-                    if (!claimInput || !account.xpriv) return;
-                    setClaiming(true);
-                    setClaimError(null);
-                    try {
-                      const res = await api.claimUsername({
-                        username: claimInput,
-                        address: account.address,
-                        xpriv: account.xpriv,
-                      });
-                      setUsername(res.username);
-                      setClaimInput('');
-                    } catch (err) {
-                      setClaimError(err instanceof Error ? err.message : 'Claim failed');
-                    } finally {
-                      setClaiming(false);
-                    }
-                  }}
+                  type="submit"
+                  data-testid="username-claim-btn"
                   disabled={claiming || !claimInput}
                   className="rounded-md bg-bitcoin px-3 py-1.5 text-[11px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover disabled:opacity-50"
                 >
                   {claiming ? '…' : 'Claim'}
                 </button>
-              </div>
+              </form>
             )}
             {FEATURES.USERNAMES && claimError && (
               <p className="text-[11px] text-bad">{claimError}</p>
