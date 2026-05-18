@@ -46,6 +46,10 @@ const MVP_EXEMPT_TESTIDS = new Set([
   // reliably catch them without artificially slowing WASM calls.
   'seed-creating-btn',
   'seed-import-restoring-btn',
+  // Faucet error toast (issue #99) -- only fires when /api/mint returns
+  // an ApiError; covered by the unit-level mapping tests, not reachable
+  // in the happy-path E2E flow.
+  'wallet-mint-error',
 ]);
 
 // Generic wrapper components are allowed to expose <button> without testid
