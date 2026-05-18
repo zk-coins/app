@@ -53,6 +53,22 @@ export const UsernameResponseSchema = z.object({
 export const ClaimUsernameResponseSchema = UsernameResponseSchema;
 export const ResolveUsernameResponseSchema = UsernameResponseSchema;
 
+// Server-side feature gates, mirrored from
+// `zk-coins/server::server.rs::Capabilities`. Each bool reflects a
+// compile-time Cargo feature on the server binary, so the client can
+// gate UI on a single source of truth instead of mirroring a parallel
+// `NEXT_PUBLIC_ENABLE_*` set.
+export const CapabilitiesSchema = z.object({
+  address_list: z.boolean(),
+  faucet: z.boolean(),
+  usernames: z.boolean(),
+  lnurl: z.boolean(),
+});
+
 export const InfoResponseSchema = z.object({
   network: z.string(),
+  // Optional so a fresh app talking to a pre-capabilities server
+  // (zk-coins/server pre-#29) doesn't trip the Zod gate. The
+  // capabilities store applies a fail-closed default in that case.
+  capabilities: CapabilitiesSchema.optional(),
 });

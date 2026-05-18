@@ -7,6 +7,7 @@ import { UnlockScreen } from '@/components/onboarding/UnlockScreen';
 import { WalletScreen } from '@/components/screens/WalletScreen';
 import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
+import { useCapabilities } from '@/stores/capabilities';
 
 export default function Home() {
   const {
@@ -25,6 +26,11 @@ export default function Home() {
     (async () => {
       await checkForStoredWallet();
       await hydrate();
+      // Server feature gates: faucet / usernames / address_list / lnurl
+      // are reported by `/api/info`. Fire-and-forget — the store
+      // fail-closes on error so an unreachable server hides gated UI
+      // rather than crashing the boot path.
+      useCapabilities.getState().fetch();
       setHydrated(true);
     })();
   }, [checkForStoredWallet, hydrate]);

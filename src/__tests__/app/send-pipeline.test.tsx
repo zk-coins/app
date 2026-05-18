@@ -46,7 +46,13 @@ const FEATURES_STATE = vi.hoisted(() => ({
   TOR_ROUTING: false,
 }));
 
-vi.mock('@/lib/features', () => ({ FEATURES: FEATURES_STATE }));
+// `FEATURES` only exposes build-time client flags; the runtime
+// `FAUCET` / `USERNAMES` capabilities are served by `useFeatures()`.
+// The holder backs both so tests can keep flipping a single object.
+vi.mock('@/lib/features', () => ({
+  FEATURES: FEATURES_STATE,
+  useFeatures: () => FEATURES_STATE,
+}));
 
 const routerReplace = vi.fn();
 const routerPush = vi.fn();

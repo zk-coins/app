@@ -146,6 +146,26 @@ describe('api.info', () => {
     );
     expect(result.network).toBe('Mutinynet');
   });
+
+  it('parses the capabilities object when the server includes it', async () => {
+    mockJsonResponse<z.infer<typeof InfoResponseSchema>>({
+      network: 'Mutinynet',
+      capabilities: { address_list: true, faucet: true, usernames: true, lnurl: false },
+    });
+    const result = await api.info();
+    expect(result.capabilities).toEqual({
+      address_list: true,
+      faucet: true,
+      usernames: true,
+      lnurl: false,
+    });
+  });
+
+  it('leaves capabilities undefined when the server omits the field (pre-#29 compat)', async () => {
+    mockJsonResponse<z.infer<typeof InfoResponseSchema>>({ network: 'Mainnet' });
+    const result = await api.info();
+    expect(result.capabilities).toBeUndefined();
+  });
 });
 
 describe('error handling', () => {
