@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { z } from 'zod';
-import { api } from '@/lib/api/client';
+import { ApiError, api } from '@/lib/api/client';
+import { KNOWN_SERVER_ERRORS } from '@/lib/api/errorMessages';
 import {
   BalanceResponseSchema,
   InfoResponseSchema,
@@ -148,7 +149,7 @@ describe('api.info', () => {
 });
 
 describe('error handling', () => {
-  it('throws on non-ok response', async () => {
+  it('throws on non-ok response (raw text body)', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 500,
@@ -157,7 +158,7 @@ describe('error handling', () => {
     await expect(api.info()).rejects.toThrow('API error 500: Internal Server Error');
   });
 
-  it('throws on 422 validation error', async () => {
+  it('throws on 422 validation error (raw text body)', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 422,
@@ -183,6 +184,79 @@ describe('error handling', () => {
     });
     await expect(api.info()).rejects.toThrow();
   });
+});
+
+describe('ApiError (server PR #31 contract)', () => {
+  // Helper that fakes a structured 4xx/5xx response with the PR-#31 body
+  // shape `{success: false, error: "<server string>"}`.
+  function mockErrorResponse(status: number, error: string): void {
+    const body = JSON.stringify({ success: false, error });
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status,
+      json: () => Promise.resolve(JSON.parse(body)),
+      text: () => Promise.resolve(body),
+    });
+  }
+
+  it('throws a typed ApiError with status + serverError for structured 422', async () => {
+    mockErrorResponse(422, 'Insufficient funds');
+    try {
+      await api.send({
+        account_address: 'a',
+        recipient: 'b',
+        amount: 1,
+        public_key: 'pk',
+        next_public_key: 'npk',
+      });
+      throw new Error('did not throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiError);
+      const apiErr = err as ApiError;
+      expect(apiErr.status).toBe(422);
+      expect(apiErr.serverError).toBe('Insufficient funds');
+      expect(apiErr.rawBody).toContain('Insufficient funds');
+      expect(apiErr.message).toBe('API error 422: Insufficient funds');
+    }
+  });
+
+  it('preserves the raw body when the response body is not JSON', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      text: () => Promise.resolve('Bad Gateway'),
+    });
+    try {
+      await api.info();
+      throw new Error('did not throw');
+    } catch (err) {
+      expect(err).toBeInstanceOf(ApiError);
+      const apiErr = err as ApiError;
+      expect(apiErr.status).toBe(502);
+      expect(apiErr.serverError).toBe('Bad Gateway');
+      expect(apiErr.rawBody).toBe('Bad Gateway');
+    }
+  });
+
+  // Lockstep round-trip: every server-side `error` string in
+  // KNOWN_SERVER_ERRORS must survive the fetch→ApiError translation
+  // unchanged, so the user-facing mapping in `errorMessages.ts` can
+  // look it up by exact-string match.
+  it.each(KNOWN_SERVER_ERRORS)(
+    'produces ApiError.serverError === %j for the matching server response',
+    async (errString) => {
+      // 422 is the modal status; the actual status is irrelevant for
+      // this round-trip assertion — we're checking string preservation.
+      mockErrorResponse(422, errString);
+      try {
+        await api.info();
+        throw new Error('did not throw');
+      } catch (err) {
+        expect(err).toBeInstanceOf(ApiError);
+        expect((err as ApiError).serverError).toBe(errString);
+      }
+    },
+  );
 });
 
 describe('api url from store', () => {

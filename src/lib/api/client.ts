@@ -26,6 +26,27 @@ function getApiUrl(): string {
 
 const REQUEST_TIMEOUT_MS = 120_000; // 2 minutes (proof generation can be slow)
 
+/**
+ * Typed error for non-2xx responses from the zkCoins API.
+ *
+ * Server PR #31 introduced a structured failure contract: failures now
+ * arrive as `4xx`/`5xx` with body `{success: false, error: "<string>"}`.
+ * `serverError` is the extracted string (or the raw body if the body
+ * wasn't JSON); `rawBody` is preserved for diagnostics. Call-sites
+ * pass an `ApiError` instance through `userMessageFor` (see
+ * `./errorMessages.ts`) to render a translated, user-facing message.
+ */
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly serverError: string,
+    public readonly rawBody?: string,
+  ) {
+    super(`API error ${status}: ${serverError}`);
+    this.name = 'ApiError';
+  }
+}
+
 async function request<T>(path: string, schema: ZodType<T>, options?: RequestInit): Promise<T> {
   const controller = new AbortController();
   /* c8 ignore next — 2-minute timeout callback, not triggered in unit tests */
@@ -38,8 +59,22 @@ async function request<T>(path: string, schema: ZodType<T>, options?: RequestIni
       ...options,
     });
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`API error ${res.status}: ${text}`);
+      const rawBody = await res.text();
+      let serverError = rawBody;
+      try {
+        const parsed = JSON.parse(rawBody) as unknown;
+        if (
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          'error' in parsed &&
+          typeof (parsed as { error: unknown }).error === 'string'
+        ) {
+          serverError = (parsed as { error: string }).error;
+        }
+      } catch {
+        // Body wasn't JSON — keep the raw text as the error message.
+      }
+      throw new ApiError(res.status, serverError, rawBody);
     }
     return schema.parse(await res.json());
   } finally {
