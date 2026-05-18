@@ -20,19 +20,19 @@ import { useNetworkStore } from '@/stores/network';
 import { ApiError, api } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { formatBtc, formatBtcCompact, formatUsd, toZkAddress } from '@/lib/format';
-import { FEATURES } from '@/lib/features';
+import { useFeatures } from '@/lib/features';
 
 const HIDDEN = '••••';
 
 export function WalletScreen() {
   const { account, balance, transactions, setBalance, setUsername } = useWalletStore();
   const { networkName, setNetworkName } = useNetworkStore();
-  // Faucet is gated at build time by `NEXT_PUBLIC_ENABLE_FAUCET`. When that
-  // flag is off, the entire button — including the mint API call — is dead
-  // code and is removed from the production bundle. The additional runtime
-  // mainnet check is defence in depth: even on a DEV build, never show the
-  // faucet if the connected server happens to report `mainnet`.
-  const showFaucet = FEATURES.FAUCET && networkName !== '' && networkName !== 'mainnet';
+  const features = useFeatures();
+  // Faucet is gated by the server-reported `faucet` capability. The
+  // additional runtime mainnet check is defence in depth: even if a
+  // DEV-style server (faucet=true) is wired to a mainnet network name,
+  // never show the faucet button.
+  const showFaucet = features.FAUCET && networkName !== '' && networkName !== 'mainnet';
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [minting, setMinting] = useState(false);
@@ -58,7 +58,7 @@ export function WalletScreen() {
       try {
         const res = await api.balance(account.address);
         setBalance(res.balance);
-        if (FEATURES.USERNAMES && res.username && !account.username) {
+        if (features.USERNAMES && res.username && !account.username) {
           setUsername(res.username);
         }
       } catch {
@@ -68,7 +68,10 @@ export function WalletScreen() {
     tick();
     const interval = setInterval(tick, 5000);
     return () => clearInterval(interval);
-  }, [account, setBalance, setUsername]);
+    // `features.USERNAMES` flips when `/api/info` lands; restart polling
+    // so the next tick picks up the new gate rather than waiting for an
+    // unrelated dep to change.
+  }, [account, setBalance, setUsername, features.USERNAMES]);
 
   const zkAddress = account ? toZkAddress(account.address) : '';
 
@@ -148,11 +151,11 @@ export function WalletScreen() {
         {account && (
           <div className="mt-2 space-y-1.5">
             <p className="mono text-[12px] text-ink2">
-              {FEATURES.USERNAMES && account.username
+              {features.USERNAMES && account.username
                 ? `${account.username}@zkcoins.app`
                 : zkAddress}
             </p>
-            {FEATURES.USERNAMES && !account.username && (
+            {features.USERNAMES && !account.username && (
               <form
                 className="flex items-center gap-2"
                 onSubmit={(e) => {
@@ -180,7 +183,7 @@ export function WalletScreen() {
                 </button>
               </form>
             )}
-            {FEATURES.USERNAMES && claimError && (
+            {features.USERNAMES && claimError && (
               <p className="text-[11px] text-bad">{claimError}</p>
             )}
             <button
@@ -234,7 +237,7 @@ export function WalletScreen() {
                   </Link>
                   .
                 </>
-              ) : FEATURES.APPS_DIRECTORY ? (
+              ) : features.APPS_DIRECTORY ? (
                 <>
                   Buy private BTC through{' '}
                   <Link href="/apps" className="text-bitcoin hover:underline">

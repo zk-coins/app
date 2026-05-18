@@ -39,7 +39,10 @@ const FEATURES_STATE = vi.hoisted(() => ({
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
 }));
-vi.mock('@/lib/features', () => ({ FEATURES: FEATURES_STATE }));
+vi.mock('@/lib/features', () => ({
+  FEATURES: FEATURES_STATE,
+  useFeatures: () => FEATURES_STATE,
+}));
 
 const VALID_PHRASE =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
