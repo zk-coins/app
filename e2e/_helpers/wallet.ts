@@ -178,3 +178,48 @@ export async function disconnect(page: Page): Promise<void> {
   // CTA is the most stable anchor that the onboarding screen is rendered.
   await expect(page.getByTestId('onboarding-create-btn')).toBeVisible({ timeout: 10_000 });
 }
+
+/**
+ * Block until WalletScreen's `useEffect(api.info, …)` has resolved and
+ * `networkName` is populated in the zustand store. Polling the store
+ * directly (rather than the DOM badge) eliminates the in-app-navigation
+ * race that previously required +30 s DOM-visibility timeouts: as soon
+ * as `api.info()` returns, any subsequent navigation that gates UI on
+ * `networkName !== ''` is deterministic — the badge renders on first
+ * paint of the target route.
+ *
+ * The store is exposed on `window.__useNetworkStore` by
+ * `src/stores/network.ts` precisely for this purpose.
+ */
+type NetworkStoreShim = {
+  getState: () => { networkName: string };
+};
+export async function waitForNetworkInfo(page: Page, timeout = 30_000): Promise<void> {
+  await expect
+    .poll(
+      () =>
+        page.evaluate(() => {
+          const w = window as unknown as { __useNetworkStore?: NetworkStoreShim };
+          return w.__useNetworkStore?.getState().networkName ?? '';
+        }),
+      { timeout },
+    )
+    .not.toBe('');
+}
+
+/**
+ * Block until WalletScreen's first `/api/balance` tick has resolved.
+ * Polls the `data-loading` marker on `balance-amount-usd`, which is
+ * `true` while `balance === null` (post-mount loading) and absent once
+ * the first tick lands — regardless of the value (zero or funded).
+ *
+ * Use this in test setup instead of `wallet-empty-banner` visibility:
+ * the banner only renders for `balance === 0` and is genuinely absent
+ * when the wallet is funded, so banner-absence is not a reliable
+ * "loaded" signal. The `data-loading` attribute is.
+ */
+export async function waitForBalanceLoaded(page: Page, timeout = 60_000): Promise<void> {
+  await expect(page.getByTestId('balance-amount-usd')).not.toHaveAttribute('data-loading', 'true', {
+    timeout,
+  });
+}

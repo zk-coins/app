@@ -17,24 +17,26 @@ import { Logo } from '../icons/Logo';
 import { PwaPrompt } from '../PwaPrompt';
 import { useWalletStore, type Transaction } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { api } from '@/lib/api/client';
+import { ApiError, api } from '@/lib/api/client';
+import { userMessageFor } from '@/lib/api/errorMessages';
 import { formatBtc, formatBtcCompact, formatUsd, toZkAddress } from '@/lib/format';
-import { FEATURES } from '@/lib/features';
+import { useFeatures } from '@/lib/features';
 
 const HIDDEN = '••••';
 
 export function WalletScreen() {
   const { account, balance, transactions, setBalance, setUsername } = useWalletStore();
   const { networkName, setNetworkName } = useNetworkStore();
-  // Faucet is gated at build time by `NEXT_PUBLIC_ENABLE_FAUCET`. When that
-  // flag is off, the entire button — including the mint API call — is dead
-  // code and is removed from the production bundle. The additional runtime
-  // mainnet check is defence in depth: even on a DEV build, never show the
-  // faucet if the connected server happens to report `mainnet`.
-  const showFaucet = FEATURES.FAUCET && networkName !== '' && networkName !== 'mainnet';
+  const features = useFeatures();
+  // Faucet is gated by the server-reported `faucet` capability. The
+  // additional runtime mainnet check is defence in depth: even if a
+  // DEV-style server (faucet=true) is wired to a mainnet network name,
+  // never show the faucet button.
+  const showFaucet = features.FAUCET && networkName !== '' && networkName !== 'mainnet';
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [minting, setMinting] = useState(false);
+  const [mintError, setMintError] = useState<string | null>(null);
   const [claimInput, setClaimInput] = useState('');
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export function WalletScreen() {
       try {
         const res = await api.balance(account.address);
         setBalance(res.balance);
-        if (FEATURES.USERNAMES && res.username && !account.username) {
+        if (features.USERNAMES && res.username && !account.username) {
           setUsername(res.username);
         }
       } catch {
@@ -66,9 +68,31 @@ export function WalletScreen() {
     tick();
     const interval = setInterval(tick, 5000);
     return () => clearInterval(interval);
-  }, [account, setBalance, setUsername]);
+    // `features.USERNAMES` flips when `/api/info` lands; restart polling
+    // so the next tick picks up the new gate rather than waiting for an
+    // unrelated dep to change.
+  }, [account, setBalance, setUsername, features.USERNAMES]);
 
   const zkAddress = account ? toZkAddress(account.address) : '';
+
+  const claimUsername = useCallback(async () => {
+    if (!account || !claimInput || !account.xpriv) return;
+    setClaiming(true);
+    setClaimError(null);
+    try {
+      const res = await api.claimUsername({
+        username: claimInput,
+        address: account.address,
+        xpriv: account.xpriv,
+      });
+      setUsername(res.username);
+      setClaimInput('');
+    } catch (err) {
+      setClaimError(err instanceof Error ? err.message : 'Claim failed');
+    } finally {
+      setClaiming(false);
+    }
+  }, [account, claimInput, setUsername]);
 
   const copyAddress = useCallback(() => {
     if (!account) return;
@@ -127,12 +151,18 @@ export function WalletScreen() {
         {account && (
           <div className="mt-2 space-y-1.5">
             <p className="mono text-[12px] text-ink2">
-              {FEATURES.USERNAMES && account.username
+              {features.USERNAMES && account.username
                 ? `${account.username}@zkcoins.app`
                 : zkAddress}
             </p>
-            {FEATURES.USERNAMES && !account.username && (
-              <div className="flex items-center gap-2">
+            {features.USERNAMES && !account.username && (
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  claimUsername();
+                }}
+              >
                 <input
                   type="text"
                   value={claimInput}
@@ -144,32 +174,16 @@ export function WalletScreen() {
                   className="flex-1 rounded-md border border-line2 bg-surface px-2.5 py-1.5 mono text-[11px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
                 />
                 <button
-                  onClick={async () => {
-                    if (!claimInput || !account.xpriv) return;
-                    setClaiming(true);
-                    setClaimError(null);
-                    try {
-                      const res = await api.claimUsername({
-                        username: claimInput,
-                        address: account.address,
-                        xpriv: account.xpriv,
-                      });
-                      setUsername(res.username);
-                      setClaimInput('');
-                    } catch (err) {
-                      setClaimError(err instanceof Error ? err.message : 'Claim failed');
-                    } finally {
-                      setClaiming(false);
-                    }
-                  }}
+                  type="submit"
+                  data-testid="username-claim-btn"
                   disabled={claiming || !claimInput}
                   className="rounded-md bg-bitcoin px-3 py-1.5 text-[11px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover disabled:opacity-50"
                 >
                   {claiming ? '…' : 'Claim'}
                 </button>
-              </div>
+              </form>
             )}
-            {FEATURES.USERNAMES && claimError && (
+            {features.USERNAMES && claimError && (
               <p className="text-[11px] text-bad">{claimError}</p>
             )}
             <button
@@ -223,7 +237,7 @@ export function WalletScreen() {
                   </Link>
                   .
                 </>
-              ) : FEATURES.APPS_DIRECTORY ? (
+              ) : features.APPS_DIRECTORY ? (
                 <>
                   Buy private BTC through{' '}
                   <Link href="/apps" className="text-bitcoin hover:underline">
@@ -252,12 +266,18 @@ export function WalletScreen() {
                 onClick={async () => {
                   if (!account || minting) return;
                   setMinting(true);
+                  setMintError(null);
                   try {
                     await api.mint(account.address);
                     const { balance } = await api.balance(account.address);
                     setBalance(balance);
-                  } catch {
-                    /* faucet may not be available */
+                  } catch (err) {
+                    // Faucet may not be available (server doesn't expose
+                    // /api/mint, e.g. on mainnet). Surface the typed
+                    // ApiError message inline; swallow other errors.
+                    if (err instanceof ApiError) {
+                      setMintError(userMessageFor(err));
+                    }
                   } finally {
                     setMinting(false);
                   }
@@ -267,6 +287,11 @@ export function WalletScreen() {
               >
                 {minting ? 'Minting…' : 'Faucet'}
               </button>
+            )}
+            {mintError && (
+              <p data-testid="wallet-mint-error" className="mt-2 text-[11px] text-bad">
+                {mintError}
+              </p>
             )}
           </div>
         </div>

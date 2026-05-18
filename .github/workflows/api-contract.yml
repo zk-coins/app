@@ -1,0 +1,62 @@
+name: API Contract (live)
+
+# Validates that the Zod schemas in `src/lib/api/schemas.ts` still
+# parse the live server's actual responses. Hits real /api/*, so it
+# is NOT wired into the required-CI gate that runs on every PR —
+# too expensive and externally flaky for per-PR work.
+#
+# Triggers (defence in depth):
+#
+#   1. push to main      Mandatory release-time drift probe. A failure
+#                        here means the released client expects a
+#                        response shape the DEV server no longer
+#                        emits — drift exists and PRD will surface
+#                        it on the next user request. Investigate
+#                        and/or roll back the release accordingly.
+#   2. schedule          Weekly safety net (Mondays 08:00 UTC).
+#                        Catches drift introduced between releases.
+#   3. workflow_dispatch Ad-hoc probe; the `api_url` input points the
+#                        probe at any environment (default DEV).
+
+on:
+  push:
+    branches: [main]
+  schedule:
+    - cron: '0 8 * * 1'
+  workflow_dispatch:
+    inputs:
+      api_url:
+        description: 'API base URL to probe (default: DEV).'
+        required: false
+        default: 'https://dev-api.zkcoins.app'
+
+concurrency:
+  group: api-contract-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  contract:
+    name: Live contract probe
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run live contract test
+        run: npm test -- contract.live
+        env:
+          RUN_API_CONTRACT: 'true'
+          E2E_API_URL: ${{ github.event.inputs.api_url || 'https://dev-api.zkcoins.app' }}

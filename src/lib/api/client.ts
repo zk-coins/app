@@ -1,5 +1,24 @@
+import type { ZodType, z } from 'zod';
 import { useNetworkStore } from '@/stores/network';
 import { initWasm } from '@zkcoins/wasm';
+import {
+  BalanceResponseSchema,
+  ClaimUsernameResponseSchema,
+  CommitResponseSchema,
+  InfoResponseSchema,
+  MintResponseSchema,
+  ResolveUsernameResponseSchema,
+  SendResponseSchema,
+  UsernameResponseSchema,
+} from './schemas';
+
+// Response types are inferred from the schemas in `./schemas.ts` so the
+// schema is the single source of truth. The public names match the
+// pre-Zod interface names callers already import — no churn for them.
+export type SendResponse = z.infer<typeof SendResponseSchema>;
+export type BalanceResponse = z.infer<typeof BalanceResponseSchema>;
+export type UsernameResponse = z.infer<typeof UsernameResponseSchema>;
+export type InfoResponse = z.infer<typeof InfoResponseSchema>;
 
 function getApiUrl(): string {
   return useNetworkStore.getState().apiUrl;
@@ -7,7 +26,28 @@ function getApiUrl(): string {
 
 const REQUEST_TIMEOUT_MS = 120_000; // 2 minutes (proof generation can be slow)
 
-async function request<T>(path: string, options?: RequestInit): Promise<T> {
+/**
+ * Typed error for non-2xx responses from the zkCoins API.
+ *
+ * Server PR #31 introduced a structured failure contract: failures now
+ * arrive as `4xx`/`5xx` with body `{success: false, error: "<string>"}`.
+ * `serverError` is the extracted string (or the raw body if the body
+ * wasn't JSON); `rawBody` is preserved for diagnostics. Call-sites
+ * pass an `ApiError` instance through `userMessageFor` (see
+ * `./errorMessages.ts`) to render a translated, user-facing message.
+ */
+export class ApiError extends Error {
+  constructor(
+    public readonly status: number,
+    public readonly serverError: string,
+    public readonly rawBody?: string,
+  ) {
+    super(`API error ${status}: ${serverError}`);
+    this.name = 'ApiError';
+  }
+}
+
+async function request<T>(path: string, schema: ZodType<T>, options?: RequestInit): Promise<T> {
   const controller = new AbortController();
   /* c8 ignore next — 2-minute timeout callback, not triggered in unit tests */
   const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
@@ -19,10 +59,24 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
       ...options,
     });
     if (!res.ok) {
-      const text = await res.text();
-      throw new Error(`API error ${res.status}: ${text}`);
+      const rawBody = await res.text();
+      let serverError = rawBody;
+      try {
+        const parsed = JSON.parse(rawBody) as unknown;
+        if (
+          typeof parsed === 'object' &&
+          parsed !== null &&
+          'error' in parsed &&
+          typeof (parsed as { error: unknown }).error === 'string'
+        ) {
+          serverError = (parsed as { error: string }).error;
+        }
+      } catch {
+        // Body wasn't JSON — keep the raw text as the error message.
+      }
+      throw new ApiError(res.status, serverError, rawBody);
     }
-    return res.json();
+    return schema.parse(await res.json());
   } finally {
     clearTimeout(timeoutId);
   }
@@ -42,27 +96,10 @@ export interface SignedSendRequest extends SendRequest {
   timestamp: number;
 }
 
-export interface BalanceResponse {
-  balance: number;
-  username?: string;
-}
-
-export interface UsernameResponse {
-  username: string;
-  address: string;
-}
-
 export interface ClaimUsernameParams {
   username: string;
   address: string;
   xpriv: string;
-}
-
-export interface SendResponse {
-  success: boolean;
-  proof_id?: number | null;
-  account_state_hash?: string;
-  output_coins_root?: string;
 }
 
 export interface CommitRequest {
@@ -70,10 +107,6 @@ export interface CommitRequest {
   public_key: string;
   signature: string;
   message: string;
-}
-
-export interface InfoResponse {
-  network: string;
 }
 
 /**
@@ -170,55 +203,38 @@ async function signClaimRequest(
 
 export const api = {
   mint: (address: string, amount: number = 10_000) =>
-    request<SendResponse>('/api/mint', {
+    request('/api/mint', MintResponseSchema, {
       method: 'POST',
       body: JSON.stringify({ account_address: address, amount }),
     }),
 
   send: (data: SendRequest) =>
-    request<SendResponse>('/api/send', {
+    request('/api/send', SendResponseSchema, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
   sendSigned: async (data: SendRequest, xpriv: string, numPubkeys: number) => {
     const signed = await signSendRequest(data, xpriv, numPubkeys);
-    return request<SendResponse>('/api/send', {
+    return request('/api/send', SendResponseSchema, {
       method: 'POST',
       body: JSON.stringify(signed),
     });
   },
 
   commit: (data: CommitRequest) =>
-    request<SendResponse>('/api/commit', {
+    request('/api/commit', CommitResponseSchema, {
       method: 'POST',
       body: JSON.stringify(data),
     }),
 
-  balance: async (address: string): Promise<BalanceResponse> => {
-    try {
-      return await request<BalanceResponse>(`/api/balance?address=${address}`);
-    } catch (err) {
-      // The server returns HTTP 404 for addresses it has never seen
-      // (no mint / no incoming send yet) but the body itself is the
-      // correct `{balance: 0}`. Surface that 0 instead of propagating
-      // the throw so freshly created or restored wallets actually
-      // render the "Wallet is empty" banner instead of the loading
-      // placeholder. Backend issue tracked separately — once the
-      // server returns 200 for unknown addresses, this branch becomes
-      // dead code and can be removed.
-      if (err instanceof Error && err.message.startsWith('API error 404')) {
-        return { balance: 0 };
-      }
-      throw err;
-    }
-  },
+  balance: (address: string) => request(`/api/balance?address=${address}`, BalanceResponseSchema),
 
-  info: () => request<InfoResponse>('/api/info'),
+  info: () => request('/api/info', InfoResponseSchema),
 
   claimUsername: async (params: ClaimUsernameParams) => {
     const signed = await signClaimRequest(params);
-    return request<UsernameResponse>('/api/username/claim', {
+    return request('/api/username/claim', ClaimUsernameResponseSchema, {
       method: 'POST',
       body: JSON.stringify({
         username: params.username,
@@ -231,5 +247,5 @@ export const api = {
   },
 
   resolveUsername: (username: string) =>
-    request<UsernameResponse>(`/api/username/resolve/${encodeURIComponent(username)}`),
+    request(`/api/username/resolve/${encodeURIComponent(username)}`, ResolveUsernameResponseSchema),
 };

@@ -6,10 +6,11 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Check, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
-import { api, type CommitRequest } from '@/lib/api/client';
+import { ApiError, api, type CommitRequest } from '@/lib/api/client';
+import { userMessageFor } from '@/lib/api/errorMessages';
 import { initWasm } from '@zkcoins/wasm';
 import { SATS_PER_BTC, formatBtc, formatBtcCompact } from '@/lib/format';
-import { FEATURES } from '@/lib/features';
+import { useFeatures } from '@/lib/features';
 
 /* --- In-flight commit crash recovery --- */
 
@@ -34,6 +35,7 @@ function getInflightCommit(): CommitRequest | null {
 export default function SendPage() {
   const router = useRouter();
   const { account, balance, setBalance, incrementPubkeys, addTransaction } = useWalletStore();
+  const features = useFeatures();
 
   // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {
@@ -102,11 +104,11 @@ export default function SendPage() {
     setError(null);
     try {
       // Resolve username to address if the recipient looks like one.
-      // Username resolution itself is gated by `NEXT_PUBLIC_ENABLE_USERNAMES`;
-      // when disabled, only raw hex addresses are accepted and the resolver
-      // code (including the `api.resolveUsername` call) is dead.
+      // Username resolution is gated by the server-reported `usernames`
+      // capability; when off, only raw hex addresses are accepted and
+      // `api.resolveUsername` is never called.
       let resolvedRecipient = recipient.trim();
-      if (FEATURES.USERNAMES) {
+      if (features.USERNAMES) {
         if (resolvedRecipient.startsWith('$')) {
           resolvedRecipient = resolvedRecipient.slice(1);
         }
@@ -141,65 +143,84 @@ export default function SendPage() {
         account.numPubkeys,
       );
 
-      if (res.success) {
-        // Phase 2: Create and submit commitment so the recipient receives the coins.
-        if (res.account_state_hash && res.output_coins_root && res.proof_id) {
-          const commitment = wasm.createCommitment(
-            account.xpriv,
-            account.numPubkeys,
-            res.account_state_hash,
-            res.output_coins_root,
-          );
-          const commitPayload: CommitRequest = {
-            proof_id: res.proof_id,
-            public_key: commitment.publicKey,
-            signature: commitment.signature,
-            message: commitment.message,
-          };
+      // Pre-PR-#31 servers reply 200 + `{success: false}` (no error
+      // string). Normalise to ApiError so the catch path treats both
+      // contracts uniformly.
+      if (!res.success) {
+        throw new ApiError(200, res.error ?? 'legacy: success false with no error string');
+      }
 
-          // Persist in-flight commit before attempting (crash recovery).
-          saveInflightCommit(commitPayload);
+      // Phase 2: Create and submit commitment so the recipient receives the coins.
+      if (res.account_state_hash && res.output_coins_root && res.proof_id) {
+        const commitment = wasm.createCommitment(
+          account.xpriv,
+          account.numPubkeys,
+          res.account_state_hash,
+          res.output_coins_root,
+        );
+        const commitPayload: CommitRequest = {
+          proof_id: res.proof_id,
+          public_key: commitment.publicKey,
+          signature: commitment.signature,
+          message: commitment.message,
+        };
 
-          let committed = false;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              await api.commit(commitPayload);
-              committed = true;
-              clearInflightCommit();
-              break;
-            } catch {
-              if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
-            }
-          }
+        // Persist in-flight commit before attempting (crash recovery).
+        saveInflightCommit(commitPayload);
 
-          if (!committed) {
-            throw new Error(
-              'Transaction sent but delivery to recipient failed. ' +
-                'The app will retry automatically on next load.',
-            );
+        let committed = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await api.commit(commitPayload);
+            committed = true;
+            clearInflightCommit();
+            break;
+          } catch {
+            if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
           }
         }
 
-        incrementPubkeys();
-        addTransaction({
-          id: res.proof_id?.toString() ?? `send-${Date.now()}`,
-          type: 'send',
-          amount: sats,
-          counterparty: recipient.trim(),
-          timestamp: Date.now(),
-          proofId: res.proof_id?.toString(),
-        });
+        if (!committed) {
+          throw new Error(
+            'Transaction sent but delivery to recipient failed. ' +
+              'The app will retry automatically on next load.',
+          );
+        }
       }
+
+      incrementPubkeys();
+      addTransaction({
+        id: res.proof_id?.toString() ?? `send-${Date.now()}`,
+        type: 'send',
+        amount: sats,
+        counterparty: recipient.trim(),
+        timestamp: Date.now(),
+        proofId: res.proof_id?.toString(),
+      });
 
       const { balance } = await api.balance(account.address);
       setBalance(balance);
       setSuccess({ amount: sats, proofId: res.proof_id?.toString() });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Send failed');
+      if (err instanceof ApiError) {
+        setError(userMessageFor(err));
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Send failed');
+      }
     } finally {
       setSending(false);
     }
-  }, [account, recipient, amount, setBalance, incrementPubkeys, addTransaction]);
+  }, [
+    account,
+    recipient,
+    amount,
+    setBalance,
+    incrementPubkeys,
+    addTransaction,
+    features.USERNAMES,
+  ]);
 
   if (!account) {
     return (
@@ -260,7 +281,13 @@ export default function SendPage() {
         <span className="text-[11px] font-medium tracking-wider text-ink3 uppercase">Send</span>
       </header>
 
-      <div className="mt-10 space-y-7">
+      <form
+        className="mt-10 space-y-7"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleConfirm();
+        }}
+      >
         <div>
           <h1 data-testid="send-heading" className="text-[26px] font-bold tracking-tight text-ink">
             Send Bitcoin
@@ -301,7 +328,7 @@ export default function SendPage() {
             <Link href="/receive" className="text-bitcoin hover:underline">
               Receive
             </Link>
-            {FEATURES.APPS_DIRECTORY && (
+            {features.APPS_DIRECTORY && (
               <>
                 {' '}
                 or{' '}
@@ -324,7 +351,7 @@ export default function SendPage() {
             onChange={(e) => setRecipient(e.target.value)}
             spellCheck={false}
             autoComplete="off"
-            placeholder={FEATURES.USERNAMES ? 'alice@zkcoins.app' : '0x…'}
+            placeholder={features.USERNAMES ? 'alice@zkcoins.app' : '0x…'}
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
         </div>
@@ -349,6 +376,7 @@ export default function SendPage() {
             </span>
           </div>
           <button
+            type="button"
             data-testid="send-setmax-btn"
             onClick={() => {
               if (balance !== null && balance > 0) setAmount(formatBtc(balance));
@@ -382,6 +410,7 @@ export default function SendPage() {
             <p className="text-[11px] text-ink3">This cannot be undone.</p>
             <div className="flex gap-3">
               <button
+                type="button"
                 data-testid="send-cancel-btn"
                 onClick={() => setConfirming(false)}
                 className="flex-1 rounded-md border border-line2 py-3 text-[13px] text-ink2 transition-colors hover:border-ink2 hover:text-ink"
@@ -389,6 +418,7 @@ export default function SendPage() {
                 Cancel
               </button>
               <button
+                type="button"
                 data-testid="send-confirm-btn"
                 onClick={send}
                 disabled={sending}
@@ -400,15 +430,15 @@ export default function SendPage() {
           </div>
         ) : (
           <button
+            type="submit"
             data-testid="send-submit-btn"
-            onClick={handleConfirm}
             disabled={sending || !recipient || !amount}
             className="w-full rounded-md bg-bitcoin py-4 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
           >
             Send privately
           </button>
         )}
-      </div>
+      </form>
     </AppShell>
   );
 }

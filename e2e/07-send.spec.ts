@@ -28,28 +28,9 @@ async function goToSend(page: Page): Promise<void> {
   await expect(page.getByTestId('send-heading')).toBeVisible({ timeout: 10_000 });
 }
 
-/**
- * Wait for Alice's `/api/balance` polling tick to land so the in-store
- * balance reflects her on-chain funds. Without this, the Send-page
- * `handleConfirm` sees `balance === null` (the post-#49 loading state)
- * and rejects every amount with "Balance not loaded yet" — the confirm
- * dialog never opens.
- *
- * Use the `data-loading` marker on `balance-amount-usd` rather than
- * `wallet-empty-banner not visible`: the banner is also absent during
- * the loading state (it only renders for `balance === 0`), so banner-
- * absence is no longer a reliable funded-balance signal.
- */
-async function waitForAliceBalanceLoaded(page: Page): Promise<void> {
-  await expect(page.getByTestId('balance-amount-usd')).not.toHaveAttribute('data-loading', 'true', {
-    timeout: 30_000,
-  });
-}
-
-/** Common Alice setup: log in, wait for balance, navigate to /send. */
+/** Common Alice setup: log in (waits for balance + network), then nav to /send. */
 async function aliceGoToSend(page: Page): Promise<void> {
   await aliceLogin(page);
-  await waitForAliceBalanceLoaded(page);
   await goToSend(page);
 }
 
@@ -188,7 +169,15 @@ test.describe('Send Bitcoin', () => {
   // covered by `send-success`. § 8.13 totals updated.
 
   test('send-success', async ({ page }) => {
-    test.setTimeout(120_000);
+    // The 2-phase Send pipeline does: signed `/api/send` (ZK proof
+    // generation server-side, ~10-30 s on a warm DEV) → commitment
+    // build → `/api/commit` with up to three retries at 2 s/4 s
+    // backoff → success heading. A cold DEV after a fresh deploy
+    // can push the proof to 60-90 s; combined with one commit
+    // retry the wait for the success heading lands close to 100 s.
+    // Give 150 s of headroom and cap the test at 180 s so we still
+    // surface a genuine deadlock instead of waiting forever.
+    test.setTimeout(180_000);
     await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
@@ -196,7 +185,17 @@ test.describe('Send Bitcoin', () => {
     await page.getByTestId('send-amount-input').fill('0.00001');
     await page.getByTestId('send-submit-btn').click();
     await page.getByTestId('send-confirm-btn').click();
-    await expect(page.getByTestId('send-success-heading')).toBeVisible({ timeout: 90_000 });
+    // Race the success heading against the inline error banner so a
+    // server-side failure surfaces with the real error message
+    // instead of "element never appeared after 150 s".
+    const heading = page.getByTestId('send-success-heading');
+    const error = page.getByTestId('send-error');
+    await Promise.race([
+      heading.waitFor({ state: 'visible', timeout: 150_000 }),
+      error.waitFor({ state: 'visible', timeout: 150_000 }),
+    ]);
+    await expect(error, await error.textContent().catch(() => '')).toBeHidden();
+    await expect(heading).toBeVisible();
     await snap(page, '07-send-success');
   });
 

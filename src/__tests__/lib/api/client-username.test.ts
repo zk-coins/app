@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { z } from 'zod';
 import { api } from '@/lib/api/client';
+import {
+  BalanceResponseSchema,
+  ClaimUsernameResponseSchema,
+  ResolveUsernameResponseSchema,
+} from '@/lib/api/schemas';
 import { useNetworkStore } from '@/stores/network';
 
 const mockFetch = vi.fn();
@@ -15,7 +21,7 @@ afterEach(() => {
   globalThis.fetch = originalFetch;
 });
 
-function mockResponse(data: unknown, status = 200) {
+function mockJsonResponse<T>(data: T, status = 200): void {
   mockFetch.mockResolvedValueOnce({
     ok: status >= 200 && status < 300,
     status,
@@ -26,7 +32,10 @@ function mockResponse(data: unknown, status = 200) {
 
 describe('api.resolveUsername', () => {
   it('sends GET to /api/username/resolve/{name}', async () => {
-    mockResponse({ username: 'alice', address: 'aa'.repeat(32) });
+    mockJsonResponse<z.infer<typeof ResolveUsernameResponseSchema>>({
+      username: 'alice',
+      address: 'aa'.repeat(32),
+    });
     const result = await api.resolveUsername('alice');
     expect(mockFetch).toHaveBeenCalledWith(
       'https://test-api.zkcoins.app/api/username/resolve/alice',
@@ -37,7 +46,10 @@ describe('api.resolveUsername', () => {
   });
 
   it('encodes special characters in username', async () => {
-    mockResponse({ username: 'bob.btc', address: 'bb'.repeat(32) });
+    mockJsonResponse<z.infer<typeof ResolveUsernameResponseSchema>>({
+      username: 'bob.btc',
+      address: 'bb'.repeat(32),
+    });
     await api.resolveUsername('bob.btc');
     expect(mockFetch).toHaveBeenCalledWith(
       'https://test-api.zkcoins.app/api/username/resolve/bob.btc',
@@ -59,7 +71,10 @@ describe('api.resolveUsername', () => {
 
 describe('api.claimUsername', () => {
   it('sends POST to /api/username/claim with signed payload', async () => {
-    mockResponse({ username: 'alice', address: 'aa'.repeat(32) });
+    mockJsonResponse<z.infer<typeof ClaimUsernameResponseSchema>>({
+      username: 'alice',
+      address: 'aa'.repeat(32),
+    });
 
     const result = await api.claimUsername({
       username: 'alice',
@@ -110,14 +125,14 @@ describe('api.claimUsername', () => {
 
 describe('api.balance with username', () => {
   it('returns username field when present', async () => {
-    mockResponse({ balance: 50000, username: 'alice' });
+    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 50000, username: 'alice' });
     const result = await api.balance('aa'.repeat(32));
     expect(result.balance).toBe(50000);
     expect(result.username).toBe('alice');
   });
 
   it('returns undefined username when not set', async () => {
-    mockResponse({ balance: 10000 });
+    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 10000 });
     const result = await api.balance('bb'.repeat(32));
     expect(result.balance).toBe(10000);
     expect(result.username).toBeUndefined();

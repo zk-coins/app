@@ -29,11 +29,12 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Build and push Docker image
-        # DEV mirrors PRD — no feature-flag build-args. The
-        # NEXT_PUBLIC_ENABLE_* flags default to false, so DCE strips
-        # every gated path from the bundle here too. Feature flags are
-        # for local developer setups via `.env.local`, not for shared
-        # infra. See issue #30 for the migration rationale.
+        # DEV mirrors PRD — no feature-flag build-args. Build-time
+        # client gates (`NEXT_PUBLIC_ENABLE_*`) default to false and
+        # DCE strips them from the bundle. Server-gated UI
+        # (faucet, usernames) is driven by `/api/info.capabilities` at
+        # runtime, so the same image works against any DEV / PRD server
+        # without rebuilding. See issues #30 and #97.
         uses: docker/build-push-action@v6
         with:
           context: .
