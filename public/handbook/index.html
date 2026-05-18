@@ -2378,6 +2378,122 @@
           </div>
         </details>
 
+        <!-- SPEC 13 -->
+        <details id="spec-13" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">13</span>Send — server error toasts</h2>
+                <div class="file">e2e/13-send-server-errors.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>4 tests · 3 baselines</b>
+                <div class="links">
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/13-send-server-errors.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/13-send-server-errors.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            Asserts the end-to-end <code>ApiError</code> → <code>userMessageFor</code> → toast
+            pipeline introduced by issue #99. The four mocks (insufficient funds, unknown account,
+            prove failed, unmapped) cover the structured 4xx/5xx contract from server PR #31.
+          </p>
+          <div class="tests">
+            <div class="test">
+              <div class="head">
+                <span class="name">insufficient-funds-toast</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/13-send-server-errors.spec.ts#L60"
+                    >L60</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/13-server-error-insufficient-funds.png"
+                  alt="insufficient funds toast"
+                />
+              </div>
+              <div class="desc">
+                Server 422 + <code>"Insufficient funds"</code> → "Nicht genug Guthaben für diese
+                Überweisung."
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">unknown-account-toast</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/13-send-server-errors.spec.ts#L73"
+                    >L73</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/13-server-error-unknown-account.png"
+                  alt="unknown account toast"
+                />
+              </div>
+              <div class="desc">
+                Server 404 + <code>"Unknown account address"</code> → "Dieser Account ist auf dem
+                Server nicht bekannt."
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">prove-failed-toast</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/13-send-server-errors.spec.ts#L86"
+                    >L86</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/13-server-error-prove-failed.png"
+                  alt="prove failed toast"
+                />
+              </div>
+              <div class="desc">
+                Server 500 + <code>"prove failed"</code> → "Beweisgenerierung fehlgeschlagen. Bitte
+                später erneut versuchen."
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">unmapped-server-error-falls-back</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/13-send-server-errors.spec.ts#L99"
+                    >L99</a
+                  ></span
+                >
+              </div>
+              <div class="img no-shot">
+                <p>
+                  No-shot: text-only regression guard. Asserts the
+                  <code>"Serverfehler &lt;status&gt;: &lt;raw&gt;"</code> fallback so an unmapped
+                  server error string can never regress into a raw <code>Error.message</code> blob.
+                </p>
+              </div>
+              <div class="desc">
+                Server 418 + arbitrary string → "Serverfehler 418: I'm a teapot".
+              </div>
+            </div>
+          </div>
+        </details>
+
         <hr class="sep" />
 
         <!-- COVERAGE -->
