@@ -78,7 +78,8 @@ jobs:
         # `06-balance.spec.ts::balance-zero-empty-banner` and blocks
         # the commit step. Revert to `--grep-invert "Accessibility"`
         # plus the glob once the DEV regression / faucet env is sorted.
-        run: npx playwright test --project=chromium --update-snapshots=all --grep "issue #99"
+        run: |
+          npx playwright test --project=chromium --update-snapshots=all --grep 'issue #99'
 
       - name: Commit, push to a side branch, open auto-merge PR
         env:
