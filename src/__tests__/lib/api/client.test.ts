@@ -137,14 +137,18 @@ describe('api.commit', () => {
 });
 
 describe('api.info', () => {
-  it('sends GET to /api/info', async () => {
-    mockJsonResponse<z.infer<typeof InfoResponseSchema>>({ network: 'Mutinynet' });
+  it('sends GET to /api/info and returns both network and username_domain', async () => {
+    mockJsonResponse<z.infer<typeof InfoResponseSchema>>({
+      network: 'Mutinynet',
+      username_domain: 'dev.zkcoins.app',
+    });
     const result = await api.info();
     expect(mockFetch).toHaveBeenCalledWith(
       'https://test-api.zkcoins.app/api/info',
       expect.objectContaining({ headers: { 'Content-Type': 'application/json' } }),
     );
     expect(result.network).toBe('Mutinynet');
+    expect(result.username_domain).toBe('dev.zkcoins.app');
   });
 
   it('parses the capabilities object when the server includes it', async () => {
@@ -282,7 +286,10 @@ describe('ApiError (server PR #31 contract)', () => {
 describe('api url from store', () => {
   it('uses apiUrl from network store', async () => {
     useNetworkStore.setState({ apiUrl: 'https://custom-api.example.com' });
-    mockJsonResponse<z.infer<typeof InfoResponseSchema>>({ network: 'test' });
+    mockJsonResponse<z.infer<typeof InfoResponseSchema>>({
+      network: 'test',
+      username_domain: 'test.zkcoins.app',
+    });
     await api.info();
     expect(mockFetch).toHaveBeenCalledWith(
       'https://custom-api.example.com/api/info',

@@ -194,7 +194,7 @@ test.describe('Send Bitcoin', () => {
       heading.waitFor({ state: 'visible', timeout: 150_000 }),
       error.waitFor({ state: 'visible', timeout: 150_000 }),
     ]);
-    await expect(error, await error.textContent().catch(() => '')).toBeHidden();
+    await expect(error, (await error.textContent().catch(() => '')) ?? '').toBeHidden();
     await expect(heading).toBeVisible();
     await snap(page, '07-send-success');
   });

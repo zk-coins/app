@@ -71,4 +71,9 @@ export const InfoResponseSchema = z.object({
   // (zk-coins/server pre-#29) doesn't trip the Zod gate. The
   // capabilities store applies a fail-closed default in that case.
   capabilities: CapabilitiesSchema.optional(),
+  // Optional for the same reason — pre-#32 servers don't ship this
+  // field. The network store falls back to the empty string and the
+  // UI treats that as a loading state. Mismatched stages remain
+  // visible because the post-#32 server reports its real hostname.
+  username_domain: z.string().optional(),
 });

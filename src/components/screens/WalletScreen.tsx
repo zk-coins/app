@@ -26,7 +26,7 @@ const HIDDEN = '••••';
 
 export function WalletScreen() {
   const { account, balance, transactions, setBalance, setUsername } = useWalletStore();
-  const { networkName, setNetworkName } = useNetworkStore();
+  const { networkName, usernameDomain, setNetworkName, setUsernameDomain } = useNetworkStore();
   const features = useFeatures();
   // Faucet is gated by the server-reported `faucet` capability. The
   // additional runtime mainnet check is defence in depth: even if a
@@ -41,13 +41,20 @@ export function WalletScreen() {
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
 
-  // Fetch network info once.
+  // Fetch network info once. The server is the source of truth for the
+  // username domain — see `useNetworkStore` for the rationale.
   useEffect(() => {
     api
       .info()
-      .then((info) => setNetworkName(info.network))
+      .then((info) => {
+        setNetworkName(info.network);
+        // Pre-#32 servers omit this field; the store stays at the empty
+        // string default so `toZkAddress` keeps returning `''` (loading
+        // state) until a post-#32 server reports its hostname.
+        setUsernameDomain(info.username_domain ?? '');
+      })
       .catch(() => {});
-  }, [setNetworkName]);
+  }, [setNetworkName, setUsernameDomain]);
 
   // Balance polling. Username is only read when the feature is enabled —
   // when off, the server is not expected to return a username and the
@@ -73,7 +80,7 @@ export function WalletScreen() {
     // unrelated dep to change.
   }, [account, setBalance, setUsername, features.USERNAMES]);
 
-  const zkAddress = account ? toZkAddress(account.address) : '';
+  const zkAddress = account ? toZkAddress(account.address, usernameDomain) : '';
 
   const claimUsername = useCallback(async () => {
     if (!account || !claimInput || !account.xpriv) return;
@@ -151,8 +158,8 @@ export function WalletScreen() {
         {account && (
           <div className="mt-2 space-y-1.5">
             <p className="mono text-[12px] text-ink2">
-              {features.USERNAMES && account.username
-                ? `${account.username}@zkcoins.app`
+              {features.USERNAMES && account.username && usernameDomain
+                ? `${account.username}@${usernameDomain}`
                 : zkAddress}
             </p>
             {features.USERNAMES && !account.username && (

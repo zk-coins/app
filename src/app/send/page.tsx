@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Check, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 import { ApiError, api, type CommitRequest } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { initWasm } from '@zkcoins/wasm';
@@ -36,6 +37,7 @@ export default function SendPage() {
   const router = useRouter();
   const { account, balance, setBalance, incrementPubkeys, addTransaction } = useWalletStore();
   const features = useFeatures();
+  const usernameDomain = useNetworkStore((s) => s.usernameDomain);
 
   // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {
@@ -112,8 +114,16 @@ export default function SendPage() {
         if (resolvedRecipient.startsWith('$')) {
           resolvedRecipient = resolvedRecipient.slice(1);
         }
-        if (resolvedRecipient.endsWith('@zkcoins.app')) {
-          resolvedRecipient = resolvedRecipient.replace('@zkcoins.app', '');
+        // Only strip the suffix the server reports for itself. A
+        // DEV-suffixed recipient (`…@dev.zkcoins.app`) entered on a PRD
+        // wallet must NOT be stripped — it falls through to
+        // `api.resolveUsername(…)` and gets a clean 404 instead of
+        // silently routing against the wrong stage.
+        if (usernameDomain) {
+          const suffix = `@${usernameDomain}`;
+          if (resolvedRecipient.endsWith(suffix)) {
+            resolvedRecipient = resolvedRecipient.slice(0, -suffix.length);
+          }
         }
         if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
           const resolved = await api.resolveUsername(resolvedRecipient);
@@ -216,6 +226,7 @@ export default function SendPage() {
     account,
     recipient,
     amount,
+    usernameDomain,
     setBalance,
     incrementPubkeys,
     addTransaction,
@@ -351,7 +362,7 @@ export default function SendPage() {
             onChange={(e) => setRecipient(e.target.value)}
             spellCheck={false}
             autoComplete="off"
-            placeholder={features.USERNAMES ? 'alice@zkcoins.app' : '0x…'}
+            placeholder={features.USERNAMES && usernameDomain ? `alice@${usernameDomain}` : '0x…'}
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
         </div>

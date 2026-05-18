@@ -90,7 +90,9 @@ beforeEach(() => {
   // `api.info` is called on mount — return a benign value so it doesn't
   // race the balance assertions. `mockResolvedValue` (not Once) covers any
   // number of mounts/unmounts in a single test.
-  infoSpy = vi.spyOn(api, 'info').mockResolvedValue({ network: 'signet' });
+  infoSpy = vi
+    .spyOn(api, 'info')
+    .mockResolvedValue({ network: 'signet', username_domain: 'zkcoins.app' });
   balanceSpy = vi.spyOn(api, 'balance');
 });
 
@@ -243,13 +245,14 @@ describe('WalletScreen — balance polling', () => {
     expect(useWalletStore.getState().account?.username).toBe('pinned');
   });
 
-  it('writes the network name from /api/info on mount', async () => {
-    infoSpy.mockResolvedValue({ network: 'mainnet' });
+  it('writes the network name and username_domain from /api/info on mount', async () => {
+    infoSpy.mockResolvedValue({ network: 'mainnet', username_domain: 'zkcoins.app' });
     balanceSpy.mockResolvedValue({ balance: 0 });
 
     render(<WalletScreen />);
     await waitFor(() => {
       expect(useNetworkStore.getState().networkName).toBe('mainnet');
+      expect(useNetworkStore.getState().usernameDomain).toBe('zkcoins.app');
     });
     expect(infoSpy).toHaveBeenCalledTimes(1);
   });

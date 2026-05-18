@@ -7,11 +7,13 @@ import { QRCodeSVG } from 'qrcode.react';
 import { ArrowLeft, Copy, Check, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 import { toZkAddress } from '@/lib/format';
 
 export default function ReceivePage() {
   const router = useRouter();
   const { account } = useWalletStore();
+  const usernameDomain = useNetworkStore((s) => s.usernameDomain);
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -23,7 +25,7 @@ export default function ReceivePage() {
     }
   }, [account, router]);
 
-  const zkAddress = account ? toZkAddress(account.address) : '';
+  const zkAddress = account ? toZkAddress(account.address, usernameDomain) : '';
 
   const copy = useCallback(() => {
     if (!account) return;
