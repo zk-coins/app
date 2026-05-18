@@ -72,17 +72,17 @@ describe('api.balance', () => {
     expect(result.balance).toBe(42000);
   });
 
-  it('maps 404 (unknown address) to balance: 0 instead of throwing', async () => {
-    // The server returns HTTP 404 with `{balance: 0}` for addresses it
-    // has never seen. The client surfaces that as a clean 0 so callers
-    // (Onboarding, WalletScreen) can render the "Wallet is empty"
-    // state for brand-new wallets instead of staying in loading.
-    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 0 }, 404);
-    const result = await api.balance('unknown-address');
+  it('returns balance: 0 for unobserved addresses (200 OK)', async () => {
+    // Server contract: a well-formed address that has never been
+    // observed on chain returns 200 with `{balance: 0}`. Callers
+    // (Onboarding, WalletScreen) rely on this to render the
+    // "Wallet is empty" state for brand-new wallets.
+    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 0 });
+    const result = await api.balance('unobserved-address');
     expect(result.balance).toBe(0);
   });
 
-  it('still throws on non-404 errors', async () => {
+  it('throws on server errors', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
       status: 500,
