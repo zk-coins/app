@@ -42,6 +42,8 @@ const e2eDir = path.join(repoRoot, 'e2e');
 const MVP_EXEMPT_TESTIDS = new Set([
   'passkey-restore-btn',
   'unlock-passkey-btn',
+  // FEATURES.USERNAMES gated — dead-stripped from PRD bundle.
+  'username-claim-btn',
   // Disabled loading states are visually transient -- Playwright cannot
   // reliably catch them without artificially slowing WASM calls.
   'seed-creating-btn',
@@ -61,8 +63,6 @@ const MVP_EXEMPT_FILES = new Set([
 // Pinned by the snippet substring (not line number) so the allowlist
 // survives unrelated reflows of the surrounding code.
 const MVP_EXEMPT_BUTTON_SNIPPETS = [
-  // WalletScreen username-claim button — FEATURES.USERNAMES gated.
-  { file: 'src/components/screens/WalletScreen.tsx', snippet: 'onClick={claimUsername}' },
   // PasskeyFlow register button — FEATURES.PASSKEY gated, dead-stripped from PRD bundle.
   { file: 'src/components/onboarding/Onboarding.tsx', snippet: 'onClick={register}' },
   // PasskeyRestoreFlow authenticate button — FEATURES.PASSKEY gated, dead-stripped from PRD bundle.

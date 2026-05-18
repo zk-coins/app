@@ -151,7 +151,13 @@ export function WalletScreen() {
                 : zkAddress}
             </p>
             {FEATURES.USERNAMES && !account.username && (
-              <div className="flex items-center gap-2">
+              <form
+                className="flex items-center gap-2"
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  claimUsername();
+                }}
+              >
                 <input
                   type="text"
                   value={claimInput}
@@ -159,18 +165,18 @@ export function WalletScreen() {
                     setClaimInput(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''));
                     setClaimError(null);
                   }}
-                  onKeyDown={(e) => e.key === 'Enter' && claimUsername()}
                   placeholder="Claim a username"
                   className="flex-1 rounded-md border border-line2 bg-surface px-2.5 py-1.5 mono text-[11px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
                 />
                 <button
-                  onClick={claimUsername}
+                  type="submit"
+                  data-testid="username-claim-btn"
                   disabled={claiming || !claimInput}
                   className="rounded-md bg-bitcoin px-3 py-1.5 text-[11px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover disabled:opacity-50"
                 >
                   {claiming ? '…' : 'Claim'}
                 </button>
-              </div>
+              </form>
             )}
             {FEATURES.USERNAMES && claimError && (
               <p className="text-[11px] text-bad">{claimError}</p>

@@ -261,7 +261,13 @@ export default function SendPage() {
         <span className="text-[11px] font-medium tracking-wider text-ink3 uppercase">Send</span>
       </header>
 
-      <div className="mt-10 space-y-7">
+      <form
+        className="mt-10 space-y-7"
+        onSubmit={(e) => {
+          e.preventDefault();
+          handleConfirm();
+        }}
+      >
         <div>
           <h1 data-testid="send-heading" className="text-[26px] font-bold tracking-tight text-ink">
             Send Bitcoin
@@ -323,7 +329,6 @@ export default function SendPage() {
             type="text"
             value={recipient}
             onChange={(e) => setRecipient(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
             spellCheck={false}
             autoComplete="off"
             placeholder={FEATURES.USERNAMES ? 'alice@zkcoins.app' : '0x…'}
@@ -341,7 +346,6 @@ export default function SendPage() {
               inputMode="decimal"
               value={amount}
               onChange={(e) => setAmount(e.target.value)}
-              onKeyDown={(e) => e.key === 'Enter' && handleConfirm()}
               spellCheck={false}
               autoComplete="off"
               placeholder="0.00000000"
@@ -352,6 +356,7 @@ export default function SendPage() {
             </span>
           </div>
           <button
+            type="button"
             data-testid="send-setmax-btn"
             onClick={() => {
               if (balance !== null && balance > 0) setAmount(formatBtc(balance));
@@ -385,6 +390,7 @@ export default function SendPage() {
             <p className="text-[11px] text-ink3">This cannot be undone.</p>
             <div className="flex gap-3">
               <button
+                type="button"
                 data-testid="send-cancel-btn"
                 onClick={() => setConfirming(false)}
                 className="flex-1 rounded-md border border-line2 py-3 text-[13px] text-ink2 transition-colors hover:border-ink2 hover:text-ink"
@@ -392,6 +398,7 @@ export default function SendPage() {
                 Cancel
               </button>
               <button
+                type="button"
                 data-testid="send-confirm-btn"
                 onClick={send}
                 disabled={sending}
@@ -403,15 +410,15 @@ export default function SendPage() {
           </div>
         ) : (
           <button
+            type="submit"
             data-testid="send-submit-btn"
-            onClick={handleConfirm}
             disabled={sending || !recipient || !amount}
             className="w-full rounded-md bg-bitcoin py-4 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
           >
             Send privately
           </button>
         )}
-      </div>
+      </form>
     </AppShell>
   );
 }

@@ -72,9 +72,10 @@ export function UnlockScreen({
           <p className="mt-2 text-[13px] text-ink2">Unlock your wallet to continue</p>
         </div>
 
-        <div className="mt-10 space-y-4">
-          {FEATURES.PASSKEY && authMethod === 'passkey' ? (
+        {FEATURES.PASSKEY && authMethod === 'passkey' ? (
+          <div className="mt-10 space-y-4">
             <button
+              type="button"
               data-testid="unlock-passkey-btn"
               onClick={handlePasskeyUnlock}
               disabled={unlocking}
@@ -83,35 +84,44 @@ export function UnlockScreen({
               <PixelIcon name="key" size={14} />
               {unlocking ? 'Authenticating…' : 'Unlock with passkey'}
             </button>
-          ) : (
-            <>
-              <input
-                data-testid="unlock-password-input"
-                type="password"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handlePasswordUnlock()}
-                placeholder="Enter your password"
-                className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
-              />
-              <button
-                data-testid="unlock-submit-btn"
-                data-unlocking={unlocking || undefined}
-                onClick={handlePasswordUnlock}
-                disabled={unlocking || !password}
-                className="w-full rounded-md bg-bitcoin py-4 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
-              >
-                {unlocking ? 'Unlocking…' : 'Unlock'}
-              </button>
-            </>
-          )}
-
-          {error && (
-            <p data-testid="unlock-error" className="text-center text-[12px] text-bad">
-              {error}
-            </p>
-          )}
-        </div>
+            {error && (
+              <p data-testid="unlock-error" className="text-center text-[12px] text-bad">
+                {error}
+              </p>
+            )}
+          </div>
+        ) : (
+          <form
+            className="mt-10 space-y-4"
+            onSubmit={(e) => {
+              e.preventDefault();
+              handlePasswordUnlock();
+            }}
+          >
+            <input
+              data-testid="unlock-password-input"
+              type="password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Enter your password"
+              className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
+            />
+            <button
+              type="submit"
+              data-testid="unlock-submit-btn"
+              data-unlocking={unlocking || undefined}
+              disabled={unlocking || !password}
+              className="w-full rounded-md bg-bitcoin py-4 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
+            >
+              {unlocking ? 'Unlocking…' : 'Unlock'}
+            </button>
+            {error && (
+              <p data-testid="unlock-error" className="text-center text-[12px] text-bad">
+                {error}
+              </p>
+            )}
+          </form>
+        )}
       </div>
     </div>
   );

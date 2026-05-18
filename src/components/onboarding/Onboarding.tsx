@@ -375,7 +375,14 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       )}
 
       {stage === 'password' && (
-        <div data-testid="seed-password-stage" className="space-y-4">
+        <form
+          data-testid="seed-password-stage"
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create();
+          }}
+        >
           <div>
             <p className="text-[13px] font-semibold text-ink">Set an encryption password</p>
             <p className="mt-1 text-[12px] text-ink2">
@@ -388,7 +395,6 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && create()}
             placeholder="Password (min 8 characters)"
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
@@ -397,19 +403,18 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
             type="password"
             value={passwordConfirm}
             onChange={(e) => setPasswordConfirm(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && create()}
             placeholder="Confirm password"
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
           <button
+            type="submit"
             data-testid="seed-create-btn"
-            onClick={create}
             disabled={!password || !passwordConfirm}
             className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
           >
             Create wallet
           </button>
-        </div>
+        </form>
       )}
 
       {stage === 'creating' && (
@@ -659,7 +664,13 @@ function SeedImportFlow({
       </div>
 
       {stage === 'input' && (
-        <>
+        <form
+          className="space-y-6"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleValidate();
+          }}
+        >
           <textarea
             data-testid="seed-import-textarea"
             value={phrase}
@@ -674,18 +685,25 @@ function SeedImportFlow({
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[13px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
           <button
+            type="submit"
             data-testid="seed-import-continue-btn"
-            onClick={handleValidate}
             disabled={!phrase.trim()}
             className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
           >
             Continue
           </button>
-        </>
+        </form>
       )}
 
       {stage === 'password' && (
-        <div data-testid="seed-import-password-stage" className="space-y-4">
+        <form
+          data-testid="seed-import-password-stage"
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            restore();
+          }}
+        >
           <div>
             <p className="text-[13px] font-semibold text-ink">Set an encryption password</p>
             <p className="mt-1 text-[12px] text-ink2">
@@ -698,7 +716,6 @@ function SeedImportFlow({
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && restore()}
             placeholder="Password (min 8 characters)"
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
@@ -707,19 +724,18 @@ function SeedImportFlow({
             type="password"
             value={passwordConfirm}
             onChange={(e) => setPasswordConfirm(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && restore()}
             placeholder="Confirm password"
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
           <button
+            type="submit"
             data-testid="seed-import-submit-btn"
-            onClick={restore}
             disabled={!password || !passwordConfirm}
             className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
           >
             Restore wallet
           </button>
-        </div>
+        </form>
       )}
 
       {stage === 'restoring' && (
