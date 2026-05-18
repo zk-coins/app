@@ -71,7 +71,7 @@ export function WalletScreen() {
   const zkAddress = account ? toZkAddress(account.address) : '';
 
   const claimUsername = useCallback(async () => {
-    if (!account || !claimInput || !account.xpriv) return;
+    if (claiming || !account || !claimInput || !account.xpriv) return;
     setClaiming(true);
     setClaimError(null);
     try {
@@ -87,7 +87,7 @@ export function WalletScreen() {
     } finally {
       setClaiming(false);
     }
-  }, [account, claimInput, setUsername]);
+  }, [account, claimInput, claiming, setUsername]);
 
   const copyAddress = useCallback(() => {
     if (!account) return;

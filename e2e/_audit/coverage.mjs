@@ -62,7 +62,7 @@ const MVP_EXEMPT_FILES = new Set([
 // survives unrelated reflows of the surrounding code.
 const MVP_EXEMPT_BUTTON_SNIPPETS = [
   // WalletScreen username-claim button — FEATURES.USERNAMES gated.
-  { file: 'src/components/screens/WalletScreen.tsx', snippet: 'api.claimUsername' },
+  { file: 'src/components/screens/WalletScreen.tsx', snippet: 'onClick={claimUsername}' },
   // PasskeyFlow register button — FEATURES.PASSKEY gated, dead-stripped from PRD bundle.
   { file: 'src/components/onboarding/Onboarding.tsx', snippet: 'onClick={register}' },
   // PasskeyRestoreFlow authenticate button — FEATURES.PASSKEY gated, dead-stripped from PRD bundle.

@@ -30,7 +30,7 @@ export function UnlockScreen({
   const credentialId = useAuthStore((s) => s.credentialId);
 
   const handlePasswordUnlock = useCallback(async () => {
-    if (!password) return;
+    if (unlocking || !password) return;
     setUnlocking(true);
     setError(null);
     try {
@@ -40,9 +40,10 @@ export function UnlockScreen({
     } finally {
       setUnlocking(false);
     }
-  }, [password, onUnlockPassword]);
+  }, [password, unlocking, onUnlockPassword]);
 
   const handlePasskeyUnlock = useCallback(async () => {
+    if (unlocking) return;
     setUnlocking(true);
     setError(null);
     try {
@@ -55,7 +56,7 @@ export function UnlockScreen({
     } finally {
       setUnlocking(false);
     }
-  }, [credentialId, onUnlockPrf]);
+  }, [credentialId, unlocking, onUnlockPrf]);
 
   return (
     <div className="relative min-h-screen bg-bg">
