@@ -33,7 +33,14 @@ const FEATURES_STATE = vi.hoisted(() => ({
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
 }));
-vi.mock('@/lib/features', () => ({ FEATURES: FEATURES_STATE }));
+// Home renders WalletScreen on the unlocked branch; WalletScreen
+// reads runtime FAUCET / USERNAMES via `useFeatures()`. The mock
+// must expose both the build-time `FEATURES` export AND the
+// `useFeatures` hook so the post-#102 features module shape works.
+vi.mock('@/lib/features', () => ({
+  FEATURES: FEATURES_STATE,
+  useFeatures: () => FEATURES_STATE,
+}));
 
 let mockPathname = '/';
 vi.mock('next/navigation', () => ({
