@@ -33,7 +33,15 @@ const FEATURES_STATE = vi.hoisted(() => ({
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
 }));
-vi.mock('@/lib/features', () => ({ FEATURES: FEATURES_STATE }));
+vi.mock('@/lib/features', () => ({
+  FEATURES: FEATURES_STATE,
+  // `Home`'s subtree (WalletScreen → AppShell → BottomNav) reads
+  // runtime capabilities via `useFeatures()`. Return the same flat
+  // object — production-shape is identical (`{ ...buildTime, FAUCET,
+  // USERNAMES }`), and `FEATURES_STATE` already carries all eight
+  // flags so the build-time and runtime sides agree in the test.
+  useFeatures: () => FEATURES_STATE,
+}));
 
 let mockPathname = '/';
 vi.mock('next/navigation', () => ({
