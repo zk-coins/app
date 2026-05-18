@@ -35,9 +35,13 @@ async function aliceGoToSend(page: Page): Promise<void> {
  * Install a `/api/send` route handler that returns a structured
  * `4xx|5xx + {success: false, error}` body, exactly as `server.rs`
  * emits after PR #31.
+ *
+ * Registered at the context level (not page-level) and matched via
+ * regex on the URL pathname — bullet-proof against cross-origin and
+ * any future SW-pass-through edge case.
  */
 async function mockSendError(page: Page, status: number, error: string): Promise<void> {
-  await page.route('**/api/send', (route) =>
+  await page.context().route(/\/api\/send$/, (route) =>
     route.fulfill({
       status,
       contentType: 'application/json',
@@ -55,6 +59,14 @@ async function aliceSubmitSend(page: Page): Promise<void> {
   await expect(page.getByTestId('send-confirm-card')).toBeVisible({ timeout: 5_000 });
   await page.getByTestId('send-confirm-btn').click();
 }
+
+// Block service-worker registration for this file. The zkCoins PWA worker
+// caches/passes-through `/api/send` traffic before `page.route()` gets a
+// chance — the regen run without this saw the real DEV response leak past
+// the mock and surface as `Serverfehler 200: legacy: success false…` in
+// the toast. Blocking SW takes the worker out of the request path entirely
+// so the mock is the only response handler.
+test.use({ serviceWorkers: 'block' });
 
 test.describe('Send Bitcoin — server error toasts (issue #99)', () => {
   test('insufficient-funds-toast', async ({ page }) => {
