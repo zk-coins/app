@@ -46,12 +46,7 @@ export default defineConfig({
   // outside of `E2E_REGENERATING`. We keep the conditional in place
   // (rather than removing the field) so a future spec PR has a clear
   // place to stage itself behind a regen.
-  //
-  // Currently staged behind regen:
-  //   13-send-server-errors.spec.ts (PR — issue #99 follow-up)
-  //     remove once linux baselines for `13-server-error-*` are
-  //     committed via the regenerate-visual-baselines workflow.
-  testIgnore: process.env.E2E_REGENERATING === 'true' ? [] : ['**/13-send-server-errors.spec.ts'],
+  testIgnore: process.env.E2E_REGENERATING === 'true' ? [] : [],
   // Seed Alice + Bob once before any worker starts; remove the fixture
   // file afterwards. See e2e/_global-setup.ts and e2e/_global-teardown.ts.
   globalSetup: require.resolve('./e2e/_global-setup.ts'),

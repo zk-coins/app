@@ -71,15 +71,7 @@ jobs:
         # axe against the live DEV server — when a follow-up fix is
         # still en route, those checks would block the baseline refresh
         # that the fix actually needs.
-        #
-        # TEMP (revert before merge): grep narrowed to "issue #99" so
-        # the regen only runs the new 13-send-server-errors spec. DEV
-        # currently has FEATURES.FAUCET=true which breaks the unrelated
-        # `06-balance.spec.ts::balance-zero-empty-banner` and blocks
-        # the commit step. Revert to `--grep-invert "Accessibility"`
-        # plus the glob once the DEV regression / faucet env is sorted.
-        run: |
-          npx playwright test --project=chromium --update-snapshots=all --grep 'issue #99'
+        run: npx playwright test --project=chromium --update-snapshots=all --grep-invert "Accessibility" e2e/0*.spec.ts e2e/1*.spec.ts
 
       - name: Commit, push to a side branch, open auto-merge PR
         env:
