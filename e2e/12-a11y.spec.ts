@@ -9,13 +9,12 @@
  * `(rule id, route, reason)` tuple — different routes can independently
  * allow or disallow the same rule.
  *
- * The allowlist below mirrors the violations the spec surfaced on
- * the first CI run against DEV. The same PR fixes them in the code
- * (palette bump + `aria-hidden` on decorative indexes + QR `title`),
- * but the spec runs against `dev.zkcoins.app` which only picks up
- * the fix after this PR merges to `develop` and the deploy-dev
- * workflow rolls. The follow-up PR linked in each `reason` empties
- * the array once DEV is live.
+ * The allowlist below carries one entry — the residual seed-grid
+ * `text-ink4` index labels axe still flags after #83. (`aria-hidden`
+ * is correct for screen readers but the axe color-contrast rule does
+ * not exempt the element itself, only descendants of an ancestor
+ * `aria-hidden`.) This PR bumps those labels to `text-ink3`; the
+ * trailing follow-up PR empties the array once the DEV deploy lands.
  *
  * No screenshots, no visual baseline — these are purely functional
  * axe checks. The spec runs in the regular E2E job; the visual-baseline
@@ -34,39 +33,9 @@ import { clearWalletState } from './_helpers/wallet';
 const KNOWN_VIOLATIONS: Array<{ id: string; route: string; reason: string }> = [
   {
     id: 'color-contrast',
-    route: '/',
-    reason:
-      "Wallet home (Alice) — ink3@4.04:1 on dark surface. Fixed by this PR's ink3 palette bump; entry removed in the follow-up PR after the DEV deploy.",
-  },
-  {
-    id: 'color-contrast',
     route: '/ (seed-reveal)',
     reason:
-      'Onboarding seed-reveal — ink3 helper text + ink4 mnemonic-index labels. Fixed by this PR (palette bump + aria-hidden on indexes); entry removed in the follow-up after the DEV deploy.',
-  },
-  {
-    id: 'color-contrast',
-    route: '/send',
-    reason:
-      "Send page — ink3 back link, header, BTC suffix. Fixed by this PR's ink3 palette bump; entry removed in the follow-up after the DEV deploy.",
-  },
-  {
-    id: 'color-contrast',
-    route: '/receive',
-    reason:
-      "Receive page — ink3 back link + header. Fixed by this PR's ink3 palette bump; entry removed in the follow-up after the DEV deploy.",
-  },
-  {
-    id: 'svg-img-alt',
-    route: '/receive',
-    reason:
-      'QR <svg> missing accessible name. Fixed by this PR (qrcode.react `title` prop); entry removed in the follow-up after the DEV deploy.',
-  },
-  {
-    id: 'color-contrast',
-    route: '/settings',
-    reason:
-      "Settings page — ink3 section headers + body text + address row. Fixed by this PR's ink3 palette bump; entry removed in the follow-up after the DEV deploy.",
+      'Seed-grid index labels at ink4 (2.01:1) — bumped to ink3 in this PR; entry removed in the follow-up after the DEV deploy.',
   },
 ];
 
