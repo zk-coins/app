@@ -26,6 +26,11 @@ import { z } from 'zod';
 
 export const SendResponseSchema = z.object({
   success: z.boolean(),
+  // Server's structured error body for non-2xx responses (mirrors
+  // `account_server::map_send_coins_error`'s output). `request()`
+  // surfaces this on the thrown error message so callers can show
+  // a specific user-fixable string rather than a JSON blob.
+  error: z.string().optional(),
   proof_id: z.number().nullable().optional(),
   account_state_hash: z.string().optional(),
   output_coins_root: z.string().optional(),

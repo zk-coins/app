@@ -171,6 +171,52 @@ describe('error handling', () => {
     await expect(api.info()).rejects.toThrow('Network error');
   });
 
+  // Server contract from zkCoins server PR #31 (Issue #28 Item 1):
+  // /api/send + /api/mint + /api/commit failure responses are now
+  // structured JSON `{ success: false, error: "<reason>", ... }`
+  // paired with 4xx/5xx. `request()` extracts `body.error` and
+  // surfaces it on the thrown message — so the catch-handler in
+  // src/app/send/page.tsx can display the user-fixable reason
+  // directly instead of the raw JSON body.
+  it('extracts structured body.error on 4xx response', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 422,
+      text: () => Promise.resolve(JSON.stringify({ success: false, error: 'Insufficient funds' })),
+    });
+    await expect(api.balance('any')).rejects.toThrow('API error 422: Insufficient funds');
+  });
+
+  it('extracts body.error on 5xx response (prove failed)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve(JSON.stringify({ success: false, error: 'prove failed' })),
+    });
+    await expect(api.info()).rejects.toThrow('API error 500: prove failed');
+  });
+
+  it('falls back to raw body when 4xx body is JSON without error field', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 502,
+      text: () => Promise.resolve(JSON.stringify({ unrelated: 'gateway timeout' })),
+    });
+    await expect(api.info()).rejects.toThrow(/API error 502: \{"unrelated":"gateway timeout"\}/);
+  });
+
+  it('falls back to raw body when 4xx body is plain text', async () => {
+    // Reverse-proxy 504 or similar: body is HTML/plain-text, not JSON.
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 504,
+      text: () => Promise.resolve('<html><body>Gateway Timeout</body></html>'),
+    });
+    await expect(api.info()).rejects.toThrow(
+      'API error 504: <html><body>Gateway Timeout</body></html>',
+    );
+  });
+
   it('throws on schema mismatch (server drift)', async () => {
     // Force a payload that no longer matches the schema (renamed field).
     // This is the load-bearing assertion for issue #68 W3 — drift now

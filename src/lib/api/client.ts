@@ -38,8 +38,26 @@ async function request<T>(path: string, schema: ZodType<T>, options?: RequestIni
       ...options,
     });
     if (!res.ok) {
+      // Server contract (post-PR-#31 / zkCoins #28 Item 1): /api/send
+      // + /api/mint + /api/commit failure responses carry a structured
+      // body `{ success: false, error: "<reason>", ... }` paired with a
+      // 4xx/5xx status. Surface `body.error` as the thrown message so
+      // page-level catch handlers can display a specific user-fixable
+      // string (e.g. "Insufficient funds") instead of the raw JSON
+      // body. Fall back to the raw text when the body is not JSON or
+      // when `error` is absent (legacy endpoints, broadcast probes,
+      // 502/504 gateway errors with HTML bodies).
       const text = await res.text();
-      throw new Error(`API error ${res.status}: ${text}`);
+      let errorBody: string = text;
+      try {
+        const parsed = JSON.parse(text) as { error?: unknown };
+        if (typeof parsed.error === 'string' && parsed.error.length > 0) {
+          errorBody = parsed.error;
+        }
+      } catch {
+        // text was not JSON — keep the raw body.
+      }
+      throw new Error(`API error ${res.status}: ${errorBody}`);
     }
     return schema.parse(await res.json());
   } finally {
