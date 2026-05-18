@@ -9,12 +9,13 @@
  * `(rule id, route, reason)` tuple — different routes can independently
  * allow or disallow the same rule.
  *
- * The allowlist below carries one entry — the residual seed-grid
- * `text-ink4` index labels axe still flags after #83. (`aria-hidden`
- * is correct for screen readers but the axe color-contrast rule does
- * not exempt the element itself, only descendants of an ancestor
- * `aria-hidden`.) This PR bumps those labels to `text-ink3`; the
- * trailing follow-up PR empties the array once the DEV deploy lands.
+ * The allowlist is currently empty: the violations surfaced on the
+ * first CI run were resolved in #83 (palette bump + `aria-hidden` on
+ * decorative indexes + QR `title`) and #93 (residual seed-grid
+ * indexes bumped from ink4 to ink3 — axe's color-contrast rule does
+ * not exempt elements with `aria-hidden` on themselves, only
+ * descendants of an aria-hidden ancestor). Future regressions land
+ * here as new entries with a linked follow-up issue per route.
  *
  * No screenshots, no visual baseline — these are purely functional
  * axe checks. The spec runs in the regular E2E job; the visual-baseline
@@ -30,14 +31,7 @@ import { aliceLogin } from './_helpers/fixtures';
 import { clearWalletState } from './_helpers/wallet';
 
 /** See file header for the allowlist policy. */
-const KNOWN_VIOLATIONS: Array<{ id: string; route: string; reason: string }> = [
-  {
-    id: 'color-contrast',
-    route: '/ (seed-reveal)',
-    reason:
-      'Seed-grid index labels at ink4 (2.01:1) — bumped to ink3 in this PR; entry removed in the follow-up after the DEV deploy.',
-  },
-];
+const KNOWN_VIOLATIONS: Array<{ id: string; route: string; reason: string }> = [];
 
 const AXE_TAGS = ['wcag2a', 'wcag2aa'];
 const BLOCKING_IMPACTS = ['serious', 'critical'] as const;
