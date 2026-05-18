@@ -26,6 +26,8 @@ import { z } from 'zod';
 
 export const SendResponseSchema = z.object({
   success: z.boolean(),
+  // Present on 4xx/5xx error bodies (server PR #31). Absent on success.
+  error: z.string().optional(),
   proof_id: z.number().nullable().optional(),
   account_state_hash: z.string().optional(),
   output_coins_root: z.string().optional(),

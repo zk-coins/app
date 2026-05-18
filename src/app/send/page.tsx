@@ -6,7 +6,8 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Check, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
-import { api, type CommitRequest } from '@/lib/api/client';
+import { ApiError, api, type CommitRequest } from '@/lib/api/client';
+import { userMessageFor } from '@/lib/api/errorMessages';
 import { initWasm } from '@zkcoins/wasm';
 import { SATS_PER_BTC, formatBtc, formatBtcCompact } from '@/lib/format';
 import { FEATURES } from '@/lib/features';
@@ -141,61 +142,72 @@ export default function SendPage() {
         account.numPubkeys,
       );
 
-      if (res.success) {
-        // Phase 2: Create and submit commitment so the recipient receives the coins.
-        if (res.account_state_hash && res.output_coins_root && res.proof_id) {
-          const commitment = wasm.createCommitment(
-            account.xpriv,
-            account.numPubkeys,
-            res.account_state_hash,
-            res.output_coins_root,
-          );
-          const commitPayload: CommitRequest = {
-            proof_id: res.proof_id,
-            public_key: commitment.publicKey,
-            signature: commitment.signature,
-            message: commitment.message,
-          };
+      // Pre-PR-#31 servers reply 200 + `{success: false}` (no error
+      // string). Normalise to ApiError so the catch path treats both
+      // contracts uniformly.
+      if (!res.success) {
+        throw new ApiError(200, res.error ?? 'legacy: success false with no error string');
+      }
 
-          // Persist in-flight commit before attempting (crash recovery).
-          saveInflightCommit(commitPayload);
+      // Phase 2: Create and submit commitment so the recipient receives the coins.
+      if (res.account_state_hash && res.output_coins_root && res.proof_id) {
+        const commitment = wasm.createCommitment(
+          account.xpriv,
+          account.numPubkeys,
+          res.account_state_hash,
+          res.output_coins_root,
+        );
+        const commitPayload: CommitRequest = {
+          proof_id: res.proof_id,
+          public_key: commitment.publicKey,
+          signature: commitment.signature,
+          message: commitment.message,
+        };
 
-          let committed = false;
-          for (let attempt = 0; attempt < 3; attempt++) {
-            try {
-              await api.commit(commitPayload);
-              committed = true;
-              clearInflightCommit();
-              break;
-            } catch {
-              if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
-            }
-          }
+        // Persist in-flight commit before attempting (crash recovery).
+        saveInflightCommit(commitPayload);
 
-          if (!committed) {
-            throw new Error(
-              'Transaction sent but delivery to recipient failed. ' +
-                'The app will retry automatically on next load.',
-            );
+        let committed = false;
+        for (let attempt = 0; attempt < 3; attempt++) {
+          try {
+            await api.commit(commitPayload);
+            committed = true;
+            clearInflightCommit();
+            break;
+          } catch {
+            if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
           }
         }
 
-        incrementPubkeys();
-        addTransaction({
-          id: res.proof_id?.toString() ?? `send-${Date.now()}`,
-          type: 'send',
-          amount: sats,
-          counterparty: recipient.trim(),
-          timestamp: Date.now(),
-          proofId: res.proof_id?.toString(),
-        });
+        if (!committed) {
+          throw new Error(
+            'Transaction sent but delivery to recipient failed. ' +
+              'The app will retry automatically on next load.',
+          );
+        }
       }
+
+      incrementPubkeys();
+      addTransaction({
+        id: res.proof_id?.toString() ?? `send-${Date.now()}`,
+        type: 'send',
+        amount: sats,
+        counterparty: recipient.trim(),
+        timestamp: Date.now(),
+        proofId: res.proof_id?.toString(),
+      });
 
       const { balance } = await api.balance(account.address);
       setBalance(balance);
       setSuccess({ amount: sats, proofId: res.proof_id?.toString() });
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Send failed');
+      if (err instanceof ApiError) {
+        setError(userMessageFor(err));
+      } else if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError('Send failed');
+      }
     } finally {
       setSending(false);
     }

@@ -17,7 +17,8 @@ import { Logo } from '../icons/Logo';
 import { PwaPrompt } from '../PwaPrompt';
 import { useWalletStore, type Transaction } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { api } from '@/lib/api/client';
+import { ApiError, api } from '@/lib/api/client';
+import { userMessageFor } from '@/lib/api/errorMessages';
 import { formatBtc, formatBtcCompact, formatUsd, toZkAddress } from '@/lib/format';
 import { FEATURES } from '@/lib/features';
 
@@ -35,6 +36,7 @@ export function WalletScreen() {
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [minting, setMinting] = useState(false);
+  const [mintError, setMintError] = useState<string | null>(null);
   const [claimInput, setClaimInput] = useState('');
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
@@ -261,12 +263,18 @@ export function WalletScreen() {
                 onClick={async () => {
                   if (!account || minting) return;
                   setMinting(true);
+                  setMintError(null);
                   try {
                     await api.mint(account.address);
                     const { balance } = await api.balance(account.address);
                     setBalance(balance);
-                  } catch {
-                    /* faucet may not be available */
+                  } catch (err) {
+                    // Faucet may not be available (server doesn't expose
+                    // /api/mint, e.g. on mainnet). Surface the typed
+                    // ApiError message inline; swallow other errors.
+                    if (err instanceof ApiError) {
+                      setMintError(userMessageFor(err));
+                    }
                   } finally {
                     setMinting(false);
                   }
@@ -276,6 +284,11 @@ export function WalletScreen() {
               >
                 {minting ? 'Minting…' : 'Faucet'}
               </button>
+            )}
+            {mintError && (
+              <p data-testid="wallet-mint-error" className="mt-2 text-[11px] text-bad">
+                {mintError}
+              </p>
             )}
           </div>
         </div>
