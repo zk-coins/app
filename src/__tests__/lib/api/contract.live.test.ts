@@ -76,9 +76,9 @@ describe.skipIf(!RUN)('live API contract', () => {
   it(
     'GET /api/balance parses against BalanceResponseSchema',
     async () => {
-      // Mint into a fresh address, then read its balance back. The
-      // 404→{balance:0} branch in `api.balance` is exercised on
-      // never-seen addresses; here we want a fully populated row.
+      // Mint into a fresh address, then read its balance back. Here we
+      // want a fully populated row; the zero-balance path (unobserved
+      // address → 200 with `balance: 0`) is exercised by the unit tests.
       const address = randomAddress();
       await api.mint(address);
       const res = await api.balance(address);
