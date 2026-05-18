@@ -72,7 +72,6 @@ export default function SendPage() {
   const [success, setSuccess] = useState<{ amount: number; proofId?: string } | null>(null);
 
   const handleConfirm = useCallback(() => {
-    if (sending || confirming) return;
     if (!account || !recipient || !amount) return;
     const btcNum = parseFloat(amount);
     if (!btcNum || btcNum <= 0) {
@@ -90,10 +89,10 @@ export default function SendPage() {
     }
     setError(null);
     setConfirming(true);
-  }, [account, balance, recipient, amount, sending, confirming]);
+  }, [account, balance, recipient, amount]);
 
   const send = useCallback(async () => {
-    if (sending || !account) return;
+    if (!account) return;
     setConfirming(false);
     const btcNum = parseFloat(amount);
     if (!btcNum || btcNum <= 0) return;
@@ -200,7 +199,7 @@ export default function SendPage() {
     } finally {
       setSending(false);
     }
-  }, [account, recipient, amount, sending, setBalance, incrementPubkeys, addTransaction]);
+  }, [account, recipient, amount, setBalance, incrementPubkeys, addTransaction]);
 
   if (!account) {
     return (

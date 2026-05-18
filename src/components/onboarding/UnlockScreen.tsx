@@ -30,7 +30,7 @@ export function UnlockScreen({
   const credentialId = useAuthStore((s) => s.credentialId);
 
   const handlePasswordUnlock = useCallback(async () => {
-    if (unlocking || !password) return;
+    if (!password) return;
     setUnlocking(true);
     setError(null);
     try {
@@ -40,10 +40,9 @@ export function UnlockScreen({
     } finally {
       setUnlocking(false);
     }
-  }, [password, unlocking, onUnlockPassword]);
+  }, [password, onUnlockPassword]);
 
   const handlePasskeyUnlock = useCallback(async () => {
-    if (unlocking) return;
     setUnlocking(true);
     setError(null);
     try {
@@ -56,7 +55,7 @@ export function UnlockScreen({
     } finally {
       setUnlocking(false);
     }
-  }, [credentialId, unlocking, onUnlockPrf]);
+  }, [credentialId, onUnlockPrf]);
 
   return (
     <div className="relative min-h-screen bg-bg">
@@ -75,7 +74,6 @@ export function UnlockScreen({
         {FEATURES.PASSKEY && authMethod === 'passkey' ? (
           <div className="mt-10 space-y-4">
             <button
-              type="button"
               data-testid="unlock-passkey-btn"
               onClick={handlePasskeyUnlock}
               disabled={unlocking}
