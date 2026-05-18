@@ -41,10 +41,19 @@ export function formatUsd(sats: number, price = MOCK_BTC_USD): string {
   });
 }
 
-export function toZkAddress(hexAddress: string): string {
-  if (!hexAddress) return '@zkcoins.app';
-  const stripped = hexAddress.replace(/^0x/, '');
-  return `${stripped.slice(0, 8)}@zkcoins.app`;
+/**
+ * Render an address as `<8-char-prefix>@<domain>`. The domain is the
+ * external hostname reported by the connected server via `/api/info`
+ * — the caller reads it from `useNetworkStore` and passes it in.
+ * Returns the empty string when either input is missing so callers
+ * can treat "no domain yet" as a loading state without an extra
+ * branch at every call-site.
+ */
+export function toZkAddress(hexAddress: string, domain: string): string {
+  if (!domain) return '';
+  if (!hexAddress) return `@${domain}`;
+  const stripped = hexAddress.toLowerCase().replace(/^0x/, '');
+  return `${stripped.slice(0, 8)}@${domain}`;
 }
 
 export function truncateAddress(addr: string, head = 10, tail = 8): string {
