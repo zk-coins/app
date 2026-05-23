@@ -18,6 +18,15 @@ on:
         required: true
         default: develop
 
+# Serialize regenerations per target branch. Two concurrent runs against
+# the same branch would race on the auto-commit of the new baselines and
+# clobber each other; `cancel-in-progress: false` lets the first run
+# finish and queues the second, instead of leaving a half-committed
+# baseline tree. Independent branches do not interact.
+concurrency:
+  group: regenerate-visual-baselines-${{ inputs.branch }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
   pull-requests: write

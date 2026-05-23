@@ -1,20 +1,35 @@
 name: CI
 
 on:
-  # Only trigger on PRs targeting develop (feature → develop). The
-  # release PR (develop → main) is opened automatically and would
-  # otherwise fire a second CI run for every push to develop — those
-  # duplicate runs surfaced as "fail" entries on the release PR's
-  # check list whenever the concurrency block cancelled the older
-  # one. The push event already covers develop, and its run is
-  # associated with the same SHA on the release PR.
+  # Only trigger PRs against `develop`. The release PR (develop → main)
+  # is opened automatically by `auto-release-pr.yaml`, so `main` is
+  # deliberately omitted from `pull_request.branches`: a `push: develop`
+  # already covers each new SHA, and adding a PR-side trigger on `main`
+  # would queue a second `pull_request` run against the release PR for
+  # the very same commit — wasted CI minutes on a check `push: develop`
+  # already provides.
+  #
+  # Note: under the PR-number grouping in the `concurrency` block below
+  # the two runs would land in DIFFERENT groups (PR run keyed by PR
+  # number, push run keyed by `refs/heads/develop`), so the block would
+  # NOT deduplicate them. The omission is still correct — it avoids
+  # double-loading the same SHA — but the previous "concurrency cancels
+  # one of them" reasoning is obsolete.
   pull_request:
     branches: [develop]
   push:
     branches: [develop]
 
+# Group by PR number so a new push to the same PR cancels the in-flight
+# run for the outdated commit. Grouping by SHA (the previous approach)
+# put every commit in its own group, which meant `cancel-in-progress`
+# never fired and back-to-back pushes queued sequentially — each new
+# commit waited for the doomed older run to drain.
+# Falls back to `github.ref` for push/dispatch events (where there is no
+# `pull_request.number`): `refs/heads/develop` for post-merge runs, the
+# dispatched ref for manual triggers.
 concurrency:
-  group: ci-${{ github.event.pull_request.head.sha || github.sha }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:

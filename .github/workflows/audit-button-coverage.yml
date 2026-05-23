@@ -14,8 +14,11 @@ on:
       - 'e2e/**'
       - '.github/workflows/audit-button-coverage.yml'
 
+# Group by PR number (with `github.ref` fallback for push/dispatch) so a
+# new push cancels the in-flight audit on the outdated commit. See
+# `ci.yaml` for the full rationale — same fix, same pattern.
 concurrency:
-  group: audit-button-coverage-${{ github.event.pull_request.head.sha || github.sha }}
+  group: audit-button-coverage-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
