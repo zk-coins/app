@@ -26,3 +26,10 @@ e2e/.fixtures/
 # hardlinks them from e2e/*.spec.ts-snapshots/ at predev/prebuild time.
 # Keep the canonical baselines in e2e/ as the single source of truth.
 public/handbook/screenshots/
+
+# Claude-specific tooling artifacts — keep project tool-agnostic.
+# Project conventions belong in CONTRIBUTING.md (a generic Markdown
+# standard readable by every team member and every AI tool), not in
+# CLAUDE.md or .claude/ directories.
+CLAUDE.md
+.claude/
