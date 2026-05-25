@@ -6,7 +6,7 @@ describe('userMessageFor', () => {
   it.each(KNOWN_SERVER_ERRORS)(
     'has a non-fallback German message for every known server error: %s',
     (serverError) => {
-      // Lockstep test: when `zk-coins/server::map_send_coins_error`
+      // Lockstep test: when `zk-coins/node::map_send_coins_error`
       // grows, both `KNOWN_SERVER_ERRORS` and the mapping in
       // `errorMessages.ts` must be updated together. Failure here
       // means the app would show the raw `Serverfehler …` fallback

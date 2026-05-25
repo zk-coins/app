@@ -632,7 +632,7 @@ Each PR:
 
 - Adds **only the spec it's labelled with** plus any unblocking helper change.
 - Lands the spec with its file name added to `playwright.config.ts::testIgnore` so the existing `e2e-tests` job doesn't fail on missing baselines.
-- **Wipes the DEV server state** before triggering the regen so the run starts from a known-empty `accounts.bin` / `smt.bin` / `mmr.bin` / `latest_block.bin` / `minting_num_pubkeys.bin`. See `zk-coins/server CONTRIBUTING.md § DEV state recovery`.
+- **Wipes the DEV server state** before triggering the regen so the run starts from a known-empty `accounts.bin` / `smt.bin` / `mmr.bin` / `latest_block.bin` / `minting_num_pubkeys.bin`. See `zk-coins/node CONTRIBUTING.md § DEV state recovery`.
 - Dispatches `regenerate-visual-baselines.yml` via `gh workflow run "Regenerate Visual Baselines" --ref develop -f branch=develop`. The workflow opens a side-branch PR `e2e/regen-baselines-<run-id>` against develop (it does not push directly — see §9.2).
 - **Admin-merges the regen PR**: `gh pr merge <N> --squash --delete-branch --admin`. The protection rule allows admin override (`enforce_admins: false`), which is the unblocking mechanism while the GITHUB_TOKEN cascade-trigger limitation persists.
 - After baselines land, removes the spec from `testIgnore` in a second commit. CI now exercises the spec on every push.

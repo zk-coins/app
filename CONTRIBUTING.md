@@ -264,5 +264,5 @@ Changes to the service worker require incrementing `CACHE_NAME` in `sw.js`.
 
 ## Related Repos
 
-- [zk-coins/server](https://github.com/zk-coins/server) — Rust backend (API)
+- [zk-coins/node](https://github.com/zk-coins/node) — Rust backend (API)
 - [zk-coins/docs](https://github.com/zk-coins/docs) — Documentation (docs.zkcoins.app)

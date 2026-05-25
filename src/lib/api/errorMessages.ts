@@ -2,7 +2,7 @@
  * Server-error-string → user-facing message mapping.
  *
  * Issue #99. Mirrors the failure-contract table introduced by
- * `zk-coins/server` PR #31 (`server.rs::map_send_coins_error` plus
+ * `zk-coins/node` PR #31 (`router.rs::map_send_coins_error` plus
  * `handler_error_response()`). When a new error string is added
  * server-side, this table and `KNOWN_SERVER_ERRORS` below must be
  * updated in lockstep — the unit test in

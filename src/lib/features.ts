@@ -10,7 +10,7 @@
 //
 // 2. **Runtime server capabilities** (`FAUCET`, `USERNAMES`). These
 //    are reported by the server at `/api/info` (see
-//    `zk-coins/server::server.rs::Capabilities`) and stored in
+//    `zk-coins/node::router.rs::Capabilities`) and stored in
 //    `useCapabilities`. Consumers must read them via `useFeatures()`
 //    inside a component, so the component re-renders when the
 //    capabilities load. Reading them statically from `process.env`
