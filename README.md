@@ -1,14 +1,19 @@
 # zkCoins App
 
+[![Docker Image Version](https://img.shields.io/docker/v/zkcoins/app/latest?logo=docker&label=zkcoins%2Fapp&color=2496ED)](https://hub.docker.com/r/zkcoins/app)
+[![Docker Pulls](https://img.shields.io/docker/pulls/zkcoins/app?logo=docker&color=2496ED)](https://hub.docker.com/r/zkcoins/app)
+
 Web application for [zkcoins.app](https://zkcoins.app) — private Bitcoin transactions via Shielded CSV. Installable as PWA.
+
+Container images: **[hub.docker.com/r/zkcoins/app](https://hub.docker.com/r/zkcoins/app)**
 
 ## Live
 
-| Environment | URL                                              | Image               |
-| ----------- | ------------------------------------------------ | ------------------- |
-| **PRD**     | [zkcoins.app](https://zkcoins.app)               | `zkcoins/app:latest` |
-| **DEV**     | [dev.zkcoins.app](https://dev.zkcoins.app)       | `zkcoins/app:beta`   |
-| **Status**  | [status.zkcoins.app](https://status.zkcoins.app) | —                   |
+| Environment | URL                                              | Image                                                                             |
+| ----------- | ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| **PRD**     | [zkcoins.app](https://zkcoins.app)               | [`zkcoins/app:latest`](https://hub.docker.com/r/zkcoins/app/tags?name=latest)     |
+| **DEV**     | [dev.zkcoins.app](https://dev.zkcoins.app)       | [`zkcoins/app:beta`](https://hub.docker.com/r/zkcoins/app/tags?name=beta)         |
+| **Status**  | [status.zkcoins.app](https://status.zkcoins.app) | —                                                                                 |
 
 ## Stack
 
