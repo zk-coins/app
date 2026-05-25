@@ -6,8 +6,8 @@ Web application for [zkcoins.app](https://zkcoins.app) — private Bitcoin trans
 
 | Environment | URL                                              | Image               |
 | ----------- | ------------------------------------------------ | ------------------- |
-| **PRD**     | [zkcoins.app](https://zkcoins.app)               | `zkcoin/app:latest` |
-| **DEV**     | [dev.zkcoins.app](https://dev.zkcoins.app)       | `zkcoin/app:beta`   |
+| **PRD**     | [zkcoins.app](https://zkcoins.app)               | `zkcoins/app:latest` |
+| **DEV**     | [dev.zkcoins.app](https://dev.zkcoins.app)       | `zkcoins/app:beta`   |
 | **Status**  | [status.zkcoins.app](https://status.zkcoins.app) | —                   |
 
 ## Stack
@@ -360,11 +360,11 @@ The `pkg/` directory is committed to git (not gitignored) for Docker builds.
 ## Docker
 
 ```bash
-docker build -t zkcoin/app .
+docker build -t zkcoins/app .
 docker run -p 3090:3090 \
   -e NEXT_PUBLIC_API_URL=https://api.zkcoins.app \
   -e NEXT_PUBLIC_EXPLORER_URL=https://zkcoins.space \
-  zkcoin/app
+  zkcoins/app
 ```
 
 Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
@@ -374,8 +374,8 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 | Workflow               | Trigger          | Action                                    |
 | ---------------------- | ---------------- | ----------------------------------------- |
 | `ci.yaml`              | Push develop, PR | Lint + Build                              |
-| `deploy-dev.yaml`      | Push develop     | Docker → `zkcoin/app:beta` → DEV server   |
-| `deploy-prd.yaml`      | Push main        | Docker → `zkcoin/app:latest` → PRD server |
+| `deploy-dev.yaml`      | Push develop     | Docker → `zkcoins/app:beta` → DEV server   |
+| `deploy-prd.yaml`      | Push main        | Docker → `zkcoins/app:latest` → PRD server |
 | `auto-release-pr.yaml` | Push develop     | Creates Release PR (develop → main)       |
 
 ## Open Tasks

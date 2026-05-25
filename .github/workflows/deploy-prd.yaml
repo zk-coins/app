@@ -14,7 +14,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DOCKER_TAGS: zkcoin/app:latest
+  DOCKER_TAGS: zkcoins/app:latest
 
 permissions:
   contents: read
