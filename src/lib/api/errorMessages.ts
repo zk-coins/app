@@ -7,6 +7,24 @@
  * server-side, this table and `KNOWN_SERVER_ERRORS` below must be
  * updated in lockstep — the unit test in
  * `src/__tests__/lib/api/error-mapping.test.ts` fails otherwise.
+ *
+ * Lookup is two-layer:
+ *   1. `SERVER_ERROR_TO_USER_MESSAGE` — exact-string match. This is the
+ *      lockstep contract: every entry in `KNOWN_SERVER_ERRORS` must
+ *      resolve here (asserted by the unit test) and stays in lockstep
+ *      with the `api_remote.rs::error_strings_match_known_app_mapping`
+ *      test in `zk-coins/node`.
+ *   2. `SERVER_ERROR_PATTERNS` — regex fallback for *families* of
+ *      diagnostic strings the node may emit with varying wording (e.g.
+ *      `"<field> is not valid hex"` for any field name, or
+ *      `"<field> must be 32 bytes (64 hex chars)"`). The node prefers
+ *      diagnostic, field-naming strings; this layer keeps the UX
+ *      consistent without forcing the node to flatten its messages back
+ *      to the generic forms in `KNOWN_SERVER_ERRORS`.
+ *
+ * Pattern entries must NOT overlap with `KNOWN_SERVER_ERRORS` strings —
+ * the exact-match pass always wins, and a duplicate match would mean
+ * the exact entry is dead code. The unit test guards this.
  */
 
 import { ApiError } from './client';
@@ -81,6 +99,31 @@ const SERVER_ERROR_TO_USER_MESSAGE: Record<string, string> = {
 };
 
 /**
+ * Family-level patterns for diagnostic node error strings that vary by
+ * field name or wording. Tried only when no exact match is found in
+ * `SERVER_ERROR_TO_USER_MESSAGE`. Order matters: specific patterns must
+ * precede broader ones. Each entry maps to one of the existing German
+ * user messages so the UX is consistent between exact-matched and
+ * family-matched errors.
+ */
+const SERVER_ERROR_PATTERNS: Array<readonly [RegExp, string]> = [
+  // Hex validation errors. Node emits e.g.
+  // "account_address is not valid hex" — any field, any wording variant.
+  [/(?:is not valid hex|invalid hex)/i, 'Ungültige Hex-Eingabe.'],
+  // Address length errors. Node emits e.g.
+  // "account_address must be 32 bytes (64 hex chars)" or
+  // "recipient must be 32 bytes (64 hex chars)" — varies by field.
+  [/(?:must be \d+ bytes|invalid address length|address length)/i, 'Ungültige Adresslänge.'],
+  // Bitcoin broadcast failures. Node may emit "Broadcast failed"
+  // (exact-matched above) or the diagnostic
+  // "Failed to broadcast commitment inscription on-chain".
+  [
+    /(?:^Broadcast failed$|^Failed to broadcast)/i,
+    'Bitcoin-Broadcast fehlgeschlagen. Bitte später erneut versuchen.',
+  ],
+];
+
+/**
  * Map an `ApiError` to a translated, user-facing message. Falls back to
  * `Serverfehler <status>: <raw>` when the server emits an unmapped
  * string (a lockstep gap that the unit test must catch — the fallback
@@ -88,8 +131,12 @@ const SERVER_ERROR_TO_USER_MESSAGE: Record<string, string> = {
  * resting state).
  */
 export function userMessageFor(error: ApiError): string {
-  return (
-    SERVER_ERROR_TO_USER_MESSAGE[error.serverError] ??
-    `Serverfehler ${error.status}: ${error.serverError}`
-  );
+  const exact = SERVER_ERROR_TO_USER_MESSAGE[error.serverError];
+  if (exact !== undefined) return exact;
+
+  for (const [pattern, message] of SERVER_ERROR_PATTERNS) {
+    if (pattern.test(error.serverError)) return message;
+  }
+
+  return `Serverfehler ${error.status}: ${error.serverError}`;
 }
