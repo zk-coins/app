@@ -1,14 +1,19 @@
 # zkCoins App
 
+[![Docker Image Version](https://img.shields.io/docker/v/zkcoins/app/latest?logo=docker&label=zkcoins%2Fapp&color=2496ED)](https://hub.docker.com/r/zkcoins/app)
+[![Docker Pulls](https://img.shields.io/docker/pulls/zkcoins/app?logo=docker&color=2496ED)](https://hub.docker.com/r/zkcoins/app)
+
 Web application for [zkcoins.app](https://zkcoins.app) — private Bitcoin transactions via Shielded CSV. Installable as PWA.
+
+Container images: **[hub.docker.com/r/zkcoins/app](https://hub.docker.com/r/zkcoins/app)**
 
 ## Live
 
-| Environment | URL                                              | Image               |
-| ----------- | ------------------------------------------------ | ------------------- |
-| **PRD**     | [zkcoins.app](https://zkcoins.app)               | `zkcoin/app:latest` |
-| **DEV**     | [dev.zkcoins.app](https://dev.zkcoins.app)       | `zkcoin/app:beta`   |
-| **Status**  | [status.zkcoins.app](https://status.zkcoins.app) | —                   |
+| Environment | URL                                              | Image                                                                             |
+| ----------- | ------------------------------------------------ | --------------------------------------------------------------------------------- |
+| **PRD**     | [zkcoins.app](https://zkcoins.app)               | [`zkcoins/app:latest`](https://hub.docker.com/r/zkcoins/app/tags?name=latest)     |
+| **DEV**     | [dev.zkcoins.app](https://dev.zkcoins.app)       | [`zkcoins/app:beta`](https://hub.docker.com/r/zkcoins/app/tags?name=beta)         |
+| **Status**  | [status.zkcoins.app](https://status.zkcoins.app) | —                                                                                 |
 
 ## Stack
 
@@ -31,7 +36,7 @@ Full rationale: [docs.zkcoins.app/tech-decisions](https://docs.zkcoins.app/tech-
 - Defensive code that genuinely cannot be reached in happy-dom (SSR guards, IDB `onerror` callbacks, the 2-minute request timeout) is exempted by an inline `/* c8 ignore */` annotation with a one-line reason.
 - The branch is protected on GitHub: a PR cannot be merged while CI is red.
 
-The same rule applies to `zk-coins/server` (gated Cargo features are excluded from the measured scope).
+The same rule applies to `zk-coins/node` (gated Cargo features are excluded from the measured scope).
 
 ## Features
 
@@ -79,7 +84,7 @@ Two independent gating mechanisms coexist:
 
 1. **Build-time client flags** (`NEXT_PUBLIC_ENABLE_*`, inlined by Next.js). Local-dev only — a developer can opt a gated UI in by setting the variable in `.env.local`. Not wired up in `deploy-dev.yaml` or `deploy-prd.yaml`, and the `Dockerfile` declares no matching `ARG`. DEV mirrors PRD; both bundles contain only the ungated code. When a feature is ready to ship, the gate is removed from the source, **not** flipped on for a deploy. Read via `FEATURES.X` (or `useFeatures().X` inside components).
 
-2. **Server-side capability gates** (`useFeatures().FAUCET`, `useFeatures().USERNAMES`). Reported by the server at `GET /api/info.capabilities`, mirroring the server's Cargo feature set. The capabilities store fail-closes on a missing response, so a pre-#29 server or an unreachable server hides the gated UI rather than crashing. The same shipped bundle works against any server because the gate is checked at runtime — see [`zk-coins/server` issue #29](https://github.com/zk-coins/server/issues/29) and [`zk-coins/app` issue #97](https://github.com/zk-coins/app/issues/97).
+2. **Server-side capability gates** (`useFeatures().FAUCET`, `useFeatures().USERNAMES`). Reported by the server at `GET /api/info.capabilities`, mirroring the server's Cargo feature set. The capabilities store fail-closes on a missing response, so a pre-#29 server or an unreachable server hides the gated UI rather than crashing. The same shipped bundle works against any server because the gate is checked at runtime — see [`zk-coins/node` issue #29](https://github.com/zk-coins/node/issues/29) and [`zk-coins/app` issue #97](https://github.com/zk-coins/app/issues/97).
 
 | `.env.local` var (`NEXT_PUBLIC_*`) | Gates                                                                   |
 | ---------------------------------- | ----------------------------------------------------------------------- |
@@ -360,11 +365,11 @@ The `pkg/` directory is committed to git (not gitignored) for Docker builds.
 ## Docker
 
 ```bash
-docker build -t zkcoin/app .
+docker build -t zkcoins/app .
 docker run -p 3090:3090 \
   -e NEXT_PUBLIC_API_URL=https://api.zkcoins.app \
   -e NEXT_PUBLIC_EXPLORER_URL=https://zkcoins.space \
-  zkcoin/app
+  zkcoins/app
 ```
 
 Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
@@ -374,8 +379,8 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 | Workflow               | Trigger          | Action                                    |
 | ---------------------- | ---------------- | ----------------------------------------- |
 | `ci.yaml`              | Push develop, PR | Lint + Build                              |
-| `deploy-dev.yaml`      | Push develop     | Docker → `zkcoin/app:beta` → DEV server   |
-| `deploy-prd.yaml`      | Push main        | Docker → `zkcoin/app:latest` → PRD server |
+| `deploy-dev.yaml`      | Push develop     | Docker → `zkcoins/app:beta` → DEV server   |
+| `deploy-prd.yaml`      | Push main        | Docker → `zkcoins/app:latest` → PRD server |
 | `auto-release-pr.yaml` | Push develop     | Creates Release PR (develop → main)       |
 
 ## Open Tasks
@@ -388,7 +393,7 @@ Runtime env var injection via `entrypoint.sh` — same image for DEV and PRD.
 
 | Repo                                                      | Purpose                                                      |
 | --------------------------------------------------------- | ------------------------------------------------------------ |
-| [zk-coins/server](https://github.com/zk-coins/server)     | Rust backend (API, ZK proofs, Bitcoin scanner)               |
+| [zk-coins/node](https://github.com/zk-coins/node)     | Rust backend (API, ZK proofs, Bitcoin scanner)               |
 | [zk-coins/docs](https://github.com/zk-coins/docs)         | Documentation ([docs.zkcoins.app](https://docs.zkcoins.app)) |
 | [zk-coins/research](https://github.com/zk-coins/research) | Protocol research, upstream repos, paper PDF                 |
 

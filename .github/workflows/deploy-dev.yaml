@@ -5,8 +5,19 @@ on:
     branches: [develop]
   workflow_dispatch:
 
+# Serialize DEV deploys per ref. Back-to-back pushes to develop used to
+# fire parallel deploys that raced on `docker compose recreate` on the
+# host; `cancel-in-progress: true` keeps the newest commit's deploy and
+# drops the older one (the older deploy is irrelevant the moment its
+# commit is no longer the branch tip). A `workflow_dispatch` from a
+# feature branch lands in its own ref-keyed group and does not interact
+# with the develop deploy.
+concurrency:
+  group: deploy-dev-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
-  DOCKER_TAGS: zkcoin/app:beta
+  DOCKER_TAGS: zkcoins/app:beta
 
 permissions:
   contents: read

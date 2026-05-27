@@ -5,8 +5,16 @@ on:
     branches: [main]
   workflow_dispatch:
 
+# Serialize PRD deploys per ref. Unlike Deploy DEV ("newest commit wins"),
+# production deploys must NEVER be killed mid-flight: cancelling halfway
+# through `docker compose recreate` produces half-renamed Created-state
+# containers and a broken host. Queue subsequent deploys instead.
+concurrency:
+  group: deploy-prd-${{ github.ref }}
+  cancel-in-progress: false
+
 env:
-  DOCKER_TAGS: zkcoin/app:latest
+  DOCKER_TAGS: zkcoins/app:latest
 
 permissions:
   contents: read

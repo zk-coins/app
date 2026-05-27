@@ -219,11 +219,11 @@ wasm-bindgen --out-dir ../../packages/zkcoins-wasm/src/pkg --target web \
 The app runs as a standalone Next.js container:
 
 ```bash
-docker build -t zkcoin/app .
+docker build -t zkcoins/app .
 docker run -p 3090:3090 \
   -e NEXT_PUBLIC_API_URL=https://api.zkcoins.app \
   -e NEXT_PUBLIC_EXPLORER_URL=https://zkcoins.space \
-  zkcoin/app
+  zkcoins/app
 ```
 
 Environment variables are injected at **runtime** via `entrypoint.sh` — the same image works for DEV and PRD.
@@ -237,8 +237,8 @@ The Dockerfile sets placeholder values at build time (`NEXT_PUBLIC_API_URL_PLACE
 | Workflow               | Trigger             | Action                                                  |
 | ---------------------- | ------------------- | ------------------------------------------------------- |
 | `ci.yaml`              | Push to develop, PR | Lint + Build                                            |
-| `deploy-dev.yaml`      | Push to develop     | Docker build → push `zkcoin/app:beta` → deploy to DEV   |
-| `deploy-prd.yaml`      | Push to main        | Docker build → push `zkcoin/app:latest` → deploy to PRD |
+| `deploy-dev.yaml`      | Push to develop     | Docker build → push `zkcoins/app:beta` → deploy to DEV   |
+| `deploy-prd.yaml`      | Push to main        | Docker build → push `zkcoins/app:latest` → deploy to PRD |
 | `auto-release-pr.yaml` | Push to develop     | Creates Release PR (develop → main)                     |
 
 ### Before Pushing
@@ -264,5 +264,5 @@ Changes to the service worker require incrementing `CACHE_NAME` in `sw.js`.
 
 ## Related Repos
 
-- [zk-coins/server](https://github.com/zk-coins/server) — Rust backend (API)
+- [zk-coins/node](https://github.com/zk-coins/node) — Rust backend (API)
 - [zk-coins/docs](https://github.com/zk-coins/docs) — Documentation (docs.zkcoins.app)
