@@ -254,3 +254,34 @@ describe('WalletScreen — balance polling', () => {
     expect(infoSpy).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('WalletScreen — faucet button gating', () => {
+  it('hides the faucet button when the node reports network "Mainnet" (CamelCase)', async () => {
+    // The node ships network names as display strings — see
+    // `node::router::info_handler` — and Mainnet is the only value
+    // the faucet must never appear on. Casing was the regression
+    // vector: `"Mainnet" !== "mainnet"` rendered the faucet on PRD
+    // even though the build-time FAUCET flag was on.
+    Object.assign(FEATURES_STATE, { FAUCET: true });
+    infoSpy.mockResolvedValue({ network: 'Mainnet' });
+    balanceSpy.mockResolvedValue({ balance: 0 });
+
+    const { queryByTestId } = render(<WalletScreen />);
+    await waitFor(() => {
+      expect(useNetworkStore.getState().networkName).toBe('Mainnet');
+    });
+    await waitFor(() => {
+      expect(useWalletStore.getState().balance).toBe(0);
+    });
+    expect(queryByTestId('faucet-btn')).toBeNull();
+  });
+
+  it('renders the faucet button on a testnet (e.g. Mutinynet) with FAUCET=true and empty balance', async () => {
+    Object.assign(FEATURES_STATE, { FAUCET: true });
+    infoSpy.mockResolvedValue({ network: 'Mutinynet' });
+    balanceSpy.mockResolvedValue({ balance: 0 });
+
+    const { findByTestId } = render(<WalletScreen />);
+    expect(await findByTestId('faucet-btn')).toBeTruthy();
+  });
+});
