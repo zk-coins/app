@@ -51,12 +51,13 @@ test.describe('View balance', () => {
     await setViewport(page, 'mobile');
     await bobLogin(page);
     await expect(page.getByTestId('wallet-empty-banner')).toBeVisible({ timeout: 30_000 });
-    // FEATURES.FAUCET is off in PRD-equivalent DEV — the faucet button
-    // is removed from the bundle. Verify the no-funds banner shows up,
-    // not the gated button.
-    await expect(page.getByTestId('faucet-btn')).toHaveCount(0);
-    // fullPage so the empty-banner is captured (sits below the masked
-    // balance card and is the entire differentiator vs. funded state).
+    // DEV runs on Mutinynet — the empty-banner UI exposes the faucet
+    // button as the primary CTA. The companion check that the button
+    // is *not* rendered on Mainnet lives in the unit-test layer
+    // (`WalletScreen` test for `showFaucet` with `networkName: "Mainnet"`)
+    // since E2E always runs against the testnet API.
+    await expect(page.getByTestId('faucet-btn')).toBeVisible();
+    // fullPage so the empty-banner + faucet button are both captured.
     await snap(page, '06-balance-zero-empty-banner', { fullPage: true });
   });
 
