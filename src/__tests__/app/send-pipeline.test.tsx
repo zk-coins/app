@@ -146,6 +146,13 @@ async function clickThroughToConfirm(user: ReturnType<typeof userEvent.setup>, r
 describe('SendPage — Phase-1 + Phase-2 happy path', () => {
   it('sends, commits, refreshes balance, prepends a transaction, and shows the success screen', async () => {
     const user = userEvent.setup();
+    // Pre-send balance hydration. SendPage refetches the balance
+    // before signing so the BIP-32 child-index counter is hydrated
+    // from the server's authoritative `num_sends` (see the
+    // `BalanceResponseSchema.num_sends` doc on the schema). Returns
+    // `num_sends == ALICE.numPubkeys` so the local state stays in
+    // sync — see `state.account?.numPubkeys` assertion below.
+    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys });
     // /api/send — Phase-1 response carries the commitment material for Phase-2.
     enqueueOk({
       success: true,
@@ -155,8 +162,12 @@ describe('SendPage — Phase-1 + Phase-2 happy path', () => {
     });
     // /api/commit succeeds on the first attempt.
     enqueueOk({ success: true, proof_id: 1234 });
-    // Post-send balance refresh.
-    enqueueOk({ balance: ONE_BTC_SATS - SEND_AMOUNT_SATS });
+    // Post-send balance refresh. `num_sends` bumped to the next
+    // index now that the send completed.
+    enqueueOk({
+      balance: ONE_BTC_SATS - SEND_AMOUNT_SATS,
+      num_sends: ALICE.numPubkeys + 1,
+    });
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
@@ -200,8 +211,13 @@ describe('SendPage — Phase-1 + Phase-2 happy path', () => {
     // && proof_id`. A mint-style envelope without commitment material is a
     // legitimate path the page must tolerate.
     const user = userEvent.setup();
+    // Pre-send balance hydration (see PR notes for rationale).
+    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys });
     enqueueOk({ success: true, proof_id: 99 });
-    enqueueOk({ balance: ONE_BTC_SATS - SEND_AMOUNT_SATS });
+    enqueueOk({
+      balance: ONE_BTC_SATS - SEND_AMOUNT_SATS,
+      num_sends: ALICE.numPubkeys + 1,
+    });
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
@@ -241,6 +257,7 @@ describe('SendPage — commit retry loop', () => {
 
   it('succeeds on the second commit attempt after backing off 2 s', async () => {
     const user = userEvent.setup();
+    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys });
     enqueueOk({
       success: true,
       proof_id: 7,
@@ -249,7 +266,7 @@ describe('SendPage — commit retry loop', () => {
     });
     enqueueErr(500, 'commit failed'); // attempt 1
     enqueueOk({ success: true, proof_id: 7 }); // attempt 2
-    enqueueOk({ balance: 50_000 });
+    enqueueOk({ balance: 50_000, num_sends: ALICE.numPubkeys + 1 });
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
@@ -268,6 +285,7 @@ describe('SendPage — commit retry loop', () => {
 
   it('exhausts all three commit attempts, shows the delivery-failed error, and keeps the inflight payload', async () => {
     const user = userEvent.setup();
+    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys });
     enqueueOk({
       success: true,
       proof_id: 8,
@@ -313,7 +331,7 @@ describe('SendPage — in-flight commit recovery on mount', () => {
       }),
     );
     enqueueOk({ success: true, proof_id: 42 }); // recovery /api/commit
-    enqueueOk({ balance: 12345 }); // recovery balance refresh
+    enqueueOk({ balance: 12345, num_sends: ALICE.numPubkeys + 1 }); // recovery balance refresh
 
     render(<SendPage />);
 
@@ -364,8 +382,9 @@ describe('SendPage — username resolution (FEATURES.USERNAMES on)', () => {
     const user = userEvent.setup();
 
     enqueueOk({ username: 'bob', address: RECIPIENT_HEX }); // resolveUsername
+    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys }); // pre-send balance hydration
     enqueueOk({ success: true, proof_id: 1 });
-    enqueueOk({ balance: 1 });
+    enqueueOk({ balance: 1, num_sends: ALICE.numPubkeys + 1 });
 
     render(<SendPage />);
     await clickThroughToConfirm(user, 'bob@zkcoins.app');
@@ -385,8 +404,9 @@ describe('SendPage — username resolution (FEATURES.USERNAMES on)', () => {
     const user = userEvent.setup();
 
     enqueueOk({ username: 'alice', address: RECIPIENT_HEX });
+    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys });
     enqueueOk({ success: true, proof_id: 1 });
-    enqueueOk({ balance: 1 });
+    enqueueOk({ balance: 1, num_sends: ALICE.numPubkeys + 1 });
 
     render(<SendPage />);
     await clickThroughToConfirm(user, '$alice');
@@ -402,16 +422,18 @@ describe('SendPage — username resolution (FEATURES.USERNAMES on)', () => {
     FEATURES_STATE.USERNAMES = true;
     const user = userEvent.setup();
 
+    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys }); // pre-send balance
     enqueueOk({ success: true, proof_id: 1 });
-    enqueueOk({ balance: 1 });
+    enqueueOk({ balance: 1, num_sends: ALICE.numPubkeys + 1 });
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
     await user.click(screen.getByTestId('send-confirm-btn'));
     await screen.findByTestId('send-success-heading');
 
-    // First call is /api/send directly — no resolve hop.
-    expect(mockFetch.mock.calls[0][0]).toContain('/api/send');
+    // First call is /api/balance (pre-send hydration), then /api/send.
+    expect(mockFetch.mock.calls[0][0]).toContain('/api/balance');
+    expect(mockFetch.mock.calls[1][0]).toContain('/api/send');
   });
 
   it('surfaces the API error when username resolution fails', async () => {

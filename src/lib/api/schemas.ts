@@ -42,6 +42,24 @@ export const CommitResponseSchema = SendResponseSchema;
 export const BalanceResponseSchema = z.object({
   balance: z.number(),
   username: z.string().optional(),
+  // Authoritative BIP-32 child-index counter for the queried account.
+  // Equals the number of times the address has executed a
+  // `/api/send` round-trip (= the server's `Account.num_sends` field
+  // — see the corresponding `BalanceResponse` doc on the node side).
+  //
+  // The wallet hydrates its local `numPubkeys` from this value on
+  // every balance tick, replacing the previous "track locally,
+  // increment on every successful send" scheme that desynced after
+  // a seed restore (the restore flow resets `numPubkeys` to 0
+  // regardless of past sends, which then either omits the
+  // `prev_commitment_pubkey` parameter or collides on the same SMT
+  // slot at commit time — both failure modes surfaced as
+  // `07-send.spec.ts::send-success` failing on DEV).
+  //
+  // `.default(0)` so a pre-PR server (no field on the wire) still
+  // parses and the wallet falls back to the local counter. The
+  // matching node-side change emits this unconditionally.
+  num_sends: z.number().default(0),
 });
 
 export const UsernameResponseSchema = z.object({

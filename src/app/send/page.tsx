@@ -34,7 +34,8 @@ function getInflightCommit(): CommitRequest | null {
 
 export default function SendPage() {
   const router = useRouter();
-  const { account, balance, setBalance, incrementPubkeys, addTransaction } = useWalletStore();
+  const { account, balance, setBalance, incrementPubkeys, syncNumPubkeys, addTransaction } =
+    useWalletStore();
   const features = useFeatures();
 
   // Redirect to home (which handles unlock) if no account in memory.
@@ -58,7 +59,12 @@ export default function SendPage() {
       .then(() => {
         clearInflightCommit();
         incrementPubkeys();
-        if (account) api.balance(account.address).then(({ balance }) => setBalance(balance));
+        if (account) {
+          api.balance(account.address).then((res) => {
+            setBalance(res.balance);
+            syncNumPubkeys(res.num_sends);
+          });
+        }
       })
       .catch(() => {
         // Keep in localStorage for next retry.
@@ -124,10 +130,29 @@ export default function SendPage() {
       const wasm = await initWasm();
       if (!account.xpriv) throw new Error('No private key');
 
-      const keys = wasm.derivePublicKeys(account.xpriv, account.numPubkeys);
+      // Hydrate the BIP-32 child-index counter from the server BEFORE
+      // signing. A seed-restored wallet has no local memory of past
+      // sends (`numPubkeys` is reset to 0 by the restore flow). Without
+      // this pre-send sync the wallet would either omit
+      // `prev_commitment_pubkey` (server: 400 "prev_commitment_pubkey
+      // required for account update", mapped to "Vorheriger Public Key
+      // fehlt.") or sign the next send with pubkey[0] again and
+      // collide on the same SMT slot at commit time. The matching
+      // server change is zk-coins/node `Account.num_sends` +
+      // `BalanceResponse.num_sends` (PR #129).
+      //
+      // The WalletScreen 5 s poll usually keeps the counter in sync;
+      // re-fetching here closes the worst-case window where the user
+      // navigated directly to `/send` faster than one polling tick.
+      const preSend = await api.balance(account.address);
+      setBalance(preSend.balance);
+      syncNumPubkeys(preSend.num_sends);
+      const effectiveNumPubkeys = preSend.num_sends;
+
+      const keys = wasm.derivePublicKeys(account.xpriv, effectiveNumPubkeys);
       const prevPk =
-        account.numPubkeys > 0
-          ? wasm.derivePublicKeys(account.xpriv, account.numPubkeys - 1).publicKey
+        effectiveNumPubkeys > 0
+          ? wasm.derivePublicKeys(account.xpriv, effectiveNumPubkeys - 1).publicKey
           : undefined;
 
       const res = await api.sendSigned(
@@ -140,7 +165,7 @@ export default function SendPage() {
           prev_commitment_pubkey: prevPk,
         },
         account.xpriv,
-        account.numPubkeys,
+        effectiveNumPubkeys,
       );
 
       // Pre-PR-#31 servers reply 200 + `{success: false}` (no error
@@ -152,9 +177,15 @@ export default function SendPage() {
 
       // Phase 2: Create and submit commitment so the recipient receives the coins.
       if (res.account_state_hash && res.output_coins_root && res.proof_id) {
+        // Sign the commitment at the same index the prior send-signing
+        // used — `effectiveNumPubkeys`, not the stale `account.numPubkeys`
+        // that may still be 0 from a fresh restore. The server's
+        // commit_handler verifies the Schnorr signature against the
+        // pubkey at this index; using a mismatched index would surface
+        // as "Commitment signature invalid" (401).
         const commitment = wasm.createCommitment(
           account.xpriv,
-          account.numPubkeys,
+          effectiveNumPubkeys,
           res.account_state_hash,
           res.output_coins_root,
         );
@@ -198,8 +229,14 @@ export default function SendPage() {
         proofId: res.proof_id?.toString(),
       });
 
-      const { balance } = await api.balance(account.address);
-      setBalance(balance);
+      const postSend = await api.balance(account.address);
+      setBalance(postSend.balance);
+      // Re-sync from the server after the commit phase landed so the
+      // store reflects the bumped counter (server's `num_sends` should
+      // now be `effectiveNumPubkeys + 1`). `incrementPubkeys()` above
+      // already advanced the local counter — this is the belt-and-
+      // braces tick against the server's source of truth.
+      syncNumPubkeys(postSend.num_sends);
       setSuccess({ amount: sats, proofId: res.proof_id?.toString() });
     } catch (err) {
       if (err instanceof ApiError) {
@@ -218,6 +255,7 @@ export default function SendPage() {
     amount,
     setBalance,
     incrementPubkeys,
+    syncNumPubkeys,
     addTransaction,
     features.USERNAMES,
   ]);

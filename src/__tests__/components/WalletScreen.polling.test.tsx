@@ -102,7 +102,7 @@ afterEach(() => {
 
 describe('WalletScreen — balance polling', () => {
   it('fetches the balance on mount and writes it to the store', async () => {
-    balanceSpy.mockResolvedValue({ balance: 12_345 });
+    balanceSpy.mockResolvedValue({ balance: 12_345, num_sends: 0 });
 
     render(<WalletScreen />);
 
@@ -114,9 +114,9 @@ describe('WalletScreen — balance polling', () => {
 
   it('fires the next tick exactly 5 s after the previous one', async () => {
     balanceSpy
-      .mockResolvedValueOnce({ balance: 100 })
-      .mockResolvedValueOnce({ balance: 200 })
-      .mockResolvedValueOnce({ balance: 300 });
+      .mockResolvedValueOnce({ balance: 100, num_sends: 0 })
+      .mockResolvedValueOnce({ balance: 200, num_sends: 0 })
+      .mockResolvedValueOnce({ balance: 300, num_sends: 0 });
 
     vi.useFakeTimers();
     render(<WalletScreen />);
@@ -140,7 +140,7 @@ describe('WalletScreen — balance polling', () => {
   });
 
   it('does not fire any tick after the component unmounts', async () => {
-    balanceSpy.mockResolvedValue({ balance: 100 });
+    balanceSpy.mockResolvedValue({ balance: 100, num_sends: 0 });
 
     vi.useFakeTimers();
     const { unmount } = render(<WalletScreen />);
@@ -161,7 +161,7 @@ describe('WalletScreen — balance polling', () => {
 
   it('does not poll when the store has no account', async () => {
     useWalletStore.setState({ account: null });
-    balanceSpy.mockResolvedValue({ balance: 0 });
+    balanceSpy.mockResolvedValue({ balance: 0, num_sends: 0 });
 
     vi.useFakeTimers();
     render(<WalletScreen />);
@@ -172,7 +172,7 @@ describe('WalletScreen — balance polling', () => {
   });
 
   it('restarts polling against the new address when the account changes', async () => {
-    balanceSpy.mockResolvedValue({ balance: 0 });
+    balanceSpy.mockResolvedValue({ balance: 0, num_sends: 0 });
 
     vi.useFakeTimers();
     render(<WalletScreen />);
@@ -206,7 +206,7 @@ describe('WalletScreen — balance polling', () => {
 
   it('does not set username when FEATURES.USERNAMES is off, even if server returns one', async () => {
     FEATURES_STATE.USERNAMES = false;
-    balanceSpy.mockResolvedValue({ balance: 1, username: 'alice' });
+    balanceSpy.mockResolvedValue({ balance: 1, username: 'alice', num_sends: 0 });
 
     render(<WalletScreen />);
     await waitFor(() => {
@@ -217,7 +217,7 @@ describe('WalletScreen — balance polling', () => {
 
   it('sets username on first response when FEATURES.USERNAMES is on and account has no username yet', async () => {
     FEATURES_STATE.USERNAMES = true;
-    balanceSpy.mockResolvedValue({ balance: 1, username: 'alice' });
+    balanceSpy.mockResolvedValue({ balance: 1, username: 'alice', num_sends: 0 });
 
     render(<WalletScreen />);
     await waitFor(() => {
@@ -228,7 +228,7 @@ describe('WalletScreen — balance polling', () => {
   it('does not overwrite an existing username on later ticks', async () => {
     FEATURES_STATE.USERNAMES = true;
     useWalletStore.setState({ account: { ...ALICE, username: 'pinned' } });
-    balanceSpy.mockResolvedValue({ balance: 1, username: 'different' });
+    balanceSpy.mockResolvedValue({ balance: 1, username: 'different', num_sends: 0 });
 
     vi.useFakeTimers();
     render(<WalletScreen />);
@@ -245,7 +245,7 @@ describe('WalletScreen — balance polling', () => {
 
   it('writes the network name from /api/info on mount', async () => {
     infoSpy.mockResolvedValue({ network: 'mainnet' });
-    balanceSpy.mockResolvedValue({ balance: 0 });
+    balanceSpy.mockResolvedValue({ balance: 0, num_sends: 0 });
 
     render(<WalletScreen />);
     await waitFor(() => {

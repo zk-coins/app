@@ -25,7 +25,8 @@ import { useFeatures } from '@/lib/features';
 const HIDDEN = '••••';
 
 export function WalletScreen() {
-  const { account, balance, transactions, setBalance, setUsername } = useWalletStore();
+  const { account, balance, transactions, setBalance, setUsername, syncNumPubkeys } =
+    useWalletStore();
   const { networkName, setNetworkName } = useNetworkStore();
   const features = useFeatures();
   // Faucet is gated by the server-reported `faucet` capability. The
@@ -58,6 +59,10 @@ export function WalletScreen() {
       try {
         const res = await api.balance(account.address);
         setBalance(res.balance);
+        // Sync the BIP-32 child-index counter from the server's
+        // authoritative `num_sends`. Skip-no-op if already in sync —
+        // see `syncNumPubkeys` in `stores/wallet.ts` for rationale.
+        syncNumPubkeys(res.num_sends);
         if (features.USERNAMES && res.username && !account.username) {
           setUsername(res.username);
         }
@@ -71,7 +76,7 @@ export function WalletScreen() {
     // `features.USERNAMES` flips when `/api/info` lands; restart polling
     // so the next tick picks up the new gate rather than waiting for an
     // unrelated dep to change.
-  }, [account, setBalance, setUsername, features.USERNAMES]);
+  }, [account, setBalance, setUsername, syncNumPubkeys, features.USERNAMES]);
 
   const zkAddress = account ? toZkAddress(account.address) : '';
 
@@ -269,8 +274,9 @@ export function WalletScreen() {
                   setMintError(null);
                   try {
                     await api.mint(account.address);
-                    const { balance } = await api.balance(account.address);
-                    setBalance(balance);
+                    const res = await api.balance(account.address);
+                    setBalance(res.balance);
+                    syncNumPubkeys(res.num_sends);
                   } catch (err) {
                     // Faucet may not be available (server doesn't expose
                     // /api/mint, e.g. on mainnet). Surface the typed
