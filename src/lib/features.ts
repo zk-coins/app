@@ -30,6 +30,15 @@ const buildTime = {
   AUTO_LOCK: on(process.env.NEXT_PUBLIC_ENABLE_AUTO_LOCK),
   ADDRESS_ROTATION: on(process.env.NEXT_PUBLIC_ENABLE_ADDRESS_ROTATION),
   TOR_ROUTING: on(process.env.NEXT_PUBLIC_ENABLE_TOR_ROUTING),
+  // Username *resolve* + display is part of the MVP and stays on the
+  // runtime `usernames` capability — wallets need to render
+  // `<name>@zkcoins.app` whenever the server resolves a name. The
+  // *claim* path is a write action; gating it behind a build flag
+  // lets us ship hosted DEV/PRD images that hide the claim input
+  // (UX policy: not on offer) while still resolving existing names.
+  // The node still exposes `POST /api/username/claim` so self-hosted
+  // operators can opt in by rebuilding the app with the flag set.
+  CLAIM_USERNAME: on(process.env.NEXT_PUBLIC_ENABLE_CLAIM_USERNAME),
 } as const;
 
 /**

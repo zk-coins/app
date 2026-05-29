@@ -11,13 +11,15 @@ describe('FEATURES (build-time client flags)', () => {
     expect(typeof FEATURES.AUTO_LOCK).toBe('boolean');
     expect(typeof FEATURES.ADDRESS_ROTATION).toBe('boolean');
     expect(typeof FEATURES.TOR_ROUTING).toBe('boolean');
+    expect(typeof FEATURES.CLAIM_USERNAME).toBe('boolean');
   });
 
-  it('exposes exactly the six build-time flags — FAUCET / USERNAMES are server-side', () => {
+  it('exposes exactly the build-time flags — FAUCET / USERNAMES are server-side', () => {
     expect(Object.keys(FEATURES).sort()).toEqual([
       'ADDRESS_ROTATION',
       'APPS_DIRECTORY',
       'AUTO_LOCK',
+      'CLAIM_USERNAME',
       'DEV_ROUTES',
       'PASSKEY',
       'TOR_ROUTING',
@@ -38,12 +40,13 @@ describe('useFeatures (build-time + runtime merged)', () => {
     });
   });
 
-  it('exposes all six build-time flags plus FAUCET and USERNAMES', () => {
+  it('exposes all build-time flags plus FAUCET and USERNAMES', () => {
     const { result } = renderHook(() => useFeatures());
     expect(Object.keys(result.current).sort()).toEqual([
       'ADDRESS_ROTATION',
       'APPS_DIRECTORY',
       'AUTO_LOCK',
+      'CLAIM_USERNAME',
       'DEV_ROUTES',
       'FAUCET',
       'PASSKEY',

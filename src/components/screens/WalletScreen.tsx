@@ -20,7 +20,7 @@ import { useNetworkStore } from '@/stores/network';
 import { ApiError, api } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { formatBtc, formatBtcCompact, formatUsd, toZkAddress } from '@/lib/format';
-import { useFeatures } from '@/lib/features';
+import { FEATURES, useFeatures } from '@/lib/features';
 
 const HIDDEN = '••••';
 
@@ -166,7 +166,7 @@ export function WalletScreen() {
                 ? `${account.username}@zkcoins.app`
                 : zkAddress}
             </p>
-            {features.USERNAMES && !account.username && (
+            {FEATURES.CLAIM_USERNAME && features.USERNAMES && !account.username && (
               <form
                 className="flex items-center gap-2"
                 onSubmit={(e) => {
@@ -194,7 +194,7 @@ export function WalletScreen() {
                 </button>
               </form>
             )}
-            {features.USERNAMES && claimError && (
+            {FEATURES.CLAIM_USERNAME && features.USERNAMES && claimError && (
               <p className="text-[11px] text-bad">{claimError}</p>
             )}
             <button

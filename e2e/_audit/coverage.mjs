@@ -42,7 +42,9 @@ const e2eDir = path.join(repoRoot, 'e2e');
 const MVP_EXEMPT_TESTIDS = new Set([
   'passkey-restore-btn',
   'unlock-passkey-btn',
-  // FEATURES.USERNAMES gated — dead-stripped from PRD bundle.
+  // FEATURES.CLAIM_USERNAME gated — dead-stripped from PRD bundle.
+  // (Username *resolve* stays runtime-gated on `features.USERNAMES`;
+  // only the *claim* write path is build-flag gated.)
   'username-claim-btn',
   // Disabled loading states are visually transient -- Playwright cannot
   // reliably catch them without artificially slowing WASM calls.
