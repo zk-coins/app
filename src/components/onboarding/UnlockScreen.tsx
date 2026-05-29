@@ -12,9 +12,21 @@ import { FEATURES } from '@/lib/features';
  * unlock screen is the only place a user with a forgotten password
  * can escape — make sure they understand the device-local nature of
  * the wipe and the seed-phrase requirement to restore.
+ *
+ * @internal Exported for the component test. Do not import from app code.
  */
 export const UNLOCK_RESET_CONFIRM =
   "Reset wallet? This deletes the encrypted wallet on this device. You'll need your 12-word seed phrase to restore it. This cannot be undone.";
+
+/**
+ * Surface message when `onReset` throws. The caller's reset chain
+ * (deleteWallet → deleteCredential → resetAuth) is mostly idempotent,
+ * but a partial failure can leave IDB in a half-wiped state — telling
+ * the user to reload is the safest recovery path.
+ *
+ * @internal Exported for the component test. Do not import from app code.
+ */
+export const UNLOCK_RESET_ERROR = 'Reset failed. Reload the page and try again.';
 
 /**
  * Unlock screen — rendered by `Home` when an encrypted wallet is in
@@ -78,11 +90,21 @@ export function UnlockScreen({
 
   const handleReset = useCallback(async () => {
     if (typeof window === 'undefined') return;
-    if (!window.confirm(UNLOCK_RESET_CONFIRM)) return;
+    if (!window.confirm(UNLOCK_RESET_CONFIRM)) {
+      // User backed out — clear any previous "Incorrect password" /
+      // "Reset failed" banner so the screen is back to its idle state.
+      setError(null);
+      return;
+    }
     setResetting(true);
     setError(null);
     try {
       await onReset();
+    } catch {
+      // Don't surface the underlying error class — the user can't act
+      // on it. The IDB delete chain is mostly idempotent, so a reload
+      // usually completes the wipe and lands them in Onboarding.
+      setError(UNLOCK_RESET_ERROR);
     } finally {
       setResetting(false);
     }
@@ -181,6 +203,7 @@ function ResetLink({
         data-testid="unlock-reset-btn"
         onClick={onClick}
         disabled={disabled}
+        aria-busy={busy}
         className="text-[12px] text-ink3 underline-offset-2 transition-colors hover:text-bitcoin hover:underline disabled:cursor-not-allowed disabled:text-ink4 disabled:no-underline"
       >
         {busy ? 'Resetting…' : 'Forgot password? Reset wallet'}
