@@ -205,15 +205,27 @@ test.describe('Send Bitcoin', () => {
     await page.getByTestId('send-confirm-btn').click();
     // Race the success heading against the inline error banner so a
     // server-side failure surfaces with the real error message
-    // instead of "element never appeared after 150 s".
+    // instead of "element never appeared after N s".
+    //
+    // Tag which branch of the race won, then only act on that branch:
+    // resolving the error locator's textContent unconditionally was the
+    // original bug — `getByTestId('send-error')` does not match anything
+    // on the success page, and Playwright's Locator.textContent() waits
+    // for the element to exist (up to the test-timeout) instead of
+    // returning null. That blocked the assertion at line 216 until the
+    // 360 s test cap fired, even though the success heading had
+    // rendered minutes earlier (the failure screenshot showed
+    // "Sent privately" with proof #183 / #184 in both attempts).
     const heading = page.getByTestId('send-success-heading');
     const error = page.getByTestId('send-error');
-    await Promise.race([
-      heading.waitFor({ state: 'visible', timeout: 300_000 }),
-      error.waitFor({ state: 'visible', timeout: 300_000 }),
+    const winner = await Promise.race([
+      heading.waitFor({ state: 'visible', timeout: 300_000 }).then(() => 'heading' as const),
+      error.waitFor({ state: 'visible', timeout: 300_000 }).then(() => 'error' as const),
     ]);
-    const errorText = (await error.textContent().catch(() => null)) ?? '';
-    await expect(error, errorText).toBeHidden();
+    if (winner === 'error') {
+      const errorText = (await error.textContent()) ?? '';
+      throw new Error(`send-success: server returned an error: ${errorText}`);
+    }
     await expect(heading).toBeVisible();
     await snap(page, '07-send-success');
   });
