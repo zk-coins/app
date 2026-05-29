@@ -33,7 +33,13 @@ export function WalletScreen() {
   // additional runtime mainnet check is defence in depth: even if a
   // DEV-style server (faucet=true) is wired to a mainnet network name,
   // never show the faucet button.
-  const showFaucet = features.FAUCET && networkName !== '' && networkName !== 'mainnet';
+  // The node reports `network` as a display string (`"Mainnet"`,
+  // `"Mutinynet"`, …) — see `node::router::info_handler`. Compare
+  // lowercased so a casing change on the server can't accidentally
+  // re-enable the faucet button on production. Both the build-time
+  // gate and the network check must hold; either alone is not enough.
+  const showFaucet =
+    features.FAUCET && networkName !== '' && networkName.toLowerCase() !== 'mainnet';
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [minting, setMinting] = useState(false);

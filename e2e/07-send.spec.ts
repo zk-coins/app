@@ -170,14 +170,32 @@ test.describe('Send Bitcoin', () => {
 
   test('send-success', async ({ page }) => {
     // The 2-phase Send pipeline does: signed `/api/send` (ZK proof
-    // generation server-side, ~10-30 s on a warm DEV) → commitment
-    // build → `/api/commit` with up to three retries at 2 s/4 s
-    // backoff → success heading. A cold DEV after a fresh deploy
-    // can push the proof to 60-90 s; combined with one commit
-    // retry the wait for the success heading lands close to 100 s.
-    // Give 150 s of headroom and cap the test at 180 s so we still
-    // surface a genuine deadlock instead of waiting forever.
-    test.setTimeout(180_000);
+    // generation server-side, ~10-30 s on a warm DEV) → pre-send
+    // `/api/balance` hydration → commitment build → `/api/commit`
+    // with up to three retries at 2 s/4 s backoff → success heading.
+    // A cold DEV after a fresh deploy can push the proof to 60-90 s;
+    // combined with one commit retry the wait for the success
+    // heading lands close to 100 s. The post-PR-#127 send-flow
+    // additionally calls `/api/balance` immediately before signing
+    // to hydrate `num_sends` from the server (the canonical BIP-32
+    // child-index source per `CONTRIBUTING.md::Architecture
+    // Principle — Thin Client`), and the post-#129/#132 server-side
+    // state writes (atomic `Account.num_sends` + `commitment_public_key`
+    // upsert) added a few seconds of legitimate per-send latency.
+    // Together these two raise the realistic upper bound by ~30-60 s.
+    //
+    // Wall-clock variance on Mutinynet plus the DEV node's single
+    // proof-gen pipeline means a parallel test suite can starve this
+    // one Send for minutes. The structural fix lives in `ci.yaml`:
+    // the `e2e-tests` job now runs the rest of the suite first
+    // (parallel) and `--grep "send-success" --workers=1` afterwards,
+    // so this test gets exclusive DEV-node bandwidth.
+    //
+    // With exclusive bandwidth the realistic upper bound drops to
+    // ~3-4 min (proof gen + track-tx + commit + balance refresh).
+    // A 6 min cap leaves ample headroom for the slow tail of
+    // Mutinynet block jitter without masking a genuine regression.
+    test.setTimeout(360_000);
     await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
@@ -187,14 +205,27 @@ test.describe('Send Bitcoin', () => {
     await page.getByTestId('send-confirm-btn').click();
     // Race the success heading against the inline error banner so a
     // server-side failure surfaces with the real error message
-    // instead of "element never appeared after 150 s".
+    // instead of "element never appeared after N s".
+    //
+    // Tag which branch of the race won, then only act on that branch:
+    // resolving the error locator's textContent unconditionally was the
+    // original bug — `getByTestId('send-error')` does not match anything
+    // on the success page, and Playwright's Locator.textContent() waits
+    // for the element to exist (up to the test-timeout) instead of
+    // returning null. That blocked the assertion at line 216 until the
+    // 360 s test cap fired, even though the success heading had
+    // rendered minutes earlier (the failure screenshot showed
+    // "Sent privately" with proof #183 / #184 in both attempts).
     const heading = page.getByTestId('send-success-heading');
     const error = page.getByTestId('send-error');
-    await Promise.race([
-      heading.waitFor({ state: 'visible', timeout: 150_000 }),
-      error.waitFor({ state: 'visible', timeout: 150_000 }),
+    const winner = await Promise.race([
+      heading.waitFor({ state: 'visible', timeout: 300_000 }).then(() => 'heading' as const),
+      error.waitFor({ state: 'visible', timeout: 300_000 }).then(() => 'error' as const),
     ]);
-    await expect(error, await error.textContent().catch(() => '')).toBeHidden();
+    if (winner === 'error') {
+      const errorText = (await error.textContent()) ?? '';
+      throw new Error(`send-success: server returned an error: ${errorText}`);
+    }
     await expect(heading).toBeVisible();
     await snap(page, '07-send-success');
   });
