@@ -64,6 +64,11 @@ export const KNOWN_SERVER_ERRORS = [
   'Broadcast failed',
 ] as const;
 
+/**
+ * @internal — exported only for the lockstep test in
+ * `error-mapping.test.ts`. Not a public API; production callers use
+ * `userMessageFor()` instead.
+ */
 export const SERVER_ERROR_TO_USER_MESSAGE: Record<string, string> = {
   // 422 — user-fixable
   'Insufficient funds': 'Nicht genug Guthaben für diese Überweisung.',
@@ -112,7 +117,7 @@ export const SERVER_ERROR_TO_USER_MESSAGE: Record<string, string> = {
  * user messages so the UX is consistent between exact-matched and
  * family-matched errors.
  */
-export const SERVER_ERROR_PATTERNS: Array<readonly [RegExp, string]> = [
+const SERVER_ERROR_PATTERNS: Array<readonly [RegExp, string]> = [
   // Hex validation errors. Node emits e.g.
   // "account_address is not valid hex" — any field, any wording variant.
   [/(?:is not valid hex|invalid hex)/i, 'Ungültige Hex-Eingabe.'],
