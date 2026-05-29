@@ -182,12 +182,24 @@ test.describe('Send Bitcoin', () => {
     // Principle — Thin Client`), and the post-#129/#132 server-side
     // state writes (atomic `Account.num_sends` + `commitment_public_key`
     // upsert) added a few seconds of legitimate per-send latency.
-    // Together these two raise the realistic upper bound by ~30-60 s
-    // — observed 180-220 s in the post-merge bundle PR. Bump the
-    // waitFor cap to 250 s and the overall test timeout to 300 s so
-    // the assertion still surfaces a genuine deadlock without
-    // flagging well-behaved-but-slow runs as a regression.
-    test.setTimeout(300_000);
+    // Together these two raise the realistic upper bound by ~30-60 s.
+    //
+    // Empirically the post-bundle-PR DEV runs land between 180 s and
+    // ~5 min — the wide variance comes from Mutinynet block-time
+    // jitter on the publisher's `track-tx` wait (30 s per attempt,
+    // up to 3 attempts), and from `fullyParallel: true` saturating
+    // the shared DEV runner with mint+balance traffic from
+    // 09-network-and-shell, 10-pwa, 11-cross-spec-redirects, … all
+    // hitting the node concurrently. None of that is App-side or
+    // protocol-correctness signal — it's environment timing.
+    //
+    // Raise the test cap to 480 s (8 min) and the waitFor cap to
+    // 420 s. A genuine deadlock still surfaces; well-behaved-but-
+    // slow runs no longer mask as a regression. A separate follow-up
+    // is the right place to (a) tighten the publisher track-tx
+    // budget, and (b) consider serializing the spec against the DEV
+    // node so test wall-time stops depending on neighbour load.
+    test.setTimeout(480_000);
     await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
@@ -201,8 +213,8 @@ test.describe('Send Bitcoin', () => {
     const heading = page.getByTestId('send-success-heading');
     const error = page.getByTestId('send-error');
     await Promise.race([
-      heading.waitFor({ state: 'visible', timeout: 250_000 }),
-      error.waitFor({ state: 'visible', timeout: 250_000 }),
+      heading.waitFor({ state: 'visible', timeout: 420_000 }),
+      error.waitFor({ state: 'visible', timeout: 420_000 }),
     ]);
     await expect(error, await error.textContent().catch(() => '')).toBeHidden();
     await expect(heading).toBeVisible();
