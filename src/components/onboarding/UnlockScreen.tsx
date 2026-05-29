@@ -8,25 +8,44 @@ import { authenticatePasskey } from '@/lib/crypto/passkey';
 import { FEATURES } from '@/lib/features';
 
 /**
+ * Confirm copy shown before wiping the local encrypted wallet. The
+ * unlock screen is the only place a user with a forgotten password
+ * can escape — make sure they understand the device-local nature of
+ * the wipe and the seed-phrase requirement to restore.
+ */
+export const UNLOCK_RESET_CONFIRM =
+  "Reset wallet? This deletes the encrypted wallet on this device. You'll need your 12-word seed phrase to restore it. This cannot be undone.";
+
+/**
  * Unlock screen — rendered by `Home` when an encrypted wallet is in
  * IndexedDB but no in-memory account exists yet.
  *
  * Extracted from `src/app/page.tsx` so it can be unit-tested in
  * isolation (issue #68 W1). The prop bag is the natural boundary —
  * the screen knows nothing about Zustand.
+ *
+ * `onReset` is the escape hatch for users who forgot their password
+ * (or whose passkey is no longer available). It wipes the encrypted
+ * wallet + credential on this device so `Home` can fall back to the
+ * Onboarding flow on the next render. The caller (Home) owns the
+ * actual delete chain — this component only triggers it after an
+ * explicit user confirmation.
  */
 export function UnlockScreen({
   authMethod,
   onUnlockPassword,
   onUnlockPrf,
+  onReset,
 }: {
   authMethod: 'passkey' | 'seed' | null;
   onUnlockPassword: (password: string) => Promise<void>;
   onUnlockPrf: (prfOutput: Uint8Array) => Promise<void>;
+  onReset: () => Promise<void>;
 }) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [unlocking, setUnlocking] = useState(false);
+  const [resetting, setResetting] = useState(false);
   const credentialId = useAuthStore((s) => s.credentialId);
 
   const handlePasswordUnlock = useCallback(async () => {
@@ -57,6 +76,18 @@ export function UnlockScreen({
     }
   }, [credentialId, onUnlockPrf]);
 
+  const handleReset = useCallback(async () => {
+    if (typeof window === 'undefined') return;
+    if (!window.confirm(UNLOCK_RESET_CONFIRM)) return;
+    setResetting(true);
+    setError(null);
+    try {
+      await onReset();
+    } finally {
+      setResetting(false);
+    }
+  }, [onReset]);
+
   return (
     <div className="relative min-h-screen bg-bg">
       <div className="mx-auto max-w-[480px] px-6 py-20 md:py-32">
@@ -76,7 +107,7 @@ export function UnlockScreen({
             <button
               data-testid="unlock-passkey-btn"
               onClick={handlePasskeyUnlock}
-              disabled={unlocking}
+              disabled={unlocking || resetting}
               className="flex w-full items-center justify-center gap-2 rounded-md bg-bitcoin py-4 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:bg-line disabled:text-ink4"
             >
               <PixelIcon name="key" size={14} />
@@ -87,6 +118,7 @@ export function UnlockScreen({
                 {error}
               </p>
             )}
+            <ResetLink onClick={handleReset} disabled={unlocking || resetting} busy={resetting} />
           </div>
         ) : (
           <form
@@ -108,7 +140,7 @@ export function UnlockScreen({
               type="submit"
               data-testid="unlock-submit-btn"
               data-unlocking={unlocking || undefined}
-              disabled={unlocking || !password}
+              disabled={unlocking || resetting || !password}
               className="w-full rounded-md bg-bitcoin py-4 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
             >
               {unlocking ? 'Unlocking…' : 'Unlock'}
@@ -118,9 +150,41 @@ export function UnlockScreen({
                 {error}
               </p>
             )}
+            <ResetLink onClick={handleReset} disabled={unlocking || resetting} busy={resetting} />
           </form>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Secondary, low-emphasis affordance — by design NOT a second primary
+ * button. Unlock remains the primary action; reset is the escape
+ * hatch for users who can't unlock (forgotten password / passkey
+ * gone). Rendered as a plain text button so the visual hierarchy
+ * keeps users on the unlock path unless they deliberately deviate.
+ */
+function ResetLink({
+  onClick,
+  disabled,
+  busy,
+}: {
+  onClick: () => void;
+  disabled: boolean;
+  busy: boolean;
+}) {
+  return (
+    <div className="pt-2 text-center">
+      <button
+        type="button"
+        data-testid="unlock-reset-btn"
+        onClick={onClick}
+        disabled={disabled}
+        className="text-[12px] text-ink3 underline-offset-2 transition-colors hover:text-bitcoin hover:underline disabled:cursor-not-allowed disabled:text-ink4 disabled:no-underline"
+      >
+        {busy ? 'Resetting…' : 'Forgot password? Reset wallet'}
+      </button>
     </div>
   );
 }
