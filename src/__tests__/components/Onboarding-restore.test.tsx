@@ -201,7 +201,7 @@ describe('SeedImportFlow — password stage validation', () => {
 
 describe('SeedImportFlow — restore side effects', () => {
   it('writes the account to the wallet store and sets authMethod=seed on success', async () => {
-    vi.spyOn(api, 'balance').mockResolvedValue({ balance: 42 });
+    vi.spyOn(api, 'balance').mockResolvedValue({ balance: 42, num_sends: 0 });
 
     const user = userEvent.setup();
     await reachImportStage(user);

@@ -125,14 +125,18 @@ describe('api.claimUsername', () => {
 
 describe('api.balance with username', () => {
   it('returns username field when present', async () => {
-    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 50000, username: 'alice' });
+    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({
+      balance: 50000,
+      username: 'alice',
+      num_sends: 0,
+    });
     const result = await api.balance('aa'.repeat(32));
     expect(result.balance).toBe(50000);
     expect(result.username).toBe('alice');
   });
 
   it('returns undefined username when not set', async () => {
-    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 10000 });
+    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 10000, num_sends: 0 });
     const result = await api.balance('bb'.repeat(32));
     expect(result.balance).toBe(10000);
     expect(result.username).toBeUndefined();

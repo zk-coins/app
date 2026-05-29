@@ -121,6 +121,37 @@ describe('wallet store — balance and pubkeys', () => {
     expect(useWalletStore.getState().account).toBeNull();
   });
 
+  it('syncs numPubkeys from the server (replaces local counter)', () => {
+    // Regression for the seed-restore desync: a freshly restored wallet
+    // has `numPubkeys = 0` even when the server holds N > 0 sends for
+    // the same address. `syncNumPubkeys(N)` is the authoritative path
+    // that heals the desync — replaces, doesn't increment.
+    useWalletStore.getState().setAccount({ ...testAccount, numPubkeys: 0 });
+    useWalletStore.getState().syncNumPubkeys(5);
+    expect(useWalletStore.getState().account?.numPubkeys).toBe(5);
+    // Subsequent ticks emit the same value — must be a no-op so React
+    // doesn't re-render every 5-s balance poll.
+    const before = useWalletStore.getState().account;
+    useWalletStore.getState().syncNumPubkeys(5);
+    expect(useWalletStore.getState().account).toBe(before);
+  });
+
+  it('syncNumPubkeys is a no-op when no account is loaded', () => {
+    // Defensive: pre-account ticks must not throw and must not
+    // spuriously create an account object.
+    useWalletStore.getState().syncNumPubkeys(3);
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
+  it('syncNumPubkeys can move the counter both up and down', () => {
+    // Down-counts are not expected in production (server is monotonic),
+    // but the store must not reject them — a desync diagnostic step is
+    // valuable if the server is ever reset/wiped.
+    useWalletStore.getState().setAccount({ ...testAccount, numPubkeys: 7 });
+    useWalletStore.getState().syncNumPubkeys(2);
+    expect(useWalletStore.getState().account?.numPubkeys).toBe(2);
+  });
+
   it('sets username on existing account', () => {
     useWalletStore.getState().setAccount(testAccount);
     useWalletStore.getState().setUsername('alice');

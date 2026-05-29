@@ -588,7 +588,7 @@ function SeedImportFlow({
   onBack: () => void;
   onPasskeyRestore?: () => void;
 }) {
-  const { setAccount, setBalance, saveWithPassword } = useWalletStore();
+  const { setAccount, setBalance, syncNumPubkeys, saveWithPassword } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'input' | 'password' | 'restoring'>('input');
   const [phrase, setPhrase] = useState('');
@@ -641,8 +641,15 @@ function SeedImportFlow({
       setAuth('seed');
 
       try {
-        const { balance } = await api.balance(ad.address);
-        setBalance(balance);
+        const res = await api.balance(ad.address);
+        setBalance(res.balance);
+        // Restore-from-seed has no local memory of past sends — the
+        // mnemonic could correspond to an address that has already
+        // sent N times against this server. Hydrate the BIP-32
+        // child-index counter from the server BEFORE the user
+        // navigates to /send to avoid the "Vorheriger Public Key
+        // fehlt" 400 documented on `BalanceResponseSchema.num_sends`.
+        syncNumPubkeys(res.num_sends);
       } catch {
         // Non-fatal — WalletScreen will keep its loading placeholder.
       }
@@ -650,7 +657,16 @@ function SeedImportFlow({
       setError(err instanceof Error ? err.message : 'Failed to restore wallet');
       setStage('password');
     }
-  }, [phrase, password, passwordConfirm, setAccount, setBalance, saveWithPassword, setAuth]);
+  }, [
+    phrase,
+    password,
+    passwordConfirm,
+    setAccount,
+    setBalance,
+    syncNumPubkeys,
+    saveWithPassword,
+    setAuth,
+  ]);
 
   return (
     <div className="space-y-6 py-2">
@@ -773,7 +789,7 @@ function SeedImportFlow({
 /* ---------- Passkey Restore Flow ---------- */
 
 function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
-  const { setAccount, setBalance, saveWithPrf } = useWalletStore();
+  const { setAccount, setBalance, syncNumPubkeys, saveWithPrf } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'intro' | 'authenticating' | 'restoring'>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -812,8 +828,12 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
       setAuth('passkey', result.credentialId);
 
       try {
-        const { balance } = await api.balance(ad.address);
-        setBalance(balance);
+        const res = await api.balance(ad.address);
+        setBalance(res.balance);
+        // Same rationale as the seed-restore path: a passkey-restored
+        // wallet has no local memory of past sends. Hydrate the
+        // counter from the server now to avoid a /send 400 later.
+        syncNumPubkeys(res.num_sends);
       } catch {
         // Non-fatal.
       }
@@ -835,7 +855,7 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
       }
       setStage('intro');
     }
-  }, [setAccount, setBalance, saveWithPrf, setAuth]);
+  }, [setAccount, setBalance, syncNumPubkeys, saveWithPrf, setAuth]);
 
   return (
     <div className="space-y-6 py-2">

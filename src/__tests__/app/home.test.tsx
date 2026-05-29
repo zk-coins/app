@@ -82,7 +82,7 @@ beforeEach(() => {
   // WalletScreen + UnlockScreen both fire api.info / api.balance on mount.
   // Stub them so the routing assertions don't race the network layer.
   vi.spyOn(api, 'info').mockResolvedValue({ network: 'signet' });
-  vi.spyOn(api, 'balance').mockResolvedValue({ balance: 0 });
+  vi.spyOn(api, 'balance').mockResolvedValue({ balance: 0, num_sends: 0 });
 });
 
 describe('Home — onboarding branch (no stored wallet, no account)', () => {

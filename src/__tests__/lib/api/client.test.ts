@@ -64,7 +64,7 @@ describe('api.mint', () => {
 
 describe('api.balance', () => {
   it('sends GET to /api/balance with address query param', async () => {
-    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 42000 });
+    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 42000, num_sends: 0 });
     const result = await api.balance('myaddress');
     expect(mockFetch).toHaveBeenCalledWith(
       'https://test-api.zkcoins.app/api/balance?address=myaddress',
@@ -78,7 +78,7 @@ describe('api.balance', () => {
     // observed on chain returns 200 with `{balance: 0}`. Callers
     // (Onboarding, WalletScreen) rely on this to render the
     // "Wallet is empty" state for brand-new wallets.
-    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 0 });
+    mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 0, num_sends: 0 });
     const result = await api.balance('unobserved-address');
     expect(result.balance).toBe(0);
   });
