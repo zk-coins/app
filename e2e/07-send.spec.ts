@@ -35,15 +35,6 @@ async function aliceGoToSend(page: Page): Promise<void> {
 }
 
 test.describe('Send Bitcoin', () => {
-  // Serial mode keeps the file's tests in a single worker so two of the
-  // file's own tests don't fight for the same DEV-node bandwidth during
-  // the heaviest spec of the suite (`send-success`). Cross-file load
-  // (other specs from 06 / 08 / 09 / 10 / 11 hitting the same DEV) still
-  // happens with `fullyParallel: true`, but eliminating same-file
-  // contention removed the second source of variance on top of the
-  // generous `setTimeout` for send-success itself.
-  test.describe.configure({ mode: 'serial' });
-
   test('send-default', async ({ page }) => {
     await setViewport(page, 'mobile');
     await aliceGoToSend(page);
@@ -193,25 +184,18 @@ test.describe('Send Bitcoin', () => {
     // upsert) added a few seconds of legitimate per-send latency.
     // Together these two raise the realistic upper bound by ~30-60 s.
     //
-    // Empirically the post-bundle-PR DEV runs land between 180 s and
-    // ~7 min — the wide variance comes from Mutinynet block-time
-    // jitter on the publisher's `track-tx` wait (30 s per attempt,
-    // up to 3 attempts), and from `fullyParallel: true` saturating
-    // the shared DEV runner with mint+balance traffic from
-    // 09-network-and-shell, 10-pwa, 11-cross-spec-redirects, … all
-    // hitting the node concurrently. None of that is App-side or
-    // protocol-correctness signal — it's environment timing.
+    // Wall-clock variance on Mutinynet plus the DEV node's single
+    // proof-gen pipeline means a parallel test suite can starve this
+    // one Send for minutes. The structural fix lives in `ci.yaml`:
+    // the `e2e-tests` job now runs the rest of the suite first
+    // (parallel) and `--grep "send-success" --workers=1` afterwards,
+    // so this test gets exclusive DEV-node bandwidth.
     //
-    // Two-pronged calibration:
-    //  - Spec-level `describe.configure({ mode: 'serial' })` (above)
-    //    eliminates same-file contention while this test runs.
-    //  - Test cap 12 min (720 s) and waitFor 11 min (660 s) covers
-    //    the slow-but-correct DEV path. A genuine deadlock still
-    //    surfaces; well-behaved-but-slow runs no longer mask as a
-    //    regression. A separate follow-up is the right place to
-    //    tighten the publisher track-tx budget to remove the
-    //    Mutinynet block-time term entirely.
-    test.setTimeout(720_000);
+    // With exclusive bandwidth the realistic upper bound drops to
+    // ~3-4 min (proof gen + track-tx + commit + balance refresh).
+    // A 6 min cap leaves ample headroom for the slow tail of
+    // Mutinynet block jitter without masking a genuine regression.
+    test.setTimeout(360_000);
     await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
@@ -225,8 +209,8 @@ test.describe('Send Bitcoin', () => {
     const heading = page.getByTestId('send-success-heading');
     const error = page.getByTestId('send-error');
     await Promise.race([
-      heading.waitFor({ state: 'visible', timeout: 660_000 }),
-      error.waitFor({ state: 'visible', timeout: 660_000 }),
+      heading.waitFor({ state: 'visible', timeout: 300_000 }),
+      error.waitFor({ state: 'visible', timeout: 300_000 }),
     ]);
     const errorText = (await error.textContent().catch(() => null)) ?? '';
     await expect(error, errorText).toBeHidden();
