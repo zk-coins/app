@@ -15,7 +15,7 @@
 
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { FullConfig } from '@playwright/test';
+import type { BrowserContext, FullConfig, Page } from '@playwright/test';
 import { chromium } from '@playwright/test';
 import { api } from './_helpers/api';
 import { createSeedWallet, DEFAULT_PASSWORD, clearWalletState } from './_helpers/wallet';
@@ -84,6 +84,52 @@ async function infoWithRetry(attempt = 1): Promise<{ network: string }> {
   }
 }
 
+/**
+ * Cold-start hardening for browser contexts used in globalSetup.
+ *
+ * The first `page.goto('/')` after a CI runner boot occasionally exceeds
+ * Playwright's default 30 s navigation timeout — Cloudflare cold path,
+ * Next.js standalone first-paint, plus the WASM bundle handshake all
+ * stack on the very first request. Subsequent navigations in the same
+ * context are fast. Bumping the context-wide default to 90 s costs
+ * nothing on the happy path and removes a class of flake that only
+ * shows up in globalSetup, not in the test specs themselves.
+ *
+ * Scoped to globalSetup only — the specs keep the 30 s default so a
+ * genuine app-side regression still surfaces as a timeout instead of
+ * being masked by a wide budget.
+ */
+function applyColdStartTimeouts(ctx: BrowserContext): void {
+  ctx.setDefaultNavigationTimeout(90_000);
+  ctx.setDefaultTimeout(60_000);
+}
+
+/**
+ * Wrap a globalSetup page-driving step in a single retry so a transient
+ * first-paint timeout doesn't fail the whole CI run. The retry creates
+ * a fresh page on the same context — the previous one may be left in
+ * a half-loaded state after the abort.
+ */
+async function withPageRetry<T>(
+  ctx: BrowserContext,
+  label: string,
+  step: (page: Page) => Promise<T>,
+): Promise<T> {
+  const maxAttempts = 2;
+  for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const page = await ctx.newPage();
+    try {
+      return await step(page);
+    } catch (err) {
+      const last = attempt === maxAttempts;
+      if (last) throw err;
+      console.warn(`globalSetup: ${label} failed on attempt ${attempt}, retrying. ${String(err)}`);
+      await page.close().catch(() => {});
+    }
+  }
+  throw new Error(`globalSetup: ${label} exhausted retries`);
+}
+
 export default async function globalSetup(config: FullConfig): Promise<void> {
   // Opt-in. The legacy specs (wallet.spec.ts, send-flow.spec.ts,
   // settings.spec.ts, visual.spec.ts, webauthn.spec.ts) create their
@@ -114,9 +160,11 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   try {
     // Alice: fresh wallet, then seed via /api/mint × FAUCET_CALLS.
     const aliceCtx = await browser.newContext({ baseURL });
-    const alicePage = await aliceCtx.newPage();
-    await clearWalletState(alicePage);
-    const alice = await createSeedWallet(alicePage, DEFAULT_PASSWORD);
+    applyColdStartTimeouts(aliceCtx);
+    const alice = await withPageRetry(aliceCtx, 'create Alice wallet', async (page) => {
+      await clearWalletState(page);
+      return await createSeedWallet(page, DEFAULT_PASSWORD);
+    });
     await aliceCtx.close();
 
     for (let i = 0; i < FAUCET_CALLS; i++) {
@@ -126,9 +174,11 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
 
     // Bob: fresh wallet, NO seeding.
     const bobCtx = await browser.newContext({ baseURL });
-    const bobPage = await bobCtx.newPage();
-    await clearWalletState(bobPage);
-    const bob = await createSeedWallet(bobPage, DEFAULT_PASSWORD);
+    applyColdStartTimeouts(bobCtx);
+    const bob = await withPageRetry(bobCtx, 'create Bob wallet', async (page) => {
+      await clearWalletState(page);
+      return await createSeedWallet(page, DEFAULT_PASSWORD);
+    });
     await bobCtx.close();
 
     const accounts: Accounts = {
