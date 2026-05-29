@@ -58,6 +58,31 @@ app/
 └── next.config.js         # WASM support, standalone output
 ```
 
+## Architecture Principle — Thin Client
+
+**The App is a thin client. All authoritative state lives on the node.**
+
+The App's only responsibilities are:
+
+1. **Private key custody** — generate / restore the BIP-32 master xpriv, store it encrypted on the device, sign messages locally with WASM crypto helpers. The xpriv never leaves the device.
+2. **UI rendering** — present what the node returns.
+
+Every other piece of state — balance, send-counter (`num_sends`), transaction history, server capabilities, account proofs, commitment lookups — is owned by [`zk-coins/node`](https://github.com/zk-coins/node). The App **MUST** fetch the authoritative value from the node before any operation that depends on it, and **MUST NOT** maintain a parallel local source of truth that can drift.
+
+### Concrete rules
+
+- **Before any signed request** (`/api/send`, `/api/commit`, `/api/username/claim`): call `api.balance(address)` first and use the response's `num_sends` to drive BIP-32 derivation. Reading `account.numPubkeys` from the Zustand store is a bug — the store resets to 0 on every fresh tab, page reload, and Playwright retry; the node's counter is the only value that survives.
+- **The Zustand wallet store** holds the cryptographic identity (`xpriv`, `address`) and transient UI state only. It must **NOT** hold a copy of balance-truth, send-counter-truth, transaction-history-truth, or feature-capability-truth. Those come from `/api/balance` (balance, `num_sends`), `/api/info` (capabilities), and (when persistence is needed) the node's `request_log` / `account_history` tables surfaced through dedicated endpoints.
+- **New features go server-side first.** If a UI flow needs information the node doesn't already expose, the correct sequence is: add the endpoint to `zk-coins/node`, deploy it to DEV, then consume it in the App. Implementing the logic in the App and "syncing later" is what produced the [`prove_account_update failed`](https://github.com/zk-coins/app/pull/127) class of bugs.
+- **Validation, derivation, formatting** that affect protocol-level decisions belong in the WASM crypto layer (`rust/client`) or the node, not in React components. Components are render-only.
+- **Drift between App and node:** the node always wins. The App syncs on the next operation.
+
+### Why
+
+The May 2026 `07-send-success` E2E failure is the canonical incident. The App used a local `numPubkeys` counter from the Zustand store; that counter resets to 0 on every fresh page load. After a successful first send (server-side `num_sends → 1`), every Playwright retry / fresh-tab session signed the next send with `pubkey(0)` instead of `pubkey(1)`, violating the in-circuit account-update continuity constraint at [`program-plonky2/src/circuit/main.rs:615-623`](https://github.com/zk-coins/node/blob/develop/program-plonky2/src/circuit/main.rs). Three server-side fixes (`Account.num_sends` counter, server-owned `commitment_public_key`, canonical 64-byte SMT value) all shipped before anyone noticed that the App was still signing with the wrong index. The thin-client rule exists so this class of bug cannot recur: if every signed operation hydrates `num_sends` from `/api/balance` immediately before signing, the local store can never drift far enough to matter.
+
+The api_remote suite (`zk-coins/node/node/tests/api_remote.rs::TestWallet`) threads the BIP-32 index explicitly into every signed request and is therefore immune to the bug — that pattern is the reference implementation for any App-side signed flow.
+
 ## Git Workflow
 
 ### Branches
@@ -168,10 +193,10 @@ export function MyComponent() {
 
 ### State Management
 
-- **Zustand** for all application state
-- **Encrypted IndexedDB persistence** via `saveEncryptedWallet()` / `loadEncryptedWallet()` (AES-GCM)
-- **No React Context** for state — Zustand stores are global singletons
-- Wallet state: `account`, `transactions`, `isLoading`, `isLocked`, `hasStoredWallet`, `storedAddress`, `storedAuthMethod`, `error`
+- **Zustand** for transient UI state and the cryptographic identity only — see the [Thin Client](#architecture-principle--thin-client) rule above for what must NOT live in the store.
+- **Encrypted IndexedDB persistence** via `saveEncryptedWallet()` / `loadEncryptedWallet()` (AES-GCM) — for the xpriv and the unlocked-state flags, not for server-owned values.
+- **No React Context** for state — Zustand stores are global singletons.
+- Wallet store fields: `account` (`xpriv`, `address`), `isLoading`, `isLocked`, `hasStoredWallet`, `storedAddress`, `storedAuthMethod`, `error`. Anything that the node can recompute (balance, `num_sends`, transaction history) is **read from the node on demand**, not cached as ground truth in the store.
 
 ### API Client
 
@@ -234,12 +259,12 @@ The Dockerfile sets placeholder values at build time (`NEXT_PUBLIC_API_URL_PLACE
 
 ## CI/CD
 
-| Workflow               | Trigger             | Action                                                  |
-| ---------------------- | ------------------- | ------------------------------------------------------- |
-| `ci.yaml`              | Push to develop, PR | Lint + Build                                            |
+| Workflow               | Trigger             | Action                                                   |
+| ---------------------- | ------------------- | -------------------------------------------------------- |
+| `ci.yaml`              | Push to develop, PR | Lint + Build                                             |
 | `deploy-dev.yaml`      | Push to develop     | Docker build → push `zkcoins/app:beta` → deploy to DEV   |
 | `deploy-prd.yaml`      | Push to main        | Docker build → push `zkcoins/app:latest` → deploy to PRD |
-| `auto-release-pr.yaml` | Push to develop     | Creates Release PR (develop → main)                     |
+| `auto-release-pr.yaml` | Push to develop     | Creates Release PR (develop → main)                      |
 
 ### Before Pushing
 
