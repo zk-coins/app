@@ -22,9 +22,15 @@
  *      consistent without forcing the node to flatten its messages back
  *      to the generic forms in `KNOWN_SERVER_ERRORS`.
  *
- * Pattern entries must NOT overlap with `KNOWN_SERVER_ERRORS` strings —
- * the exact-match pass always wins, and a duplicate match would mean
- * the exact entry is dead code. The unit test guards this.
+ * Patterns intentionally may overlap with `KNOWN_SERVER_ERRORS`
+ * strings (e.g. the hex pattern matches both the diagnostic
+ * `"<field> is not valid hex"` and the exact `"Invalid hex"`). The
+ * exact-match pass runs first, so the pattern is dead code for that
+ * specific string — that is fine and asserted by the unit test
+ * `every KNOWN_SERVER_ERRORS string resolves via the exact-match
+ * table, not via a pattern`. Catching pattern takeover matters: if a
+ * future refactor deletes an exact entry, the pattern fallback might
+ * silently swap the German copy for a different translation.
  */
 
 import { ApiError } from './client';
@@ -58,7 +64,7 @@ export const KNOWN_SERVER_ERRORS = [
   'Broadcast failed',
 ] as const;
 
-const SERVER_ERROR_TO_USER_MESSAGE: Record<string, string> = {
+export const SERVER_ERROR_TO_USER_MESSAGE: Record<string, string> = {
   // 422 — user-fixable
   'Insufficient funds': 'Nicht genug Guthaben für diese Überweisung.',
   'Coin should not exist in coin history tree': 'Diese Coin wurde bereits versendet.',
@@ -106,7 +112,7 @@ const SERVER_ERROR_TO_USER_MESSAGE: Record<string, string> = {
  * user messages so the UX is consistent between exact-matched and
  * family-matched errors.
  */
-const SERVER_ERROR_PATTERNS: Array<readonly [RegExp, string]> = [
+export const SERVER_ERROR_PATTERNS: Array<readonly [RegExp, string]> = [
   // Hex validation errors. Node emits e.g.
   // "account_address is not valid hex" — any field, any wording variant.
   [/(?:is not valid hex|invalid hex)/i, 'Ungültige Hex-Eingabe.'],

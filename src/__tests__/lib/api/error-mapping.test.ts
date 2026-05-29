@@ -1,6 +1,11 @@
 import { describe, it, expect } from 'vitest';
 import { ApiError } from '@/lib/api/client';
-import { KNOWN_SERVER_ERRORS, userMessageFor } from '@/lib/api/errorMessages';
+import {
+  KNOWN_SERVER_ERRORS,
+  SERVER_ERROR_PATTERNS,
+  SERVER_ERROR_TO_USER_MESSAGE,
+  userMessageFor,
+} from '@/lib/api/errorMessages';
 
 describe('userMessageFor', () => {
   it.each(KNOWN_SERVER_ERRORS)(
@@ -56,5 +61,31 @@ describe('userMessageFor', () => {
         'Bitcoin-Broadcast fehlgeschlagen. Bitte später erneut versuchen.',
       );
     });
+
+    // Patterns are allowed to overlap with KNOWN_SERVER_ERRORS strings —
+    // e.g. /invalid hex/i matches both the diagnostic
+    // "account_address is not valid hex" and the exact "Invalid hex".
+    // The exact-match table runs first, so the pattern is dead code for
+    // the exact string. This test guards that ordering: if a future
+    // refactor deletes an exact entry, the pattern fallback might
+    // silently swap the German copy for a different translation, and
+    // the assertion below would catch it.
+    it.each(KNOWN_SERVER_ERRORS)(
+      'resolves "%s" via the exact-match table, not via a family pattern',
+      (serverError) => {
+        expect(SERVER_ERROR_TO_USER_MESSAGE[serverError]).toBeDefined();
+        // Sanity check: even if a pattern also matches, the exact entry
+        // is the one that wins (and the lockstep test above asserts the
+        // exact entry's translation is non-fallback).
+        const exact = SERVER_ERROR_TO_USER_MESSAGE[serverError];
+        const matchingPattern = SERVER_ERROR_PATTERNS.find(([re]) => re.test(serverError));
+        if (matchingPattern && matchingPattern[1] !== exact) {
+          // Different translations between the exact entry and the
+          // overlapping pattern — log it so a future refactor that
+          // accidentally relies on the pattern is caught.
+          expect(userMessageFor(new ApiError(500, serverError))).toBe(exact);
+        }
+      },
+    );
   });
 });

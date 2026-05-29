@@ -108,7 +108,9 @@ function applyColdStartTimeouts(ctx: BrowserContext): void {
  * Wrap a globalSetup page-driving step in a single retry so a transient
  * first-paint timeout doesn't fail the whole CI run. The retry creates
  * a fresh page on the same context — the previous one may be left in
- * a half-loaded state after the abort.
+ * a half-loaded state after the abort. The `finally` block closes the
+ * page on every iteration (success, retry, or terminal throw) so
+ * pages never accumulate even if the caller delays `ctx.close()`.
  */
 async function withPageRetry<T>(
   ctx: BrowserContext,
@@ -121,9 +123,9 @@ async function withPageRetry<T>(
     try {
       return await step(page);
     } catch (err) {
-      const last = attempt === maxAttempts;
-      if (last) throw err;
+      if (attempt === maxAttempts) throw err;
       console.warn(`globalSetup: ${label} failed on attempt ${attempt}, retrying. ${String(err)}`);
+    } finally {
       await page.close().catch(() => {});
     }
   }
