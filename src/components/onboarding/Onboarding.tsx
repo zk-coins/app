@@ -31,6 +31,7 @@ function StepHeader({ onBack }: { onBack?: () => void }) {
       </div>
       {onBack && (
         <button
+          data-testid="onboarding-step-back-btn"
           onClick={onBack}
           className="inline-flex items-center gap-1.5 text-[13px] text-ink3 transition-colors hover:text-ink"
         >
@@ -314,7 +315,10 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
           >
             {mnemonic.map((word, i) => (
               <div key={i} className="flex items-center gap-2 rounded-sm bg-bg px-2.5 py-2">
-                <span className="mono w-4 text-right text-[10px] text-ink4 tabular-nums">
+                <span
+                  aria-hidden="true"
+                  className="mono w-4 text-right text-[10px] text-ink3 tabular-nums"
+                >
                   {i + 1}
                 </span>
                 <span
@@ -371,7 +375,14 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       )}
 
       {stage === 'password' && (
-        <div data-testid="seed-password-stage" className="space-y-4">
+        <form
+          data-testid="seed-password-stage"
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            create();
+          }}
+        >
           <div>
             <p className="text-[13px] font-semibold text-ink">Set an encryption password</p>
             <p className="mt-1 text-[12px] text-ink2">
@@ -396,14 +407,14 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
           <button
+            type="submit"
             data-testid="seed-create-btn"
-            onClick={create}
             disabled={!password || !passwordConfirm}
             className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
           >
             Create wallet
           </button>
-        </div>
+        </form>
       )}
 
       {stage === 'creating' && (
@@ -577,7 +588,7 @@ function SeedImportFlow({
   onBack: () => void;
   onPasskeyRestore?: () => void;
 }) {
-  const { setAccount, setBalance, saveWithPassword } = useWalletStore();
+  const { setAccount, setBalance, syncNumPubkeys, saveWithPassword } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'input' | 'password' | 'restoring'>('input');
   const [phrase, setPhrase] = useState('');
@@ -630,8 +641,15 @@ function SeedImportFlow({
       setAuth('seed');
 
       try {
-        const { balance } = await api.balance(ad.address);
-        setBalance(balance);
+        const res = await api.balance(ad.address);
+        setBalance(res.balance);
+        // Restore-from-seed has no local memory of past sends — the
+        // mnemonic could correspond to an address that has already
+        // sent N times against this server. Hydrate the BIP-32
+        // child-index counter from the server BEFORE the user
+        // navigates to /send to avoid the "Vorheriger Public Key
+        // fehlt" 400 documented on `BalanceResponseSchema.num_sends`.
+        syncNumPubkeys(res.num_sends);
       } catch {
         // Non-fatal — WalletScreen will keep its loading placeholder.
       }
@@ -639,7 +657,16 @@ function SeedImportFlow({
       setError(err instanceof Error ? err.message : 'Failed to restore wallet');
       setStage('password');
     }
-  }, [phrase, password, passwordConfirm, setAccount, setBalance, saveWithPassword, setAuth]);
+  }, [
+    phrase,
+    password,
+    passwordConfirm,
+    setAccount,
+    setBalance,
+    syncNumPubkeys,
+    saveWithPassword,
+    setAuth,
+  ]);
 
   return (
     <div className="space-y-6 py-2">
@@ -653,7 +680,13 @@ function SeedImportFlow({
       </div>
 
       {stage === 'input' && (
-        <>
+        <form
+          className="space-y-6"
+          onSubmit={(e) => {
+            e.preventDefault();
+            handleValidate();
+          }}
+        >
           <textarea
             data-testid="seed-import-textarea"
             value={phrase}
@@ -668,18 +701,25 @@ function SeedImportFlow({
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[13px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
           <button
+            type="submit"
             data-testid="seed-import-continue-btn"
-            onClick={handleValidate}
             disabled={!phrase.trim()}
             className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
           >
             Continue
           </button>
-        </>
+        </form>
       )}
 
       {stage === 'password' && (
-        <div data-testid="seed-import-password-stage" className="space-y-4">
+        <form
+          data-testid="seed-import-password-stage"
+          className="space-y-4"
+          onSubmit={(e) => {
+            e.preventDefault();
+            restore();
+          }}
+        >
           <div>
             <p className="text-[13px] font-semibold text-ink">Set an encryption password</p>
             <p className="mt-1 text-[12px] text-ink2">
@@ -700,19 +740,18 @@ function SeedImportFlow({
             type="password"
             value={passwordConfirm}
             onChange={(e) => setPasswordConfirm(e.target.value)}
-            onKeyDown={(e) => e.key === 'Enter' && restore()}
             placeholder="Confirm password"
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
           <button
+            type="submit"
             data-testid="seed-import-submit-btn"
-            onClick={restore}
             disabled={!password || !passwordConfirm}
             className="w-full rounded-md bg-bitcoin py-3.5 text-[14px] font-semibold tracking-tight text-bg transition-colors hover:bg-bitcoin-hover disabled:cursor-not-allowed disabled:bg-line disabled:text-ink4"
           >
             Restore wallet
           </button>
-        </div>
+        </form>
       )}
 
       {stage === 'restoring' && (
@@ -750,7 +789,7 @@ function SeedImportFlow({
 /* ---------- Passkey Restore Flow ---------- */
 
 function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
-  const { setAccount, setBalance, saveWithPrf } = useWalletStore();
+  const { setAccount, setBalance, syncNumPubkeys, saveWithPrf } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'intro' | 'authenticating' | 'restoring'>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -789,8 +828,12 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
       setAuth('passkey', result.credentialId);
 
       try {
-        const { balance } = await api.balance(ad.address);
-        setBalance(balance);
+        const res = await api.balance(ad.address);
+        setBalance(res.balance);
+        // Same rationale as the seed-restore path: a passkey-restored
+        // wallet has no local memory of past sends. Hydrate the
+        // counter from the server now to avoid a /send 400 later.
+        syncNumPubkeys(res.num_sends);
       } catch {
         // Non-fatal.
       }
@@ -812,7 +855,7 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
       }
       setStage('intro');
     }
-  }, [setAccount, setBalance, saveWithPrf, setAuth]);
+  }, [setAccount, setBalance, syncNumPubkeys, saveWithPrf, setAuth]);
 
   return (
     <div className="space-y-6 py-2">

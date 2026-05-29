@@ -15,13 +15,20 @@ COPY . .
 ENV NEXT_PUBLIC_API_URL=NEXT_PUBLIC_API_URL_PLACEHOLDER
 ENV NEXT_PUBLIC_EXPLORER_URL=NEXT_PUBLIC_EXPLORER_URL_PLACEHOLDER
 
-# Feature gates (`NEXT_PUBLIC_ENABLE_*`) are intentionally not declared here.
-# They are a local-developer convenience read from `.env.local` to preview
-# work-in-progress UI; the deployed image must not ship any gated branch.
-# Without an ENV in this stage, `process.env.NEXT_PUBLIC_ENABLE_*` is undefined
-# at build time, every `FEATURES.X` resolves to `false`, and Next.js DCE
-# strips the gated branches from the bundle. When a feature is ready to
-# ship, the gate is dropped from the code — never enabled via env var.
+# Build-time client gates (`NEXT_PUBLIC_ENABLE_*`) are intentionally not
+# declared here. They are a local-developer convenience read from
+# `.env.local` to preview work-in-progress UI; the deployed image must
+# not ship any gated branch. Without an ENV in this stage,
+# `process.env.NEXT_PUBLIC_ENABLE_*` is undefined at build time, every
+# `FEATURES.X` resolves to `false`, and Next.js DCE strips the gated
+# branches from the bundle. When a feature is ready to ship, the gate
+# is dropped from the code — never enabled via env var.
+#
+# Server-side feature gates (`FAUCET`, `USERNAMES`) are NOT build-time
+# anymore. They are reported by the server at `/api/info.capabilities`
+# and consumed via `useFeatures()` at runtime, so this image runs the
+# same code regardless of which Cargo features the server was compiled
+# with. The server is the single source of truth.
 RUN npm run build
 
 FROM base AS runner

@@ -21,9 +21,15 @@ import { fileURLToPath } from 'node:url';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..');
 const e2eDir = path.join(repoRoot, 'e2e');
-const outDir = path.join(repoRoot, 'public', 'handbook', 'screenshots');
+const handbookDir = path.join(repoRoot, 'public', 'handbook');
+const outDir = path.join(handbookDir, 'screenshots');
+const handbookFiles = [
+  path.join(handbookDir, 'index.html'),
+  path.join(handbookDir, 'de', 'index.html'),
+];
 
 const SUFFIX = '-chromium-linux.png';
+const REF_RE = /\/handbook\/screenshots\/([^"'\s)]+\.png)/g;
 
 function findBaselines() {
   const entries = fs.readdirSync(e2eDir, { withFileTypes: true });
@@ -57,6 +63,47 @@ function place(src, dest) {
   }
 }
 
+function collectHandbookRefs() {
+  // name -> sorted list of handbook files that reference it
+  const refs = new Map();
+  for (const file of handbookFiles) {
+    if (!fs.existsSync(file)) continue;
+    const html = fs.readFileSync(file, 'utf8');
+    const rel = path.relative(repoRoot, file);
+    for (const m of html.matchAll(REF_RE)) {
+      const name = m[1];
+      if (!refs.has(name)) refs.set(name, new Set());
+      refs.get(name).add(rel);
+    }
+  }
+  return refs;
+}
+
+function verifyCoverage(syncedNames) {
+  const refs = collectHandbookRefs();
+  const referenced = new Set(refs.keys());
+  const synced = new Set(syncedNames);
+  const dangling = [...referenced].filter((n) => !synced.has(n)).sort();
+  const orphans = [...synced].filter((n) => !referenced.has(n)).sort();
+
+  if (dangling.length === 0 && orphans.length === 0) return;
+
+  console.error('sync-handbook-baselines: handbook ↔ baseline mismatch');
+  if (dangling.length) {
+    console.error('  Referenced in handbook but missing in e2e snapshots:');
+    for (const n of dangling) {
+      console.error(`    ${n}  (in ${[...refs.get(n)].sort().join(', ')})`);
+    }
+  }
+  if (orphans.length) {
+    console.error('  Present in e2e snapshots but not referenced in any handbook:');
+    for (const n of orphans) {
+      console.error(`    ${n}`);
+    }
+  }
+  process.exit(1);
+}
+
 function main() {
   const baselines = findBaselines();
   if (baselines.length === 0) {
@@ -67,6 +114,7 @@ function main() {
   console.log(
     `sync-handbook-baselines: linked ${baselines.length} baseline(s) into public/handbook/screenshots/`,
   );
+  verifyCoverage(baselines.map(({ dest }) => path.basename(dest)));
 }
 
 main();

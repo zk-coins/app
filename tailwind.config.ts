@@ -9,7 +9,12 @@ const config: Config = {
         bg: '#000000',
         ink: '#ffffff',
         ink2: '#a1a1aa',
-        ink3: '#71717a',
+        // Bumped from `#71717a` (zinc-500) — that value rendered at
+        // 4.04:1 on `bg-surface` and failed WCAG AA color-contrast on
+        // every MVP route (issues #77, #78, #79, #80, #81). The new
+        // value renders at ~6.2:1 and keeps a visible step between
+        // ink2 (8.4:1) and ink3 for the muted-text hierarchy.
+        ink3: '#909099',
         ink4: '#3f3f46',
         line: '#1c1c1c',
         line2: '#262626',

@@ -16,7 +16,13 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { Page } from '@playwright/test';
-import { clearWalletState, DEFAULT_PASSWORD, restoreSeedWallet } from './wallet';
+import {
+  clearWalletState,
+  DEFAULT_PASSWORD,
+  restoreSeedWallet,
+  waitForBalanceLoaded,
+  waitForNetworkInfo,
+} from './wallet';
 
 export interface Account {
   mnemonic: string[];
@@ -59,6 +65,13 @@ export async function aliceLogin(
   const { alice } = readAccounts();
   await clearWalletState(page);
   await restoreSeedWallet(page, alice.mnemonic, password);
+  // Block on the two WalletScreen mount-time roundtrips so any subsequent
+  // navigation or assertion is race-free:
+  //   - api.info() populates the network store (settings badge gating)
+  //   - api.balance() resolves the data-loading marker on balance-amount-usd
+  //     (wallet-empty-banner gating, send-page balance gating)
+  await waitForNetworkInfo(page);
+  await waitForBalanceLoaded(page);
   return alice;
 }
 
@@ -67,5 +80,7 @@ export async function bobLogin(page: Page, password: string = DEFAULT_PASSWORD):
   const { bob } = readAccounts();
   await clearWalletState(page);
   await restoreSeedWallet(page, bob.mnemonic, password);
+  await waitForNetworkInfo(page);
+  await waitForBalanceLoaded(page);
   return bob;
 }

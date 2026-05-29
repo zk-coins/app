@@ -20,7 +20,7 @@
  */
 
 import { expect, test, type Page } from '@playwright/test';
-import { clearWalletState } from './_helpers/wallet';
+import { clearWalletState, waitForBalanceLoaded } from './_helpers/wallet';
 import { snap, setViewport } from './_helpers/screenshot';
 
 const PASSWORD = 'TestPass123!';
@@ -153,33 +153,29 @@ test.describe('Create wallet — seed phrase', () => {
     await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
       timeout: 30_000,
     });
-    // Empty banner is the *correct* end state — this is a brand-new
-    // wallet, no faucet, balance is genuinely zero. The banner renders
-    // only after the first /api/balance tick resolves with 0 (see
-    // WalletScreen's `balance === 0` guard), so wait for it explicitly
-    // before snap — otherwise the test races the polling tick. The
-    // baseline ends up visually identical to `06-balance-zero-empty-banner`
-    // and that is fine: both tests assert the empty-wallet rendering, just
-    // from different code paths.
-    await expect(page.getByTestId('wallet-empty-banner')).toBeVisible({ timeout: 60_000 });
+    // Block on the first /api/balance tick so the banner check below is
+    // deterministic. The banner renders for `balance === 0` and remains
+    // absent while `balance === null` (post-mount loading) — without an
+    // explicit wait the assertion races the polling tick.
+    await waitForBalanceLoaded(page);
+    await expect(page.getByTestId('wallet-empty-banner')).toBeVisible({ timeout: 5_000 });
     await snap(page, '02-wallet-after-create', { fullPage: true });
   });
 
   test('back-from-reveal (no shot)', async ({ page }) => {
     await enterSeedFlow(page);
-    // The StepHeader back button is the first `<button>` rendered.
     // In the DEV bundle SeedFlow's `onBack` goes to PasskeyFlow (not
     // straight to Welcome — see § 8.0 (a)), so click back twice to
     // land on Welcome. PRD only needs one click; both paths are
     // accepted via the final assertion.
-    await page.locator('button').first().click();
+    await page.getByTestId('onboarding-step-back-btn').click();
     if (
       await page
         .getByTestId('passkey-other-options-btn')
         .isVisible()
         .catch(() => false)
     ) {
-      await page.locator('button').first().click();
+      await page.getByTestId('onboarding-step-back-btn').click();
     }
     await expect(page.getByTestId('welcome-heading')).toBeVisible({ timeout: 10_000 });
   });

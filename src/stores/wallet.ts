@@ -41,6 +41,19 @@ interface WalletState {
   setAccount: (account: Account | null) => void;
   setBalance: (balance: number) => void;
   setUsername: (username: string) => void;
+  /**
+   * Sync the local `numPubkeys` counter from the server's
+   * `BalanceResponse.num_sends`. The server is the source of truth
+   * for the BIP-32 child-index counter — see the field doc on
+   * `BalanceResponseSchema`. Callers (WalletScreen, SendPage) pass
+   * the value through from every balance tick so a seed-restored
+   * wallet auto-heals to the correct index without local
+   * bookkeeping.
+   *
+   * No-op if no account is loaded, or if the local counter already
+   * matches the server (avoids an unnecessary React re-render).
+   */
+  syncNumPubkeys: (numSends: number) => void;
   incrementPubkeys: () => void;
   addTransaction: (tx: Transaction) => void;
   setLoading: (loading: boolean) => void;
@@ -96,6 +109,13 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     if (account) {
       set({ account: { ...account, username } });
     }
+  },
+
+  syncNumPubkeys: (numSends: number) => {
+    const { account } = get();
+    if (!account) return;
+    if (account.numPubkeys === numSends) return;
+    set({ account: { ...account, numPubkeys: numSends } });
   },
 
   incrementPubkeys: () => {

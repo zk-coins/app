@@ -459,7 +459,33 @@ Hard-to-locate routes the user can reach but the rest of the inventory doesn't n
 
 After §8.1 lands (`01-onboarding-welcome.spec.ts`), the new spec captures `welcome-desktop/mobile/tablet`, `02-create-seed:seed-reveal-hidden + seed-reveal-shown` covers the `seed-setup-generate + seed-mnemonic-display` baselines, and `03-restore-seed:restore-entry-empty` covers `seed-import`. **Delete** `e2e/visual.spec.ts` and `e2e/visual.spec.ts-snapshots/` in the PR that introduces `02-create-seed.spec.ts` (PR-3 in §11.3 below).
 
-### 8.13 Totals
+### 8.13 Accessibility (axe-core)
+
+`12-a11y.spec.ts` runs `@axe-core/playwright` against the MVP routes
+and fails on any new `serious` or `critical` violation under `wcag2a` /
+`wcag2aa`. Issue #68 / Workstream 2.
+
+No screenshots — these are functional axe checks. The regen workflow
+glob (`e2e/0*.spec.ts e2e/1*.spec.ts`) matches the spec by file name,
+but with zero `toHaveScreenshot` calls there is no baseline to write,
+so the regen run is a functional no-op for `12-a11y`.
+
+| #   | Route / state                        | Setup                                         |
+| --- | ------------------------------------ | --------------------------------------------- |
+| 1   | `/` — welcome (logged-out)           | `clearWalletState`, `welcome-heading` visible |
+| 2   | `/` — seed-reveal (mid onboarding)   | Click `onboarding-create-btn` → `seed-reveal` |
+| 3   | `/` — wallet home (Alice, logged in) | `aliceLogin`                                  |
+| 4   | `/send`                              | `aliceLogin`, click `wallet-send-btn`         |
+| 5   | `/receive`                           | `aliceLogin`, click `wallet-receive-btn`      |
+| 6   | `/settings`                          | `aliceLogin`, click `nav-settings`            |
+
+Allowlist mechanism: `KNOWN_VIOLATIONS: Array<{ id, route, reason }>`
+at the top of the spec. The same PR that fixes a violation in code
+keeps the allowlist entry until the next DEV deploy lands — the spec
+runs against DEV, so the entry only becomes false after the deploy.
+A trailing follow-up PR empties the array once DEV is live.
+
+### 8.14 Totals
 
 | Spec file                         | Tests  | Screenshots (linux only) |
 | --------------------------------- | ------ | ------------------------ |
@@ -474,9 +500,10 @@ After §8.1 lands (`01-onboarding-welcome.spec.ts`), the new spec captures `welc
 | `09-network-and-shell.spec.ts`    | 6      | 6                        |
 | `10-pwa.spec.ts`                  | 4      | 4                        |
 | `11-cross-spec-redirects.spec.ts` | 3      | 3                        |
-| **Σ**                             | **73** | **70**                   |
+| `12-a11y.spec.ts`                 | 6      | 0                        |
+| **Σ**                             | **79** | **70**                   |
 
-70 linux baselines, 73 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated.
+70 linux baselines, 79 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated. The accessibility spec is screenshot-free by design.
 
 ## 9. CI integration
 
@@ -605,7 +632,7 @@ Each PR:
 
 - Adds **only the spec it's labelled with** plus any unblocking helper change.
 - Lands the spec with its file name added to `playwright.config.ts::testIgnore` so the existing `e2e-tests` job doesn't fail on missing baselines.
-- **Wipes the DEV server state** before triggering the regen so the run starts from a known-empty `accounts.bin` / `smt.bin` / `mmr.bin` / `latest_block.bin` / `minting_num_pubkeys.bin`. See `zk-coins/server CONTRIBUTING.md § DEV state recovery`.
+- **Wipes the DEV server state** before triggering the regen so the run starts from a known-empty `accounts.bin` / `smt.bin` / `mmr.bin` / `latest_block.bin` / `minting_num_pubkeys.bin`. See `zk-coins/node CONTRIBUTING.md § DEV state recovery`.
 - Dispatches `regenerate-visual-baselines.yml` via `gh workflow run "Regenerate Visual Baselines" --ref develop -f branch=develop`. The workflow opens a side-branch PR `e2e/regen-baselines-<run-id>` against develop (it does not push directly — see §9.2).
 - **Admin-merges the regen PR**: `gh pr merge <N> --squash --delete-branch --admin`. The protection rule allows admin override (`enforce_admins: false`), which is the unblocking mechanism while the GITHUB_TOKEN cascade-trigger limitation persists.
 - After baselines land, removes the spec from `testIgnore` in a second commit. CI now exercises the spec on every push.

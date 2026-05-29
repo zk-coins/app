@@ -36,9 +36,10 @@ import { snap, setViewport } from './_helpers/screenshot';
 async function goToSettings(page: Page): Promise<void> {
   await page.getByTestId('nav-settings').click();
   await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
-  // `networkName` is populated by an api.info call that races in-app nav;
-  // the badge can take noticeably longer than other settings UI to land.
-  await expect(page.getByTestId('settings-network-badge')).toBeVisible({ timeout: 30_000 });
+  // `networkName` is pre-warmed by `aliceLogin` (see `waitForNetworkInfo`
+  // in `e2e/_helpers/wallet.ts`), so the badge renders on first paint of
+  // /settings. Default 10 s timeout is plenty.
+  await expect(page.getByTestId('settings-network-badge')).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('Disconnect wallet', () => {

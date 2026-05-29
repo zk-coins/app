@@ -1,20 +1,35 @@
 name: CI
 
 on:
-  # Only trigger on PRs targeting develop (feature → develop). The
-  # release PR (develop → main) is opened automatically and would
-  # otherwise fire a second CI run for every push to develop — those
-  # duplicate runs surfaced as "fail" entries on the release PR's
-  # check list whenever the concurrency block cancelled the older
-  # one. The push event already covers develop, and its run is
-  # associated with the same SHA on the release PR.
+  # Only trigger PRs against `develop`. The release PR (develop → main)
+  # is opened automatically by `auto-release-pr.yaml`, so `main` is
+  # deliberately omitted from `pull_request.branches`: a `push: develop`
+  # already covers each new SHA, and adding a PR-side trigger on `main`
+  # would queue a second `pull_request` run against the release PR for
+  # the very same commit — wasted CI minutes on a check `push: develop`
+  # already provides.
+  #
+  # Note: under the PR-number grouping in the `concurrency` block below
+  # the two runs would land in DIFFERENT groups (PR run keyed by PR
+  # number, push run keyed by `refs/heads/develop`), so the block would
+  # NOT deduplicate them. The omission is still correct — it avoids
+  # double-loading the same SHA — but the previous "concurrency cancels
+  # one of them" reasoning is obsolete.
   pull_request:
     branches: [develop]
   push:
     branches: [develop]
 
+# Group by PR number so a new push to the same PR cancels the in-flight
+# run for the outdated commit. Grouping by SHA (the previous approach)
+# put every commit in its own group, which meant `cancel-in-progress`
+# never fired and back-to-back pushes queued sequentially — each new
+# commit waited for the doomed older run to drain.
+# Falls back to `github.ref` for push/dispatch events (where there is no
+# `pull_request.number`): `refs/heads/develop` for post-merge runs, the
+# dispatched ref for manual triggers.
 concurrency:
-  group: ci-${{ github.event.pull_request.head.sha || github.sha }}
+  group: ci-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 permissions:
@@ -97,6 +112,12 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [lint-and-build]
+    # Cap the job so a hung browser process or stuck globalSetup
+    # cannot consume the default 6 h budget. Realistic wall-clock is
+    # ~5-7 min (step 1: 3 min parallel, step 2: 2-4 min serial) plus
+    # ~3 min for install/browser-fetch — 30 min is the conservative
+    # ceiling.
+    timeout-minutes: 30
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -113,18 +134,44 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      - name: Run E2E tests (all including visual regression)
-        run: npx playwright test --project=chromium
+      # Two-step E2E run.
+      #
+      # Step 1 runs the parallel-safe bulk of the suite (75 specs) with
+      # the default fullyParallel: true + 2 workers — the fast path that
+      # exercises onboarding, balance, network, PWA, redirects, and the
+      # 12 non-mutating Send tests.
+      #
+      # Step 2 runs the single `send-success` test on its own with
+      # --workers=1. send-success is the one spec that drives a real
+      # /api/send + /api/commit through the DEV node, blocking on
+      # server-side ZK proof generation. Running it concurrently with
+      # the rest of the suite (mint/balance traffic from 09 / 10 / 11
+      # all hitting the same node) starved its proof-gen pipeline for
+      # minutes at a time, causing repeated test-timeout failures even
+      # at a 12-min budget. Giving it exclusive DEV-node bandwidth
+      # drops the realistic upper bound back to ~3-4 min and removes
+      # the parallel-load term from the variance.
+      #
+      # globalSetup runs once per playwright invocation and mints
+      # fresh Alice + Bob, so each step gets a clean fixture set —
+      # step 2 doesn't depend on step 1's Alice having any specific
+      # remaining balance. See e2e/README.md § 4 and § 5.
+      - name: Run E2E tests (parallel, excluding send-success)
+        run: npx playwright test --project=chromium --grep-invert "send-success"
         env:
           E2E_BASE_URL: https://dev.zkcoins.app
           E2E_API_URL: https://dev-api.zkcoins.app
           E2E_NETWORK_EXPECTED: signet
           E2E_FAUCET_CALLS: '1'
-          # globalSetup runs once per CI invocation and mints fresh Alice + Bob
-          # via /api/mint. The active specs (03-restore-seed et al.) consume
-          # the resulting e2e/.fixtures/accounts.json via aliceLogin/bobLogin.
-          # Legacy specs are unaffected — they create their own throwaway
-          # wallets inline. See e2e/README.md § 4 and § 5.
+          E2E_NEED_FIXTURES: 'true'
+
+      - name: Run E2E tests (send-success, exclusive DEV-node bandwidth)
+        run: npx playwright test --project=chromium --grep "send-success" --workers=1
+        env:
+          E2E_BASE_URL: https://dev.zkcoins.app
+          E2E_API_URL: https://dev-api.zkcoins.app
+          E2E_NETWORK_EXPECTED: signet
+          E2E_FAUCET_CALLS: '1'
           E2E_NEED_FIXTURES: 'true'
 
       - name: Upload test results
