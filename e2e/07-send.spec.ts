@@ -170,14 +170,24 @@ test.describe('Send Bitcoin', () => {
 
   test('send-success', async ({ page }) => {
     // The 2-phase Send pipeline does: signed `/api/send` (ZK proof
-    // generation server-side, ~10-30 s on a warm DEV) → commitment
-    // build → `/api/commit` with up to three retries at 2 s/4 s
-    // backoff → success heading. A cold DEV after a fresh deploy
-    // can push the proof to 60-90 s; combined with one commit
-    // retry the wait for the success heading lands close to 100 s.
-    // Give 150 s of headroom and cap the test at 180 s so we still
-    // surface a genuine deadlock instead of waiting forever.
-    test.setTimeout(180_000);
+    // generation server-side, ~10-30 s on a warm DEV) → pre-send
+    // `/api/balance` hydration → commitment build → `/api/commit`
+    // with up to three retries at 2 s/4 s backoff → success heading.
+    // A cold DEV after a fresh deploy can push the proof to 60-90 s;
+    // combined with one commit retry the wait for the success
+    // heading lands close to 100 s. The post-PR-#127 send-flow
+    // additionally calls `/api/balance` immediately before signing
+    // to hydrate `num_sends` from the server (the canonical BIP-32
+    // child-index source per `CONTRIBUTING.md::Architecture
+    // Principle — Thin Client`), and the post-#129/#132 server-side
+    // state writes (atomic `Account.num_sends` + `commitment_public_key`
+    // upsert) added a few seconds of legitimate per-send latency.
+    // Together these two raise the realistic upper bound by ~30-60 s
+    // — observed 180-220 s in the post-merge bundle PR. Bump the
+    // waitFor cap to 250 s and the overall test timeout to 300 s so
+    // the assertion still surfaces a genuine deadlock without
+    // flagging well-behaved-but-slow runs as a regression.
+    test.setTimeout(300_000);
     await setViewport(page, 'mobile');
     const { bob } = readAccounts();
     await aliceGoToSend(page);
@@ -191,8 +201,8 @@ test.describe('Send Bitcoin', () => {
     const heading = page.getByTestId('send-success-heading');
     const error = page.getByTestId('send-error');
     await Promise.race([
-      heading.waitFor({ state: 'visible', timeout: 150_000 }),
-      error.waitFor({ state: 'visible', timeout: 150_000 }),
+      heading.waitFor({ state: 'visible', timeout: 250_000 }),
+      error.waitFor({ state: 'visible', timeout: 250_000 }),
     ]);
     await expect(error, await error.textContent().catch(() => '')).toBeHidden();
     await expect(heading).toBeVisible();
