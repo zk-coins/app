@@ -5,11 +5,11 @@
  * + empty-state banner under Alice (funded) and Bob (empty). 4 tests,
  * 4 linux baselines (one mobile).
  *
- * The faucet-button-visible / faucet-minting tests are gone — the
- * faucet is gated behind `FEATURES.FAUCET`, which is off in both DEV
- * and PRD bundles (see issue #30). Faucet UI testing belongs to a
- * local-only setup with `NEXT_PUBLIC_ENABLE_FAUCET=true` in
- * `.env.local`.
+ * The faucet-button-visible / faucet-minting tests are gone — mint is
+ * MVP and the UI gates the button purely on `networkName !==
+ * mainnet`, so the button IS present on DEV (Mutinynet). Faucet-flow
+ * functional coverage lives in the legacy `wallet.spec.ts`; this spec
+ * just baselines the empty/funded chrome.
  *
  * Locators: testid-based throughout. The funded-vs-empty signal is
  * `wallet-empty-banner` visibility.

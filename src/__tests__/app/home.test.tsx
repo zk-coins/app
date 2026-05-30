@@ -55,14 +55,13 @@ const ALICE = {
 
 beforeEach(() => {
   Object.assign(FEATURES_STATE, {
-    USERNAMES: false,
     APPS_DIRECTORY: false,
     PASSKEY: false,
-    FAUCET: false,
     DEV_ROUTES: false,
     AUTO_LOCK: false,
     ADDRESS_ROTATION: false,
     TOR_ROUTING: false,
+    USERNAME_CLAIM: false,
   });
   mockPathname = '/';
   useWalletStore.setState({

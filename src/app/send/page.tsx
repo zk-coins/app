@@ -10,7 +10,7 @@ import { ApiError, api, type CommitRequest } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { initWasm } from '@zkcoins/wasm';
 import { SATS_PER_BTC, formatBtc, formatBtcCompact } from '@/lib/format';
-import { useFeatures } from '@/lib/features';
+import { FEATURES } from '@/lib/features';
 
 /* --- In-flight commit crash recovery --- */
 
@@ -36,7 +36,6 @@ export default function SendPage() {
   const router = useRouter();
   const { account, balance, setBalance, incrementPubkeys, syncNumPubkeys, addTransaction } =
     useWalletStore();
-  const features = useFeatures();
 
   // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {
@@ -354,7 +353,7 @@ export default function SendPage() {
             <Link href="/receive" className="text-bitcoin hover:underline">
               Receive
             </Link>
-            {features.APPS_DIRECTORY && (
+            {FEATURES.APPS_DIRECTORY && (
               <>
                 {' '}
                 or{' '}

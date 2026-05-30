@@ -28,7 +28,7 @@ export default function Home() {
     (async () => {
       await checkForStoredWallet();
       await hydrate();
-      // Server feature gates: faucet / usernames / address_list / lnurl
+      // Opt-in server features (address_list, username_claim, lnurl)
       // are reported by `/api/info`. Fire-and-forget — the store
       // fail-closes on error so an unreachable server hides gated UI
       // rather than crashing the boot path.

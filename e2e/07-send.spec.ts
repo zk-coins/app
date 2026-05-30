@@ -7,10 +7,10 @@
  * Alice (funded, 100 000 sats) sends 1 000 sats to Bob. The send
  * goes through real `/api/send` + `/api/commit` against DEV.
  *
- * DEV mirrors PRD (issue #30): no FEATURES.USERNAMES, no
- * FEATURES.APPS_DIRECTORY → no `@user` placeholder, no DFX link in
- * the no-funds banner. The `recipient-valid-username` test was removed
- * with the migration.
+ * DEV mirrors PRD: username resolve is MVP and always renders the
+ * `@user` placeholder; `FEATURES.APPS_DIRECTORY` is off so the DFX
+ * link in the no-funds banner is dead-stripped. The
+ * `recipient-valid-username` test was removed with the migration.
  *
  * Locators: testid-based. The two amount-error paths (invalid text,
  * insufficient balance) currently share the `send-error` container,
