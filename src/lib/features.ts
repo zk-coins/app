@@ -8,15 +8,19 @@
 //    in the bundle. All flags default off (fail-closed); set the env
 //    var to the literal string `"true"` at build time to opt in.
 //
-// 2. **Runtime server capabilities** (`FAUCET`, `USERNAMES`). These
-//    are reported by the server at `/api/info` (see
+// 2. **Runtime server capabilities** (`USERNAME_CLAIM`, …). Reported
+//    by the server at `/api/info` (see
 //    `zk-coins/node::router.rs::Capabilities`) and stored in
-//    `useCapabilities`. Consumers must read them via `useFeatures()`
-//    inside a component, so the component re-renders when the
-//    capabilities load. Reading them statically from `process.env`
-//    would force operators to mirror the server's Cargo feature set
-//    in the app's build flags, which is the drift problem this hook
-//    exists to remove.
+//    `useCapabilities`. Only *opt-in* server features get a bit:
+//    MVP functionality (mint/faucet endpoints, username resolve and
+//    display) is permanently part of every node build and is therefore
+//    unconditional in the UI — no capability check guards it.
+//    Consumers must read runtime bits via `useFeatures()` inside a
+//    component, so the component re-renders when the capabilities
+//    load. Reading them statically from `process.env` would force
+//    operators to mirror the server's Cargo feature set in the app's
+//    build flags, which is the drift problem this hook exists to
+//    remove.
 
 import { useMemo } from 'react';
 import { useCapabilities } from '@/stores/capabilities';
@@ -35,25 +39,22 @@ const buildTime = {
 /**
  * Build-time client flags only. Safe to read in non-React contexts
  * (`notFound()` page guards, module-level constants). Does NOT expose
- * `FAUCET` or `USERNAMES` — those are server-side capabilities and
- * must be read via `useFeatures()` so the consumer re-renders when
- * `/api/info` lands.
+ * any server-reported capability — those must be read via
+ * `useFeatures()` so the consumer re-renders when `/api/info` lands.
  */
 export const FEATURES = buildTime;
 
 /**
- * Merged feature set: build-time client flags + runtime server
+ * Merged feature set: build-time client flags + opt-in runtime server
  * capabilities. Subscribes to the capabilities store, so the host
  * component re-renders when `/api/info` lands.
  *
- * `USERNAME_CLAIM` is `?? false` because the server schema marks the
- * field optional for one release cycle while node pre-PR-#143 is still
- * deployed — fail-closed: an unknown server cannot opt the wallet into
- * a write path it might not actually serve.
+ * MVP server functionality (mint, username resolve/display) is
+ * unconditional and is not represented here — call those endpoints
+ * directly. Only features a self-hoster might switch off get a flag.
  */
 export function useFeatures() {
   const caps = useCapabilities((s) => s.capabilities);
-  const usernameClaim = caps.username_claim ?? false;
   // Memo on the underlying booleans so the returned object is reference-
   // stable across renders that didn't change a capability. Without this,
   // every render produces a fresh object and any consumer that puts
@@ -62,10 +63,8 @@ export function useFeatures() {
     () =>
       ({
         ...buildTime,
-        FAUCET: caps.faucet,
-        USERNAMES: caps.usernames,
-        USERNAME_CLAIM: usernameClaim,
+        USERNAME_CLAIM: caps.username_claim,
       }) as const,
-    [caps.faucet, caps.usernames, usernameClaim],
+    [caps.username_claim],
   );
 }

@@ -4,15 +4,13 @@ import { api } from '@/lib/api/client';
 
 const FAIL_CLOSED = {
   address_list: false,
-  faucet: false,
-  usernames: false,
+  username_claim: false,
   lnurl: false,
 } as const;
 
 const ALL_ON = {
   address_list: true,
-  faucet: true,
-  usernames: true,
+  username_claim: true,
   lnurl: true,
 } as const;
 

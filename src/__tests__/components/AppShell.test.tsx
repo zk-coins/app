@@ -19,14 +19,13 @@ import { render, screen } from '@testing-library/react';
 import { AppShell } from '@/components/AppShell';
 
 const FEATURES_STATE = vi.hoisted(() => ({
-  USERNAMES: false,
   APPS_DIRECTORY: false,
   PASSKEY: false,
-  FAUCET: false,
   DEV_ROUTES: false,
   AUTO_LOCK: false,
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
+  USERNAME_CLAIM: false,
 }));
 vi.mock('@/lib/features', () => ({
   FEATURES: FEATURES_STATE,

@@ -24,19 +24,18 @@ import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api/client';
 
 const FEATURES_STATE = vi.hoisted(() => ({
-  USERNAMES: false,
   APPS_DIRECTORY: false,
   PASSKEY: false,
-  FAUCET: false,
   DEV_ROUTES: false,
   AUTO_LOCK: false,
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
+  USERNAME_CLAIM: false,
 }));
 // Home renders WalletScreen on the unlocked branch; WalletScreen
-// reads runtime FAUCET / USERNAMES via `useFeatures()`. The mock
-// must expose both the build-time `FEATURES` export AND the
-// `useFeatures` hook so the post-#102 features module shape works.
+// reads runtime capabilities via `useFeatures()`. The mock must
+// expose both the build-time `FEATURES` export AND the `useFeatures`
+// hook so the merged features-module shape works.
 vi.mock('@/lib/features', () => ({
   FEATURES: FEATURES_STATE,
   useFeatures: () => FEATURES_STATE,
