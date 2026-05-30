@@ -80,6 +80,13 @@ export const CapabilitiesSchema = z.object({
   address_list: z.boolean(),
   faucet: z.boolean(),
   usernames: z.boolean(),
+  // Server-side `username-claim` Cargo feature: write path for the
+  // `POST /api/username/claim` endpoint. Optional so an app build that
+  // talks to a node pre-PR-zk-coins/node#143 doesn't trip the schema —
+  // the capabilities store fills missing values from the fail-closed
+  // default (`false`). Once the migration window closes the field can
+  // be made required.
+  username_claim: z.boolean().optional(),
   lnurl: z.boolean(),
 });
 

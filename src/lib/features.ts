@@ -45,9 +45,15 @@ export const FEATURES = buildTime;
  * Merged feature set: build-time client flags + runtime server
  * capabilities. Subscribes to the capabilities store, so the host
  * component re-renders when `/api/info` lands.
+ *
+ * `USERNAME_CLAIM` is `?? false` because the server schema marks the
+ * field optional for one release cycle while node pre-PR-#143 is still
+ * deployed — fail-closed: an unknown server cannot opt the wallet into
+ * a write path it might not actually serve.
  */
 export function useFeatures() {
   const caps = useCapabilities((s) => s.capabilities);
+  const usernameClaim = caps.username_claim ?? false;
   // Memo on the underlying booleans so the returned object is reference-
   // stable across renders that didn't change a capability. Without this,
   // every render produces a fresh object and any consumer that puts
@@ -58,7 +64,8 @@ export function useFeatures() {
         ...buildTime,
         FAUCET: caps.faucet,
         USERNAMES: caps.usernames,
+        USERNAME_CLAIM: usernameClaim,
       }) as const,
-    [caps.faucet, caps.usernames],
+    [caps.faucet, caps.usernames, usernameClaim],
   );
 }

@@ -42,7 +42,10 @@ const e2eDir = path.join(repoRoot, 'e2e');
 const MVP_EXEMPT_TESTIDS = new Set([
   'passkey-restore-btn',
   'unlock-passkey-btn',
-  // FEATURES.USERNAMES gated — dead-stripped from PRD bundle.
+  // Gated on the runtime `username_claim` capability reported by
+  // /api/info — hosted DEV + PRD images report `false` (Cargo feature
+  // off on the node), so the button does not render against either.
+  // Self-hosters who flip the server-side feature ship their own E2E.
   'username-claim-btn',
   // Disabled loading states are visually transient -- Playwright cannot
   // reliably catch them without artificially slowing WASM calls.

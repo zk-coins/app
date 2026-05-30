@@ -38,7 +38,7 @@ describe('useFeatures (build-time + runtime merged)', () => {
     });
   });
 
-  it('exposes all six build-time flags plus FAUCET and USERNAMES', () => {
+  it('exposes all six build-time flags plus FAUCET, USERNAMES, and USERNAME_CLAIM', () => {
     const { result } = renderHook(() => useFeatures());
     expect(Object.keys(result.current).sort()).toEqual([
       'ADDRESS_ROTATION',
@@ -49,7 +49,45 @@ describe('useFeatures (build-time + runtime merged)', () => {
       'PASSKEY',
       'TOR_ROUTING',
       'USERNAMES',
+      'USERNAME_CLAIM',
     ]);
+  });
+
+  it('USERNAME_CLAIM is false from the fail-closed default and reflects /api/info', () => {
+    const { result, rerender } = renderHook(() => useFeatures());
+    expect(result.current.USERNAME_CLAIM).toBe(false);
+
+    useCapabilities.setState({
+      capabilities: {
+        address_list: false,
+        faucet: false,
+        usernames: true,
+        username_claim: true,
+        lnurl: false,
+      },
+      loaded: true,
+    });
+    rerender();
+    expect(result.current.USERNAME_CLAIM).toBe(true);
+  });
+
+  it('USERNAME_CLAIM defaults to false when the server omits the field (pre-PR-#143 node)', () => {
+    // Simulate an older node whose `/api/info` does not include
+    // `username_claim`. The Zod schema strips the optional, so the
+    // store's capability object lacks the key. `useFeatures` must
+    // fail-closed rather than coerce undefined to true.
+    useCapabilities.setState({
+      capabilities: {
+        address_list: false,
+        faucet: false,
+        usernames: true,
+        lnurl: false,
+        // no username_claim key
+      } as never,
+      loaded: true,
+    });
+    const { result } = renderHook(() => useFeatures());
+    expect(result.current.USERNAME_CLAIM).toBe(false);
   });
 
   it('returns FAUCET=false / USERNAMES=false from the fail-closed default', () => {

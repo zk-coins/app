@@ -166,7 +166,7 @@ export function WalletScreen() {
                 ? `${account.username}@zkcoins.app`
                 : zkAddress}
             </p>
-            {features.USERNAMES && !account.username && (
+            {features.USERNAME_CLAIM && features.USERNAMES && !account.username && (
               <form
                 className="flex items-center gap-2"
                 onSubmit={(e) => {
@@ -194,7 +194,7 @@ export function WalletScreen() {
                 </button>
               </form>
             )}
-            {features.USERNAMES && claimError && (
+            {features.USERNAME_CLAIM && features.USERNAMES && claimError && (
               <p className="text-[11px] text-bad">{claimError}</p>
             )}
             <button
