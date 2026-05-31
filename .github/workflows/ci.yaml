@@ -1,22 +1,20 @@
 name: CI
 
 on:
-  # Only trigger PRs against `develop`. The release PR (develop → main)
-  # is opened automatically by `auto-release-pr.yaml`, so `main` is
-  # deliberately omitted from `pull_request.branches`: a `push: develop`
-  # already covers each new SHA, and adding a PR-side trigger on `main`
-  # would queue a second `pull_request` run against the release PR for
-  # the very same commit — wasted CI minutes on a check `push: develop`
-  # already provides.
-  #
-  # Note: under the PR-number grouping in the `concurrency` block below
-  # the two runs would land in DIFFERENT groups (PR run keyed by PR
-  # number, push run keyed by `refs/heads/develop`), so the block would
-  # NOT deduplicate them. The omission is still correct — it avoids
-  # double-loading the same SHA — but the previous "concurrency cancels
-  # one of them" reasoning is obsolete.
+  # CI runs on every pull request regardless of target branch. This
+  # makes the default safe for the feature → staging → develop → main
+  # flow introduced in #138 and for any future stacked-PR shape —
+  # previously such PRs were silently skipped because
+  # `branches: [develop]` filtered them out, leaving every staging-
+  # bound PR without a pre-merge gate. Mirrors the node-side trigger
+  # shape in `zk-coins/node::ci.yaml`.
   pull_request:
-    branches: [develop]
+    types: [opened, synchronize, reopened, ready_for_review]
+  # `push: develop` keeps the authoritative post-merge gate. The
+  # release PR (develop → main) re-runs CI on its own `synchronize`
+  # event, but the app's release PR has no equivalent `ci:full` /
+  # heavy-gate semantics, so the push trigger remains as the canonical
+  # source of truth for the post-merge SHA.
   push:
     branches: [develop]
 
