@@ -395,7 +395,7 @@ export default function SendPage() {
             onChange={(e) => setRecipient(e.target.value)}
             spellCheck={false}
             autoComplete="off"
-            placeholder={usernameDomain ? `alice@${usernameDomain}` : 'alice@zkcoins.app'}
+            placeholder={usernameDomain ? `alice@${usernameDomain}` : ''}
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
         </div>
