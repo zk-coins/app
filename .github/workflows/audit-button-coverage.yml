@@ -1,8 +1,11 @@
 name: Audit Button Coverage
 
 on:
+  # Runs on every pull request regardless of target branch so the
+  # feature → staging → develop → main flow gets a pre-merge audit
+  # gate at every layer. See `ci.yaml` for the full rationale.
   pull_request:
-    branches: [develop]
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'src/**'
       - 'e2e/**'
