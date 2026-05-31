@@ -1,0 +1,50 @@
+name: OpenAPI Drift
+
+# Regenerates `openapi/zkcoins.yaml` from the Zod schemas and fails if
+# the on-disk artifact has drifted. Catches "forgot to run
+# `npm run generate:openapi`" before the missing diff lands on develop
+# and the published spec falls behind the schemas it was generated from
+# (issue #155).
+#
+# Slim job: just `npm ci` + the generator + a git-diff check. No build,
+# no tests — those live in `ci.yaml`.
+
+on:
+  pull_request:
+    branches: [develop]
+  push:
+    branches: [develop]
+
+concurrency:
+  group: openapi-drift-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  drift:
+    name: openapi/zkcoins.yaml is up-to-date
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Regenerate spec
+        run: npm run generate:openapi
+
+      - name: Fail on drift
+        run: |
+          if ! git diff --exit-code openapi/zkcoins.yaml; then
+            echo "::error::openapi/zkcoins.yaml is stale. Run \`npm run generate:openapi\` and commit the result."
+            exit 1
+          fi

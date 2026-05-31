@@ -20,6 +20,12 @@
  *   - Inferred response types are re-exported from `client.ts` under
  *     their historical names (`SendResponse`, `BalanceResponse`, …).
  *     Consumers import the type from `client.ts`, the schema from here.
+ *
+ * OpenAPI: these schemas are the source of truth for the
+ * `openapi/zkcoins.yaml` artifact. `scripts/generate-openapi.ts`
+ * registers them via `@asteasolutions/zod-to-openapi`'s `OpenAPIRegistry`
+ * and emits a 3.0 document. Drift between this file and the YAML is
+ * caught by the `OpenAPI Drift` CI job (issue #155).
  */
 
 import { z } from 'zod';
@@ -95,4 +101,67 @@ export const InfoResponseSchema = z.object({
   // (zk-coins/node pre-#29) doesn't trip the Zod gate. The
   // capabilities store applies a fail-closed default in that case.
   capabilities: CapabilitiesSchema.optional(),
+});
+
+// ---------------------------------------------------------------------
+// Closed enum of capability *names*. Enumerating these in the published
+// spec is a deliberate choice (issue #155, open question 3): a new flag
+// becomes a spec change reviewers see in the diff instead of a silent
+// `Record<string, bool>` growth. Stay in lock-step with the keys of
+// `CapabilitiesSchema` above and with `node::router.rs::Capabilities`.
+// ---------------------------------------------------------------------
+export const CapabilityNameSchema = z.enum(['address_list', 'username_claim', 'lnurl']);
+
+// ---------------------------------------------------------------------
+// Request bodies. These are not wired into `client.ts` (the client
+// builds the JSON inline) — they exist so the OpenAPI spec describes
+// the wire surface, not just the response side. Kept structurally
+// identical to the Rust handler types so a future round-trip test can
+// import them.
+// ---------------------------------------------------------------------
+
+export const MintRequestSchema = z.object({
+  account_address: z.string(),
+  amount: z.number().int().nonnegative(),
+});
+
+export const SendRequestSchema = z.object({
+  account_address: z.string(),
+  recipient: z.string(),
+  amount: z.number().int().nonnegative(),
+  public_key: z.string(),
+  next_public_key: z.string(),
+  // Legacy field — server ignores it post-`commitment_public_key`
+  // refactor, but deployed wallets still emit it. Kept on the wire
+  // contract so the spec is honest about what the server accepts.
+  prev_commitment_pubkey: z.string().optional(),
+  // Present on signed requests (the only path the production wallet
+  // takes); absent on unauthenticated test calls.
+  signature: z.string().optional(),
+  timestamp: z.number().int().optional(),
+});
+
+export const CommitRequestSchema = z.object({
+  proof_id: z.number().int().nonnegative(),
+  public_key: z.string(),
+  signature: z.string(),
+  message: z.string(),
+});
+
+export const ClaimUsernameRequestSchema = z.object({
+  username: z.string(),
+  address: z.string(),
+  public_key: z.string(),
+  signature: z.string(),
+  timestamp: z.number().int(),
+});
+
+// ---------------------------------------------------------------------
+// Error envelope. Server PR #31: failures arrive as 4xx/5xx with
+// `{success: false, error: "<string>"}`. Modelled as a shared component
+// so every error response in the spec points at one schema.
+// ---------------------------------------------------------------------
+export const ErrorResponseSchema = z.object({
+  success: z.literal(false),
+  error: z.string(),
 });
