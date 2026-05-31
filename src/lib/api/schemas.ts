@@ -73,13 +73,19 @@ export const ResolveUsernameResponseSchema = UsernameResponseSchema;
 
 // Server-side feature gates, mirrored from
 // `zk-coins/node::router.rs::Capabilities`. Each bool reflects a
-// compile-time Cargo feature on the server binary, so the client can
-// gate UI on a single source of truth instead of mirroring a parallel
-// `NEXT_PUBLIC_ENABLE_*` set.
+// compile-time Cargo feature on the server binary for an *opt-in*
+// feature — i.e. one that may or may not be served by a given node.
+//
+// MVP surface (mint/faucet endpoints, username resolve/display) is
+// permanently part of every node build and therefore not represented
+// here: there is no "is the server offering us mint today?" question
+// to ask. Only features that a self-hoster can switch off get a bit.
 export const CapabilitiesSchema = z.object({
   address_list: z.boolean(),
-  faucet: z.boolean(),
-  usernames: z.boolean(),
+  // Server-side `username-claim` Cargo feature: write path for the
+  // `POST /api/username/claim` endpoint. Read-side resolve/display is
+  // MVP and always available regardless of this bit.
+  username_claim: z.boolean(),
   lnurl: z.boolean(),
 });
 

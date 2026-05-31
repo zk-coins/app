@@ -29,17 +29,13 @@ export function WalletScreen() {
     useWalletStore();
   const { networkName, setNetworkName } = useNetworkStore();
   const features = useFeatures();
-  // Faucet is gated by the server-reported `faucet` capability. The
-  // additional runtime mainnet check is defence in depth: even if a
-  // DEV-style server (faucet=true) is wired to a mainnet network name,
-  // never show the faucet button.
-  // The node reports `network` as a display string (`"Mainnet"`,
+  // Faucet is MVP — every node ships `/api/mint`. The only gate is
+  // defence in depth against accidentally calling it against mainnet:
+  // the node reports `network` as a display string (`"Mainnet"`,
   // `"Mutinynet"`, …) — see `node::router::info_handler`. Compare
   // lowercased so a casing change on the server can't accidentally
-  // re-enable the faucet button on production. Both the build-time
-  // gate and the network check must hold; either alone is not enough.
-  const showFaucet =
-    features.FAUCET && networkName !== '' && networkName.toLowerCase() !== 'mainnet';
+  // re-enable the faucet button on production.
+  const showFaucet = networkName !== '' && networkName.toLowerCase() !== 'mainnet';
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [minting, setMinting] = useState(false);
@@ -56,9 +52,9 @@ export function WalletScreen() {
       .catch(() => {});
   }, [setNetworkName]);
 
-  // Balance polling. Username is only read when the feature is enabled —
-  // when off, the server is not expected to return a username and the
-  // `setUsername` call would be a no-op anyway.
+  // Balance polling. Username display is MVP, so the server always
+  // returns a `username` field when one is bound; pin the local copy
+  // on the first tick that reports it.
   useEffect(() => {
     if (!account) return;
     const tick = async () => {
@@ -69,7 +65,7 @@ export function WalletScreen() {
         // authoritative `num_sends`. Skip-no-op if already in sync —
         // see `syncNumPubkeys` in `stores/wallet.ts` for rationale.
         syncNumPubkeys(res.num_sends);
-        if (features.USERNAMES && res.username && !account.username) {
+        if (res.username && !account.username) {
           setUsername(res.username);
         }
       } catch {
@@ -79,10 +75,7 @@ export function WalletScreen() {
     tick();
     const interval = setInterval(tick, 5000);
     return () => clearInterval(interval);
-    // `features.USERNAMES` flips when `/api/info` lands; restart polling
-    // so the next tick picks up the new gate rather than waiting for an
-    // unrelated dep to change.
-  }, [account, setBalance, setUsername, syncNumPubkeys, features.USERNAMES]);
+  }, [account, setBalance, setUsername, syncNumPubkeys]);
 
   const zkAddress = account ? toZkAddress(account.address) : '';
 
@@ -162,11 +155,9 @@ export function WalletScreen() {
         {account && (
           <div className="mt-2 space-y-1.5">
             <p className="mono text-[12px] text-ink2">
-              {features.USERNAMES && account.username
-                ? `${account.username}@zkcoins.app`
-                : zkAddress}
+              {account.username ? `${account.username}@zkcoins.app` : zkAddress}
             </p>
-            {features.USERNAMES && !account.username && (
+            {features.USERNAME_CLAIM && !account.username && (
               <form
                 className="flex items-center gap-2"
                 onSubmit={(e) => {
@@ -194,7 +185,7 @@ export function WalletScreen() {
                 </button>
               </form>
             )}
-            {features.USERNAMES && claimError && (
+            {features.USERNAME_CLAIM && claimError && (
               <p className="text-[11px] text-bad">{claimError}</p>
             )}
             <button

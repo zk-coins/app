@@ -268,14 +268,14 @@ Where DEV inserts an extra screen on the way to an MVP screen, the test clicks t
 
 On screens we DO screenshot, the DEV bundle renders extra widgets the PRD bundle dead-strips. Every wallet, settings, send, and receive screenshot includes some of these:
 
-| DEV-only widget                                          | Gated by                               | Appears on                                       |
-| -------------------------------------------------------- | -------------------------------------- | ------------------------------------------------ |
-| `Apps` tab in BottomNav                                  | `FEATURES.APPS_DIRECTORY`              | Every shot of WalletScreen / Settings (AppShell) |
-| Username claim input + button on the wallet              | `FEATURES.USERNAMES`                   | §8.6 `balance-funded-desktop/mobile`             |
-| Faucet button on empty-balance banner                    | `FEATURES.FAUCET` + signet             | §8.6 `balance-zero-faucet-visible`               |
-| `@user` / `$user` resolver hint placeholder on Send      | `FEATURES.USERNAMES`                   | §8.7 `send-default`, `recipient-valid-username`  |
-| `dev-*` hostnames in FooterLinks                         | runtime (`hostname.startsWith('dev')`) | §8.1, §8.5, §8.9 (any screen with FooterLinks)   |
-| "Buy private BTC through DFX" link in no-balance variant | `FEATURES.APPS_DIRECTORY`              | §8.7 `send-no-funds-banner`                      |
+| DEV-only widget                                          | Gated by                                                                      | Appears on                                       |
+| -------------------------------------------------------- | ----------------------------------------------------------------------------- | ------------------------------------------------ |
+| `Apps` tab in BottomNav                                  | `FEATURES.APPS_DIRECTORY`                                                     | Every shot of WalletScreen / Settings (AppShell) |
+| Username claim input + button on the wallet              | `features.USERNAME_CLAIM` (runtime cap; off in hosted DEV+PRD)                | §8.6 `balance-funded-desktop/mobile`             |
+| Faucet button on empty-balance banner                    | `networkName !== mainnet` (MVP, no flag) — DEV runs Mutinynet, so it IS shown | §8.6 `balance-zero-faucet-visible`               |
+| `@user` / `$user` resolver hint placeholder on Send      | MVP — always rendered (username resolve is permanent)                         | §8.7 `send-default`, `recipient-valid-username`  |
+| `dev-*` hostnames in FooterLinks                         | runtime (`hostname.startsWith('dev')`)                                        | §8.1, §8.5, §8.9 (any screen with FooterLinks)   |
+| "Buy private BTC through DFX" link in no-balance variant | `FEATURES.APPS_DIRECTORY`                                                     | §8.7 `send-no-funds-banner`                      |
 
 A future PRD smoke pass (out of scope here) is the only way to assert the PRD-stripped variants exist. These specs deliberately do **not** try to assert PRD behaviour.
 
@@ -370,14 +370,14 @@ Settings page from Alice's wallet, all sections + every interactive widget the u
 
 WalletScreen balance area + copy chip + faucet banner under Alice and Bob.
 
-| #   | Step                        | Notes                                                                                                                    |
-| --- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| 1   | balance-funded-desktop      | Alice loaded. Balance $X + BTC value (masked), eye icon, address chip, Send/Receive enabled, no empty banner.            |
-| 2   | balance-funded-mobile       | Same, 375 × 812.                                                                                                         |
-| 3   | balance-hidden              | Eye toggle clicked → balance shows `••••`, EyeOff icon, BTC line also masked.                                            |
-| 4   | balance-zero-faucet-visible | Bob loaded. Empty-wallet banner with "Wallet is empty" + Faucet button (`FEATURES.FAUCET` on, DEV is signet).            |
-| 5   | balance-faucet-minting      | Faucet click — button shows "Minting…" disabled. Intercept `/api/mint` to delay 800 ms.                                  |
-| 6   | balance-copied-feedback     | Click address chip — Check icon + "copied" text appear for 1.5 s (assert via `waitForFunction` immediately after click). |
+| #   | Step                        | Notes                                                                                                                            |
+| --- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | balance-funded-desktop      | Alice loaded. Balance $X + BTC value (masked), eye icon, address chip, Send/Receive enabled, no empty banner.                    |
+| 2   | balance-funded-mobile       | Same, 375 × 812.                                                                                                                 |
+| 3   | balance-hidden              | Eye toggle clicked → balance shows `••••`, EyeOff icon, BTC line also masked.                                                    |
+| 4   | balance-zero-faucet-visible | Bob loaded. Empty-wallet banner with "Wallet is empty" + Faucet button (mint is MVP; DEV runs Mutinynet so the button is shown). |
+| 5   | balance-faucet-minting      | Faucet click — button shows "Minting…" disabled. Intercept `/api/mint` to delay 800 ms.                                          |
+| 6   | balance-copied-feedback     | Click address chip — Check icon + "copied" text appear for 1.5 s (assert via `waitForFunction` immediately after click).         |
 
 ### 8.7 `07-send.spec.ts` (13 tests / 12 shots, 1 no-shot)
 

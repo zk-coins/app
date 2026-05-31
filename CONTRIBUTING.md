@@ -87,14 +87,17 @@ The api_remote suite (`zk-coins/node/node/tests/api_remote.rs::TestWallet`) thre
 
 ### Branches
 
-| Branch    | Purpose                            | Deploy target |
-| --------- | ---------------------------------- | ------------- |
-| `develop` | Default branch, active development | DEV server    |
-| `main`    | Production releases                | PRD server    |
+| Branch    | Purpose                                                | Deploy target |
+| --------- | ------------------------------------------------------ | ------------- |
+| `staging` | Integration buffer — feature PRs land here first       | none          |
+| `develop` | Active development, promoted from `staging` in batches | DEV server    |
+| `main`    | Production releases, promoted from `develop`           | PRD server    |
 
-- **Push to `develop` via feature branch + PR** (branch ruleset active) — no PR required for regular work
-- **`main` is protected** — changes only via PR (auto-created by Release PR workflow)
-- Never force-push, never amend published commits
+- **Open feature PRs against `staging`** (not `develop`) — `staging` is the integration buffer where multiple feature branches accumulate before being batched into a single `develop` promotion. This keeps `develop` clean for DEV-deploy churn and gives reviewers a smaller blast radius per merge.
+- **`develop` and `main` are protected** — direct pushes are rejected. `develop` accepts only the auto-PR from `staging`; `main` accepts only the auto-PR from `develop`. Hotfixes still go through `staging` so the same review path applies.
+- **`develop` is auto-PR'd from `staging`** by `auto-release-pr-staging.yaml` whenever new commits land on `staging`. Merge that PR to promote the batch to DEV.
+- **`main` is auto-PR'd from `develop`** by `auto-release-pr.yaml`. Merge to release to PRD.
+- Never force-push, never amend published commits.
 
 ### Commit Messages
 
@@ -259,12 +262,13 @@ The Dockerfile sets placeholder values at build time (`NEXT_PUBLIC_API_URL_PLACE
 
 ## CI/CD
 
-| Workflow               | Trigger             | Action                                                   |
-| ---------------------- | ------------------- | -------------------------------------------------------- |
-| `ci.yaml`              | Push to develop, PR | Lint + Build                                             |
-| `deploy-dev.yaml`      | Push to develop     | Docker build → push `zkcoins/app:beta` → deploy to DEV   |
-| `deploy-prd.yaml`      | Push to main        | Docker build → push `zkcoins/app:latest` → deploy to PRD |
-| `auto-release-pr.yaml` | Push to develop     | Creates Release PR (develop → main)                      |
+| Workflow                       | Trigger             | Action                                                   |
+| ------------------------------ | ------------------- | -------------------------------------------------------- |
+| `ci.yaml`                      | Push to develop, PR | Lint + Build                                             |
+| `deploy-dev.yaml`              | Push to develop     | Docker build → push `zkcoins/app:beta` → deploy to DEV   |
+| `deploy-prd.yaml`              | Push to main        | Docker build → push `zkcoins/app:latest` → deploy to PRD |
+| `auto-release-pr-staging.yaml` | Push to staging     | Creates Promote PR (staging → develop)                   |
+| `auto-release-pr.yaml`         | Push to develop     | Creates Release PR (develop → main)                      |
 
 ### Before Pushing
 

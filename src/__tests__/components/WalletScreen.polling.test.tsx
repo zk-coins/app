@@ -14,7 +14,7 @@
  *   - account swap → new interval keyed to the new address
  *   - unmount → no further ticks
  *   - silent error → balance unchanged, no rethrow
- *   - username assignment guards (FEATURES.USERNAMES + first-only)
+ *   - username assignment (first-only — server is the source of truth)
  *
  * The component also calls `api.info` on mount; that is mocked to
  * resolve once so it doesn't intercept the balance assertions.
@@ -28,18 +28,17 @@ import { useNetworkStore } from '@/stores/network';
 import { api } from '@/lib/api/client';
 
 const FEATURES_STATE = vi.hoisted(() => ({
-  USERNAMES: false,
   APPS_DIRECTORY: false,
   PASSKEY: false,
-  FAUCET: false,
   DEV_ROUTES: false,
   AUTO_LOCK: false,
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
+  USERNAME_CLAIM: false,
 }));
 
-// `FEATURES` only exposes build-time client flags; the runtime
-// `FAUCET` / `USERNAMES` capabilities are served by `useFeatures()`.
+// `FEATURES` exposes build-time client flags only; runtime opt-in
+// capabilities (`USERNAME_CLAIM`, …) are served by `useFeatures()`.
 // The holder backs both so tests can keep flipping a single object.
 vi.mock('@/lib/features', () => ({
   FEATURES: FEATURES_STATE,
@@ -62,14 +61,13 @@ let infoSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   Object.assign(FEATURES_STATE, {
-    USERNAMES: false,
     APPS_DIRECTORY: false,
     PASSKEY: false,
-    FAUCET: false,
     DEV_ROUTES: false,
     AUTO_LOCK: false,
     ADDRESS_ROTATION: false,
     TOR_ROUTING: false,
+    USERNAME_CLAIM: false,
   });
   useNetworkStore.setState({
     apiUrl: 'https://test.api',
@@ -204,19 +202,7 @@ describe('WalletScreen — balance polling', () => {
     expect(useWalletStore.getState().balance).toBe(999);
   });
 
-  it('does not set username when FEATURES.USERNAMES is off, even if server returns one', async () => {
-    FEATURES_STATE.USERNAMES = false;
-    balanceSpy.mockResolvedValue({ balance: 1, username: 'alice', num_sends: 0 });
-
-    render(<WalletScreen />);
-    await waitFor(() => {
-      expect(useWalletStore.getState().balance).toBe(1);
-    });
-    expect(useWalletStore.getState().account?.username).toBeUndefined();
-  });
-
-  it('sets username on first response when FEATURES.USERNAMES is on and account has no username yet', async () => {
-    FEATURES_STATE.USERNAMES = true;
+  it('sets username on first response when account has no username yet', async () => {
     balanceSpy.mockResolvedValue({ balance: 1, username: 'alice', num_sends: 0 });
 
     render(<WalletScreen />);
@@ -225,8 +211,17 @@ describe('WalletScreen — balance polling', () => {
     });
   });
 
+  it('leaves the local username unset when the server response omits one', async () => {
+    balanceSpy.mockResolvedValue({ balance: 1, num_sends: 0 });
+
+    render(<WalletScreen />);
+    await waitFor(() => {
+      expect(useWalletStore.getState().balance).toBe(1);
+    });
+    expect(useWalletStore.getState().account?.username).toBeUndefined();
+  });
+
   it('does not overwrite an existing username on later ticks', async () => {
-    FEATURES_STATE.USERNAMES = true;
     useWalletStore.setState({ account: { ...ALICE, username: 'pinned' } });
     balanceSpy.mockResolvedValue({ balance: 1, username: 'different', num_sends: 0 });
 
@@ -260,9 +255,7 @@ describe('WalletScreen — faucet button gating', () => {
     // The node ships network names as display strings — see
     // `node::router::info_handler` — and Mainnet is the only value
     // the faucet must never appear on. Casing was the regression
-    // vector: `"Mainnet" !== "mainnet"` rendered the faucet on PRD
-    // even though the build-time FAUCET flag was on.
-    Object.assign(FEATURES_STATE, { FAUCET: true });
+    // vector: `"Mainnet" !== "mainnet"` rendered the faucet on PRD.
     infoSpy.mockResolvedValue({ network: 'Mainnet' });
     balanceSpy.mockResolvedValue({ balance: 0 });
 
@@ -276,8 +269,7 @@ describe('WalletScreen — faucet button gating', () => {
     expect(queryByTestId('faucet-btn')).toBeNull();
   });
 
-  it('renders the faucet button on a testnet (e.g. Mutinynet) with FAUCET=true and empty balance', async () => {
-    Object.assign(FEATURES_STATE, { FAUCET: true });
+  it('renders the faucet button on a testnet (e.g. Mutinynet) with empty balance', async () => {
     infoSpy.mockResolvedValue({ network: 'Mutinynet' });
     balanceSpy.mockResolvedValue({ balance: 0 });
 

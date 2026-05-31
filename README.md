@@ -28,6 +28,23 @@ Container images: **[hub.docker.com/r/zkcoins/app](https://hub.docker.com/r/zkco
 
 Full rationale: [docs.zkcoins.app/tech-decisions](https://docs.zkcoins.app/tech-decisions)
 
+## Trust Model
+
+The wallet itself lives **on-device**: seed material is encrypted in IndexedDB, and signing + BIP32 derivation run inside this app's WASM crate (`secp256k1` from the `bitcoin` crate). Wallet creation, restore, unlock, balance view, and transaction history are local operations and never reach a backend.
+
+**Send / Receive / Mint are different.** ZK proof generation runs on the configured zkCoins server (default `https://api.zkcoins.app`, set at build time via the `NEXT_PUBLIC_API_URL` env var in `src/stores/network.ts`). The app posts the full private witness — sender, recipient, amount, in-coin / out-coin slot layout, source aggregator data, account state — and the server returns a proof. That server therefore sees every transaction in cleartext. See the matching [Trust Model in zk-coins/server](https://github.com/zk-coins/server#trust-model) for the exact server-side call site and the columns that are persisted.
+
+The **on-chain footprint stays private** regardless: Plonky2 ensures nullifiers and Taproot inscriptions carry no readable transaction data. The trust boundary is the **server operator**, not the chain.
+
+| | Default (`api.zkcoins.app`) | Self-hosted server |
+| --- | --- | --- |
+| Wallet seed location | ✅ On-device only | ✅ On-device only |
+| On-chain privacy (vs. block explorers) | ✅ | ✅ |
+| Server sees plaintext transaction data | ❌ Yes — DFX runs the hosted node | ✅ No |
+| Setup effort | ✅ None | ⚠️ Run zk-coins/server + rebuild app |
+
+**If you need full transaction privacy, point the app at your own server.** Build a self-hosted backend from [`zk-coins/server`](https://github.com/zk-coins/server) (Docker image: `zkcoin/server:latest`) and rebuild this app with your URL: `NEXT_PUBLIC_API_URL=https://your-server npm run build`.
+
 ## Contributing
 
 **New PRs may only merge into `develop` if test coverage is 100% on the activated surface.** Code behind an `NEXT_PUBLIC_ENABLE_*` build-time flag or a server-side capability gate (`useFeatures().FAUCET`, `useFeatures().USERNAMES`) is excluded — feature-gated code does not need to be tested as long as the gate stays off in the PRD build. Concretely:
