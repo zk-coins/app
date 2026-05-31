@@ -18,6 +18,7 @@ import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import ReceivePage from '@/app/receive/page';
 import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 import { toZkAddress } from '@/lib/format';
 
 const routerReplace = vi.fn();
@@ -31,10 +32,12 @@ const ALICE = {
   numPubkeys: 0,
   xpriv: 'xprv-alice',
 };
-const ALICE_ZK = toZkAddress(ALICE.address);
+const DOMAIN = 'zkcoins.app';
+const ALICE_ZK = toZkAddress(ALICE.address, DOMAIN);
 
 beforeEach(() => {
   routerReplace.mockClear();
+  useNetworkStore.setState({ networkName: '', usernameDomain: DOMAIN });
   useWalletStore.setState({
     account: ALICE,
     balance: 0,
