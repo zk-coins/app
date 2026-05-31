@@ -41,10 +41,16 @@ export async function clearWalletState(page: Page): Promise<void> {
       if (db.name) indexedDB.deleteDatabase(db.name);
     }
   });
-  // After deleting the wallet IDB the app has no account loaded, so
-  // the 5 s balance-polling tick is not running and networkidle is
-  // safe here (unlike inside `snap()`, which warns against it).
-  await page.reload({ waitUntil: 'networkidle' });
+  // Wait only until the document hydrates. We don't wait for
+  // `networkidle` (500 ms of zero traffic) because the boot path now
+  // fires a fire-and-forget `/api/info` capabilities fetch and the
+  // service worker (public/sw.js) does stale-while-revalidate for
+  // every cached asset — on CI those background fetches can keep the
+  // 500 ms window from ever closing, deadlocking globalSetup. The
+  // caller's next step is a testid-based locator assertion, which
+  // is the real readiness signal we want anyway. Same rationale as
+  // `snap()` in `screenshot.ts`.
+  await page.reload({ waitUntil: 'domcontentloaded' });
 }
 
 /**
