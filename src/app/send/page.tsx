@@ -10,7 +10,7 @@ import { ApiError, api, type CommitRequest } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { initWasm } from '@zkcoins/wasm';
 import { SATS_PER_BTC, formatBtc, formatBtcCompact } from '@/lib/format';
-import { useFeatures } from '@/lib/features';
+import { FEATURES } from '@/lib/features';
 
 /* --- In-flight commit crash recovery --- */
 
@@ -36,7 +36,6 @@ export default function SendPage() {
   const router = useRouter();
   const { account, balance, setBalance, incrementPubkeys, syncNumPubkeys, addTransaction } =
     useWalletStore();
-  const features = useFeatures();
 
   // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {
@@ -110,21 +109,18 @@ export default function SendPage() {
     setError(null);
     try {
       // Resolve username to address if the recipient looks like one.
-      // Username resolution is gated by the server-reported `usernames`
-      // capability; when off, only raw hex addresses are accepted and
-      // `api.resolveUsername` is never called.
+      // Username resolve is MVP and always available on every node —
+      // raw hex addresses skip the round-trip via the regex fast-path.
       let resolvedRecipient = recipient.trim();
-      if (features.USERNAMES) {
-        if (resolvedRecipient.startsWith('$')) {
-          resolvedRecipient = resolvedRecipient.slice(1);
-        }
-        if (resolvedRecipient.endsWith('@zkcoins.app')) {
-          resolvedRecipient = resolvedRecipient.replace('@zkcoins.app', '');
-        }
-        if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
-          const resolved = await api.resolveUsername(resolvedRecipient);
-          resolvedRecipient = resolved.address;
-        }
+      if (resolvedRecipient.startsWith('$')) {
+        resolvedRecipient = resolvedRecipient.slice(1);
+      }
+      if (resolvedRecipient.endsWith('@zkcoins.app')) {
+        resolvedRecipient = resolvedRecipient.replace('@zkcoins.app', '');
+      }
+      if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
+        const resolved = await api.resolveUsername(resolvedRecipient);
+        resolvedRecipient = resolved.address;
       }
 
       const wasm = await initWasm();
@@ -249,16 +245,7 @@ export default function SendPage() {
     } finally {
       setSending(false);
     }
-  }, [
-    account,
-    recipient,
-    amount,
-    setBalance,
-    incrementPubkeys,
-    syncNumPubkeys,
-    addTransaction,
-    features.USERNAMES,
-  ]);
+  }, [account, recipient, amount, setBalance, incrementPubkeys, syncNumPubkeys, addTransaction]);
 
   if (!account) {
     return (
@@ -366,7 +353,7 @@ export default function SendPage() {
             <Link href="/receive" className="text-bitcoin hover:underline">
               Receive
             </Link>
-            {features.APPS_DIRECTORY && (
+            {FEATURES.APPS_DIRECTORY && (
               <>
                 {' '}
                 or{' '}
@@ -389,7 +376,7 @@ export default function SendPage() {
             onChange={(e) => setRecipient(e.target.value)}
             spellCheck={false}
             autoComplete="off"
-            placeholder={features.USERNAMES ? 'alice@zkcoins.app' : '0x…'}
+            placeholder="alice@zkcoins.app"
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
         </div>

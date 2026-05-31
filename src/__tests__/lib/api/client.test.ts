@@ -150,13 +150,12 @@ describe('api.info', () => {
   it('parses the capabilities object when the server includes it', async () => {
     mockJsonResponse<z.infer<typeof InfoResponseSchema>>({
       network: 'Mutinynet',
-      capabilities: { address_list: true, faucet: true, usernames: true, lnurl: false },
+      capabilities: { address_list: true, username_claim: true, lnurl: false },
     });
     const result = await api.info();
     expect(result.capabilities).toEqual({
       address_list: true,
-      faucet: true,
-      usernames: true,
+      username_claim: true,
       lnurl: false,
     });
   });

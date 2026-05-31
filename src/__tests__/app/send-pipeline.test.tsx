@@ -15,8 +15,8 @@
  *     banner state, `clearInflightCommit` on success, and the
  *     preservation of the inflight payload on failure (next reload
  *     retries).
- *   - Username resolution branches gated by `FEATURES.USERNAMES`
- *     (`@zkcoins.app` suffix, `$` prefix, hex fast-path).
+ *   - Username resolution branches (`@zkcoins.app` suffix, `$`
+ *     prefix, hex fast-path) — resolve is MVP and always available.
  *   - The `account.xpriv` defensive throw.
  *
  * `vi.useFakeTimers()` advances the 2 s / 4 s backoff and the 100 ms
@@ -36,18 +36,17 @@ import { useNetworkStore } from '@/stores/network';
 // `vi.hoisted` keeps the holder defined when the hoisted `vi.mock`
 // factory evaluates.
 const FEATURES_STATE = vi.hoisted(() => ({
-  USERNAMES: false,
   APPS_DIRECTORY: false,
   PASSKEY: false,
-  FAUCET: false,
   DEV_ROUTES: false,
   AUTO_LOCK: false,
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
+  USERNAME_CLAIM: false,
 }));
 
-// `FEATURES` only exposes build-time client flags; the runtime
-// `FAUCET` / `USERNAMES` capabilities are served by `useFeatures()`.
+// `FEATURES` exposes build-time client flags only; runtime opt-in
+// capabilities (`USERNAME_CLAIM`, …) are served by `useFeatures()`.
 // The holder backs both so tests can keep flipping a single object.
 vi.mock('@/lib/features', () => ({
   FEATURES: FEATURES_STATE,
@@ -105,14 +104,13 @@ beforeEach(() => {
   routerPush.mockClear();
   // Reset FEATURES to PRD-equivalent (everything off).
   Object.assign(FEATURES_STATE, {
-    USERNAMES: false,
     APPS_DIRECTORY: false,
     PASSKEY: false,
-    FAUCET: false,
     DEV_ROUTES: false,
     AUTO_LOCK: false,
     ADDRESS_ROTATION: false,
     TOR_ROUTING: false,
+    USERNAME_CLAIM: false,
   });
   globalThis.fetch = mockFetch;
   useNetworkStore.setState({ apiUrl: 'https://test-api.zkcoins.app' });
@@ -376,9 +374,8 @@ describe('SendPage — in-flight commit recovery on mount', () => {
   });
 });
 
-describe('SendPage — username resolution (FEATURES.USERNAMES on)', () => {
+describe('SendPage — username resolution (MVP, always on)', () => {
   it('strips the @zkcoins.app suffix and calls /api/username/resolve', async () => {
-    FEATURES_STATE.USERNAMES = true;
     const user = userEvent.setup();
 
     enqueueOk({ username: 'bob', address: RECIPIENT_HEX }); // resolveUsername
@@ -400,7 +397,6 @@ describe('SendPage — username resolution (FEATURES.USERNAMES on)', () => {
   });
 
   it('strips the leading $ prefix before resolving', async () => {
-    FEATURES_STATE.USERNAMES = true;
     const user = userEvent.setup();
 
     enqueueOk({ username: 'alice', address: RECIPIENT_HEX });
@@ -419,7 +415,6 @@ describe('SendPage — username resolution (FEATURES.USERNAMES on)', () => {
   });
 
   it('skips resolution for a 64-char hex recipient', async () => {
-    FEATURES_STATE.USERNAMES = true;
     const user = userEvent.setup();
 
     enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys }); // pre-send balance
@@ -437,7 +432,6 @@ describe('SendPage — username resolution (FEATURES.USERNAMES on)', () => {
   });
 
   it('surfaces the API error when username resolution fails', async () => {
-    FEATURES_STATE.USERNAMES = true;
     const user = userEvent.setup();
 
     enqueueErr(404, 'Username not found');

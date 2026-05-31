@@ -13,7 +13,7 @@ describe('FEATURES (build-time client flags)', () => {
     expect(typeof FEATURES.TOR_ROUTING).toBe('boolean');
   });
 
-  it('exposes exactly the six build-time flags — FAUCET / USERNAMES are server-side', () => {
+  it('exposes exactly the six build-time flags — runtime capabilities live on useFeatures()', () => {
     expect(Object.keys(FEATURES).sort()).toEqual([
       'ADDRESS_ROTATION',
       'APPS_DIRECTORY',
@@ -30,46 +30,40 @@ describe('useFeatures (build-time + runtime merged)', () => {
     useCapabilities.setState({
       capabilities: {
         address_list: false,
-        faucet: false,
-        usernames: false,
+        username_claim: false,
         lnurl: false,
       },
       loaded: false,
     });
   });
 
-  it('exposes all six build-time flags plus FAUCET and USERNAMES', () => {
+  it('exposes all six build-time flags plus USERNAME_CLAIM', () => {
     const { result } = renderHook(() => useFeatures());
     expect(Object.keys(result.current).sort()).toEqual([
       'ADDRESS_ROTATION',
       'APPS_DIRECTORY',
       'AUTO_LOCK',
       'DEV_ROUTES',
-      'FAUCET',
       'PASSKEY',
       'TOR_ROUTING',
-      'USERNAMES',
+      'USERNAME_CLAIM',
     ]);
   });
 
-  it('returns FAUCET=false / USERNAMES=false from the fail-closed default', () => {
-    const { result } = renderHook(() => useFeatures());
-    expect(result.current.FAUCET).toBe(false);
-    expect(result.current.USERNAMES).toBe(false);
-  });
-
-  it('reflects capability store updates after a successful /api/info load', () => {
+  it('USERNAME_CLAIM is false from the fail-closed default and reflects /api/info', () => {
     const { result, rerender } = renderHook(() => useFeatures());
-    expect(result.current.FAUCET).toBe(false);
+    expect(result.current.USERNAME_CLAIM).toBe(false);
 
     useCapabilities.setState({
-      capabilities: { address_list: true, faucet: true, usernames: true, lnurl: true },
+      capabilities: {
+        address_list: false,
+        username_claim: true,
+        lnurl: false,
+      },
       loaded: true,
     });
     rerender();
-
-    expect(result.current.FAUCET).toBe(true);
-    expect(result.current.USERNAMES).toBe(true);
+    expect(result.current.USERNAME_CLAIM).toBe(true);
   });
 
   it('returns a stable reference when capability values are unchanged', () => {

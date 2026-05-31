@@ -37,12 +37,22 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 const srcDir = path.join(repoRoot, 'src');
 const e2eDir = path.join(repoRoot, 'e2e');
 
-// MVP scope: src/lib/features.ts FEATURES.PASSKEY etc. are dead-stripped
-// from the PRD bundle. We don't require e2e coverage for those testids.
+// MVP scope: testids on this list are not required to have e2e coverage.
+// Two exemption grounds apply:
+//   (a) Build-time DCE — the testid lives behind a `NEXT_PUBLIC_ENABLE_*`
+//       flag that is off in the PRD bundle, so Next.js strips the code
+//       and there is nothing to drive against on the hosted images.
+//   (b) Runtime capability always false — the testid lives behind an
+//       opt-in server capability bit (`username_claim`, …) that is off
+//       on both hosted DEV and PRD nodes, so the element never renders.
+//       Self-hosters who flip the capability ship their own E2E.
 const MVP_EXEMPT_TESTIDS = new Set([
   'passkey-restore-btn',
   'unlock-passkey-btn',
-  // FEATURES.USERNAMES gated — dead-stripped from PRD bundle.
+  // Gated on the runtime `username_claim` capability reported by
+  // /api/info — hosted DEV + PRD images report `false` (Cargo feature
+  // off on the node), so the button does not render against either.
+  // Self-hosters who flip the server-side feature ship their own E2E.
   'username-claim-btn',
   // Disabled loading states are visually transient -- Playwright cannot
   // reliably catch them without artificially slowing WASM calls.
