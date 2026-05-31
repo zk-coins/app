@@ -1,4 +1,4 @@
-name: Auto Release PR (staging → develop)
+name: Auto Promote PR (staging → develop)
 
 on:
   push:
@@ -14,8 +14,8 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  create-release-pr:
-    name: Create Release PR
+  create-promote-pr:
+    name: Create Promote PR
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -42,20 +42,20 @@ jobs:
           echo "has_changes=$([[ $DIFF_COUNT -gt 0 ]] && echo 'true' || echo 'false')" >> $GITHUB_OUTPUT
           echo "commit_count=$DIFF_COUNT" >> $GITHUB_OUTPUT
 
-      - name: Create Release PR
+      - name: Create Promote PR
         if: steps.check-pr.outputs.pr_exists == 'false' && steps.check-diff.outputs.has_changes == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           COMMIT_COUNT: ${{ steps.check-diff.outputs.commit_count }}
         run: |
           printf '%s\n' \
-            "## Automatic Staging Promotion" \
+            "## Automatic Promote PR" \
             "" \
             "**Commits:** ${COMMIT_COUNT} new commit(s)" \
             "" \
             "- [ ] Review all changes" \
             "- [ ] Verify CI passes" \
-            "- [ ] Merge when ready to promote to DEV (develop)" \
+            "- [ ] Merge to promote staging to develop (deploys to DEV)" \
             > /tmp/pr-body.md
 
           gh pr create \
