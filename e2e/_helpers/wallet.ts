@@ -21,10 +21,9 @@
 import type { Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 
-export const DEFAULT_PASSWORD = 'TestPass123!';
+import { getUsernameDomain, zkAddressRegex } from './api';
 
-/** Address chip format the wallet renders: `{first8hex}@zkcoins.app`. */
-const ZK_ADDRESS_RE = /[0-9a-f]{8}@zkcoins\.app/;
+export const DEFAULT_PASSWORD = 'TestPass123!';
 
 /**
  * Wipe localStorage + IndexedDB for the current origin. Run this in
@@ -59,7 +58,8 @@ export async function clearWalletState(page: Page): Promise<void> {
  *
  * Returns the 12 BIP-39 words and the full 64-hex address read off the
  * copy-address button's `title` attribute (the visible chip is truncated
- * to `{8hex}@zkcoins.app`).
+ * to `{8hex}@<username_domain>` — the domain is read from `/api/info` so
+ * the helper matches whichever stage the suite is pointed at).
  *
  * Assumes a blank-slate state (no wallet in IDB). Caller must `clearWalletState`
  * first.
@@ -109,11 +109,12 @@ export async function createSeedWallet(
 
   // The full 64-hex address is exposed via the `title` attribute on the
   // copy-address button in WalletScreen (the visible text is the truncated
-  // `{8hex}@zkcoins.app` chip). Wait for the chip to render, then read the
-  // title from the surrounding `<button>` for the canonical form.
-  const chip = page.locator(`text=${ZK_ADDRESS_RE}`).first();
+  // `{8hex}@<username_domain>` chip). Wait for the chip to render, then
+  // read the title from the surrounding `<button>` for the canonical form.
+  const domain = await getUsernameDomain();
+  const chip = page.locator(`text=${zkAddressRegex(domain)}`).first();
   await expect(chip).toBeVisible({ timeout: 30_000 });
-  const copyButton = page.locator(`button:has-text("@zkcoins.app")`).first();
+  const copyButton = page.locator(`button:has-text("@${domain}")`).first();
   const address = (await copyButton.getAttribute('title'))?.trim() ?? '';
   if (!address || address.length < 64) {
     throw new Error(
@@ -149,7 +150,8 @@ export async function restoreSeedWallet(
   await page.getByTestId('seed-import-password-confirm-input').fill(password);
   await page.getByTestId('seed-import-submit-btn').click();
 
-  const chip = page.locator(`text=${ZK_ADDRESS_RE}`).first();
+  const domain = await getUsernameDomain();
+  const chip = page.locator(`text=${zkAddressRegex(domain)}`).first();
   await expect(chip).toBeVisible({ timeout: 30_000 });
   const address = (await chip.textContent())?.trim() ?? '';
   return { address };
@@ -166,7 +168,10 @@ export async function unlockWithPassword(
   await expect(page.getByTestId('unlock-heading')).toBeVisible({ timeout: 10_000 });
   await page.getByTestId('unlock-password-input').fill(password);
   await page.getByTestId('unlock-submit-btn').click();
-  await expect(page.locator(`text=${ZK_ADDRESS_RE}`).first()).toBeVisible({ timeout: 15_000 });
+  const domain = await getUsernameDomain();
+  await expect(page.locator(`text=${zkAddressRegex(domain)}`).first()).toBeVisible({
+    timeout: 15_000,
+  });
 }
 
 /**

@@ -51,7 +51,7 @@ What exists today in `e2e/`:
 | 2   | Determinism                         | `globalSetup` creates **two fresh random accounts (Alice + Bob)** before every run                                                                             | Every step starts from a byte-identical state across runs except the on-chain address. Wallet addresses are masked in every screenshot.       |
 | 3   | Baseline platforms                  | **Linux only**, generated in CI                                                                                                                                | Halves baseline count to 70. Developers can compare locally but only CI produces canonical PNGs.                                              |
 | 4   | Cross-spec wallet sharing           | Onboarding specs create their own throwaway wallets. Send / Receive / Balance / Disconnect specs reuse Alice + Bob.                                            | Onboarding flows must start from a blank slate; everything else benefits from shared setup speed.                                             |
-| 5   | Masks for non-deterministic content | Addresses (`{8hex}@zkcoins.app`), mnemonic word grid, balance numbers from server, ISO timestamps, copy hash, QR code                                          | Anything that varies between runs is masked at the locator level so the rest of the screen is pixel-checked.                                  |
+| 5   | Masks for non-deterministic content | Addresses (`{8hex}@<username_domain>`, suffix read from `/api/info`), mnemonic word grid, balance numbers from server, ISO timestamps, copy hash, QR code      | Anything that varies between runs is masked at the locator level so the rest of the screen is pixel-checked.                                  |
 | 6   | Screenshot tolerance                | `maxDiffPixelRatio: 0.01`, `animations: 'disabled'`, `caret: 'hide'`, `scale: 'css'`                                                                           | Already the project default in `playwright.config.ts`. We keep it tight — 1% lets through font-rendering jitter but flags any real UI change. |
 | 7   | One spec per MVP function           | `01-onboarding-welcome.spec.ts` … `11-cross-spec-redirects.spec.ts` (11 files)                                                                                 | Numeric prefixes drive a stable run order. Failure points to a single function. PRs stay small.                                               |
 | 8   | Helper layout                       | `e2e/_helpers/{api.ts, wallet.ts, screenshot.ts, fixtures.ts}`                                                                                                 | Underscore prefix keeps helpers out of `testDir` glob. Specs only import from these helpers — no copy-pasted setup.                           |
@@ -152,7 +152,7 @@ export async function createSeedWallet(
   password = 'TestPass123!',
 ): Promise<{
   mnemonic: string[]; // captured from the reveal screen
-  address: string; // {8hex}@zkcoins.app
+  address: string; // {8hex}@<username_domain> — suffix read from /api/info
 }>;
 
 export async function restoreSeedWallet(

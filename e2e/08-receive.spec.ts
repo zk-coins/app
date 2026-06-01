@@ -13,6 +13,7 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { aliceLogin } from './_helpers/fixtures';
+import { getUsernameDomain, zkAddressRegex } from './_helpers/api';
 import { snap, setViewport } from './_helpers/screenshot';
 
 /** Navigate Wallet → /receive via the in-app Receive link. */
@@ -54,7 +55,9 @@ test.describe('Receive Bitcoin', () => {
     await goToReceive(page);
     await page.getByTestId('receive-back-link').click();
     // The chip is the most reliable marker for WalletScreen.
-    await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
+    // Suffix is server-reported via /api/info.username_domain (per-stage).
+    const chip = zkAddressRegex(await getUsernameDomain());
+    await expect(page.locator(`text=${chip}`).first()).toBeVisible({
       timeout: 10_000,
     });
     // Wait for the balance tick to land so this captures the post-receive
