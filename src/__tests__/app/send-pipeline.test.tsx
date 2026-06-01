@@ -113,7 +113,10 @@ beforeEach(() => {
     USERNAME_CLAIM: false,
   });
   globalThis.fetch = mockFetch;
-  useNetworkStore.setState({ apiUrl: 'https://test-api.zkcoins.app' });
+  useNetworkStore.setState({
+    apiUrl: 'https://test-api.zkcoins.app',
+    usernameDomain: 'zkcoins.app',
+  });
   useWalletStore.setState({
     account: ALICE,
     balance: ONE_BTC_SATS,
@@ -429,6 +432,29 @@ describe('SendPage — username resolution (MVP, always on)', () => {
     // First call is /api/balance (pre-send hydration), then /api/send.
     expect(mockFetch.mock.calls[0][0]).toContain('/api/balance');
     expect(mockFetch.mock.calls[1][0]).toContain('/api/send');
+  });
+
+  it('does NOT strip a foreign-stage suffix — cross-network safety', async () => {
+    // On a PRD wallet (usernameDomain = "zkcoins.app"), a DEV-suffixed
+    // recipient must not collapse to a bare username and route against
+    // the wrong stage. The unrecognised suffix falls through to the
+    // username resolver, which the server rejects cleanly.
+    FEATURES_STATE.USERNAMES = true;
+    const user = userEvent.setup();
+
+    enqueueErr(404, 'Username not found');
+
+    render(<SendPage />);
+    await clickThroughToConfirm(user, 'bob@dev.zkcoins.app');
+    await user.click(screen.getByTestId('send-confirm-btn'));
+
+    expect(await screen.findByTestId('send-error')).toHaveTextContent(/Username not found/);
+    // The full foreign-suffixed string was forwarded to resolve — no
+    // silent strip to `bob` against the PRD account map.
+    expect(mockFetch.mock.calls[0][0]).toBe(
+      'https://test-api.zkcoins.app/api/username/resolve/bob%40dev.zkcoins.app',
+    );
+    expect(mockFetch.mock.calls.every(([url]) => !String(url).includes('/api/send'))).toBe(true);
   });
 
   it('surfaces the API error when username resolution fails', async () => {
