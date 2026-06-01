@@ -11,6 +11,8 @@
 
 import { expect, type Locator, type Page } from '@playwright/test';
 
+import { getUsernameDomain, zkAddressRegex } from './api';
+
 export interface SnapOptions {
   mask?: Locator[];
   fullPage?: boolean;
@@ -20,10 +22,15 @@ export interface SnapOptions {
   clip?: { x: number; y: number; width: number; height: number };
 }
 
-function defaultMasks(page: Page): Locator[] {
+async function defaultMasks(page: Page): Promise<Locator[]> {
+  // The chip mask's regex is derived from the server-reported
+  // `username_domain` so it matches whichever stage the suite is pointed
+  // at (`dev.zkcoins.app` on DEV, `zkcoins.app` on PRD). See
+  // `api.ts::getUsernameDomain`.
+  const domain = await getUsernameDomain();
   return [
     // Wallet-address chip — content match, no attribute needed.
-    page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/'),
+    page.locator(`text=${zkAddressRegex(domain)}`),
     // Numeric balance — mask only the volatile USD + BTC value texts,
     // NOT the whole balance card. The previous `[data-testid="balance-value"]`
     // mask covered the toggle-button icon and the surrounding chrome,
@@ -87,7 +94,7 @@ export async function snap(page: Page, name: string, opts: SnapOptions = {}): Pr
   await page.waitForLoadState('domcontentloaded');
   await page.evaluate(() => document.fonts?.ready);
   await applyStabilizer(page);
-  const masks = [...defaultMasks(page), ...(opts.mask ?? [])];
+  const masks = [...(await defaultMasks(page)), ...(opts.mask ?? [])];
   await expect(page).toHaveScreenshot(`${name}.png`, {
     fullPage: opts.fullPage ?? false,
     mask: masks,
