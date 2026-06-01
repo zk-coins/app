@@ -27,7 +27,7 @@ const HIDDEN = '••••';
 export function WalletScreen() {
   const { account, balance, transactions, setBalance, setUsername, syncNumPubkeys } =
     useWalletStore();
-  const { networkName, setNetworkName } = useNetworkStore();
+  const { networkName, usernameDomain, setNetworkName, setUsernameDomain } = useNetworkStore();
   const features = useFeatures();
   // Faucet is MVP — every node ships `/api/mint`. The only gate is
   // defence in depth against accidentally calling it against mainnet:
@@ -44,13 +44,20 @@ export function WalletScreen() {
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
 
-  // Fetch network info once.
+  // Fetch network info once. The server is the source of truth for the
+  // username domain — see `useNetworkStore` for the rationale.
   useEffect(() => {
     api
       .info()
-      .then((info) => setNetworkName(info.network))
+      .then((info) => {
+        setNetworkName(info.network);
+        // Pre-#32 servers omit this field; the store stays at the empty
+        // string default so `toZkAddress` keeps returning `''` (loading
+        // state) until a post-#32 server reports its hostname.
+        setUsernameDomain(info.username_domain ?? '');
+      })
       .catch(() => {});
-  }, [setNetworkName]);
+  }, [setNetworkName, setUsernameDomain]);
 
   // Balance polling. Username display is MVP, so the server always
   // returns a `username` field when one is bound; pin the local copy
@@ -77,7 +84,7 @@ export function WalletScreen() {
     return () => clearInterval(interval);
   }, [account, setBalance, setUsername, syncNumPubkeys]);
 
-  const zkAddress = account ? toZkAddress(account.address) : '';
+  const zkAddress = account ? toZkAddress(account.address, usernameDomain) : '';
 
   const claimUsername = useCallback(async () => {
     if (!account || !claimInput || !account.xpriv) return;
@@ -155,7 +162,9 @@ export function WalletScreen() {
         {account && (
           <div className="mt-2 space-y-1.5">
             <p className="mono text-[12px] text-ink2">
-              {account.username ? `${account.username}@zkcoins.app` : zkAddress}
+              {account.username && usernameDomain
+                ? `${account.username}@${usernameDomain}`
+                : zkAddress}
             </p>
             {features.USERNAME_CLAIM && !account.username && (
               <form
