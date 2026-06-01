@@ -52,15 +52,18 @@ export default defineConfig({
       // 2. Global aggregate (now also includes `src/app/**` +
       //    `src/components/**`) — set just below the current numbers
       //    so any regression that drops coverage on the UI surface
-      //    fails CI, without forcing every page.tsx to ship with a
-      //    unit-level component test before the rest of the audit
-      //    is closed. Raise these as more tests land.
+      //    fails CI. Calibrated after the second wave of UI tests
+      //    (home / receive / settings / Onboarding-create) landed —
+      //    the WalletScreen-branches PR (#109) was retired as
+      //    obsolete after the Capabilities-shrink refactor, so the
+      //    aggregate settles ~85 % on lines instead of the ~90 %
+      //    the original plan assumed.
       thresholds: {
         // Global aggregate over every included file (incl. lib/stores).
-        lines: 75,
-        statements: 75,
-        functions: 75,
-        branches: 60,
+        lines: 85,
+        statements: 85,
+        functions: 86,
+        branches: 74,
         // Original strict gate, applied per-glob aggregate. The
         // aggregate over `src/lib/**` (and `src/stores/**`) must be
         // 100 %, which — since aggregate = covered / total — is
