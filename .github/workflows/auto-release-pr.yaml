@@ -58,7 +58,13 @@ jobs:
             "- [ ] Merge when ready for production" \
             > /tmp/pr-body.md
 
+          # Created as DRAFT — same rationale as auto-release-pr-staging.yaml:
+          # the operator's explicit `gh pr ready` toggle fires the
+          # `ready_for_review` event that triggers ci.yaml. PRs opened
+          # via GITHUB_TOKEN would otherwise hit GitHub's anti-
+          # recursion policy and skip downstream workflows.
           gh pr create \
+            --draft \
             --base main \
             --head develop \
             --title "Release: develop -> main" \

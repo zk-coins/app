@@ -21,6 +21,7 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { clearWalletState, waitForBalanceLoaded } from './_helpers/wallet';
+import { getUsernameDomain, zkAddressRegex } from './_helpers/api';
 import { snap, setViewport } from './_helpers/screenshot';
 
 const PASSWORD = 'TestPass123!';
@@ -150,7 +151,9 @@ test.describe('Create wallet — seed phrase', () => {
     await page.getByTestId('seed-password-confirm-input').fill(PASSWORD);
     await page.getByTestId('seed-create-btn').click();
     // Wait for the wallet screen — the chip is the most reliable marker.
-    await expect(page.locator('text=/[0-9a-f]{8}@zkcoins\\.app/').first()).toBeVisible({
+    // Suffix is server-reported via /api/info.username_domain (per-stage).
+    const chip = zkAddressRegex(await getUsernameDomain());
+    await expect(page.locator(`text=${chip}`).first()).toBeVisible({
       timeout: 30_000,
     });
     // Block on the first /api/balance tick so the banner check below is

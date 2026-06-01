@@ -127,7 +127,7 @@ test.describe('Disconnect wallet', () => {
     // Wallet still there — the heading + the Disconnect button still
     // render (both are `{account && (…)}`-gated, so their continued
     // presence proves the wallet wasn't cleared). Settings page shows
-    // the full hex address rather than the `{8hex}@zkcoins.app` chip,
+    // the full hex address rather than the `{8hex}@<username_domain>` chip,
     // so don't match the chip regex here.
     await expect(page.getByTestId('settings-heading')).toBeVisible();
     await expect(page.getByTestId('settings-disconnect-btn')).toBeVisible();
