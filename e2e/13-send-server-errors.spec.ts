@@ -1,24 +1,26 @@
 /**
  * Spec 13 — Send Bitcoin: server `ApiError` → German toast (issue #99).
  *
- * Server PR #31 introduced the structured 4xx/5xx failure contract:
- * `<4xx|5xx> + {success: false, error: "<string>"}`. The app maps
- * each known server-error string to a translated user-facing message
- * via `src/lib/api/errorMessages.ts::userMessageFor`. These specs
- * assert the end-to-end pipeline (fetch → `ApiError` → `userMessageFor`
- * → `send-error` toast) by intercepting `/api/send` with a
- * `page.route()` mock that returns a deterministic structured response.
+ * The Jobs API (node PR #161) admits a send at `POST /api/jobs/send` and
+ * verifies the signed request synchronously before enqueueing: a bad
+ * request (unknown account, insufficient funds, bad signature) 4xx/5xxs
+ * at admit with the `{error: "<string>"}` envelope (`JobErrorResponse`).
+ * The app maps each known server-error string to a translated
+ * user-facing message via `src/lib/api/errorMessages.ts::userMessageFor`.
  *
- * The mock fires *after* the local WASM signing path has completed,
- * so the unmount-on-Confirm race the previous `err-banner` snapshot
- * (07-send.spec.ts § dropped notes) ran into is irrelevant here — the
- * UI settles cleanly on the error state before we capture the shot.
+ * These specs assert the end-to-end pipeline (fetch → `ApiError` →
+ * `userMessageFor` → `send-error` toast) by intercepting the admit route
+ * `/api/jobs/send` with a `page.route()` mock that returns a
+ * deterministic structured failure — so they do NOT depend on the
+ * `awaiting_signature` proof path (and therefore not on node #195).
+ *
+ * The mock fires *after* the local WASM signing path has completed, so
+ * the UI settles cleanly on the error state before we capture the shot.
  *
  * Locator strategy: testid-based on `send-error`. Each known server
- * string asserts both the *text* (German translation) and a
- * screenshot baseline. The fallback path (unmapped 418) is text-only
- * — it's a regression guard for the `Serverfehler <status>: <raw>`
- * shape, not a UI variant worth pinning visually.
+ * string asserts both the *text* (German translation) and a screenshot
+ * baseline. The fallback path (unmapped 418) is text-only — a regression
+ * guard for the `Serverfehler <status>: <raw>` shape.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -32,20 +34,20 @@ async function aliceGoToSend(page: Page): Promise<void> {
 }
 
 /**
- * Install a `/api/send` route handler that returns a structured
- * `4xx|5xx + {success: false, error}` body, exactly as `server.rs`
- * emits after PR #31.
+ * Install a `/api/jobs/send` admit-route handler that returns a
+ * structured `4xx|5xx + {error}` body, exactly as the node's Jobs API
+ * emits when it rejects a send before enqueueing.
  *
  * Registered at the context level (not page-level) and matched via
  * regex on the URL pathname — bullet-proof against cross-origin and
  * any future SW-pass-through edge case.
  */
 async function mockSendError(page: Page, status: number, error: string): Promise<void> {
-  await page.context().route(/\/api\/send$/, (route) =>
+  await page.context().route(/\/api\/jobs\/send$/, (route) =>
     route.fulfill({
       status,
       contentType: 'application/json',
-      body: JSON.stringify({ success: false, error }),
+      body: JSON.stringify({ error }),
     }),
   );
 }
@@ -61,11 +63,10 @@ async function aliceSubmitSend(page: Page): Promise<void> {
 }
 
 // Block service-worker registration for this file. The zkCoins PWA worker
-// caches/passes-through `/api/send` traffic before `page.route()` gets a
-// chance — the regen run without this saw the real DEV response leak past
-// the mock and surface as `Serverfehler 200: legacy: success false…` in
-// the toast. Blocking SW takes the worker out of the request path entirely
-// so the mock is the only response handler.
+// caches/passes-through `/api/jobs/send` traffic before `page.route()`
+// gets a chance — without this the real DEV response can leak past the
+// mock. Blocking SW takes the worker out of the request path entirely so
+// the mock is the only response handler.
 test.use({ serviceWorkers: 'block' });
 
 test.describe('Send Bitcoin — server error toasts (issue #99)', () => {

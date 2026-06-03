@@ -5,6 +5,11 @@
  * the test suite needs to touch directly (info, balance, mint). Send and
  * commit are deliberately omitted — those are exercised through the UI.
  *
+ * Mint goes through the async Jobs API (node PR #161): admit at
+ * `POST /api/jobs/mint` (mandatory `Idempotency-Key`), then poll
+ * `GET /api/jobs/:id` to `completed`. The synchronous `/api/mint` route
+ * was removed node-side.
+ *
  * Targets `process.env.E2E_API_URL` (default: dev-api.zkcoins.app).
  */
 
@@ -26,11 +31,23 @@ export interface BalanceResponse {
   username?: string;
 }
 
-export interface MintResponse {
-  success: boolean;
-  proof_id?: number;
-  account_state_hash?: string;
-  output_coins_root?: string;
+/** 202 admit body for `POST /api/jobs/{mint,send}`. */
+export interface JobAccepted {
+  job_id: string;
+  status: string;
+}
+
+/** `GET /api/jobs/:id` poll body — the subset the helpers read. */
+export interface JobStatus {
+  status: string;
+  phase?: string;
+  result?: {
+    success: boolean;
+    proof_id?: number;
+    account_state_hash?: string;
+    output_coins_root?: string;
+  } | null;
+  error?: string | null;
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
@@ -45,17 +62,50 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return res.json() as Promise<T>;
 }
 
+/** RFC-4122 v4 idempotency key from WebCrypto bytes. */
+function randomIdempotencyKey(): string {
+  const b = new Uint8Array(16);
+  crypto.getRandomValues(b);
+  b[6] = (b[6]! & 0x0f) | 0x40;
+  b[8] = (b[8]! & 0x3f) | 0x80;
+  const h = (n: number): string => n.toString(16).padStart(2, '0');
+  const hex = Array.from(b, h).join('');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+const MINT_POLL_TIMEOUT_MS = 120_000;
+const MINT_POLL_FLOOR_MS = 2_000;
+
 export const api = {
   info: () => request<InfoResponse>('/api/info'),
   balance: (address: string) =>
     request<BalanceResponse>(`/api/balance?address=${encodeURIComponent(address)}`),
-  // Mirrors `src/lib/api/client.ts::api.mint` — the server expects
-  // `{ account_address, amount }` and rejects missing fields with 422.
-  mint: (address: string, amount: number = 100_000) =>
-    request<MintResponse>('/api/mint', {
+  /**
+   * Faucet mint via the Jobs API: admit `POST /api/jobs/mint`, then poll
+   * to `completed`. Throws if the job ends in `failed` / `cancelled` or
+   * the poll times out. Returns the completed job's terminal status.
+   */
+  mint: async (address: string, amount: number = 100_000): Promise<JobStatus> => {
+    const accepted = await request<JobAccepted>('/api/jobs/mint', {
       method: 'POST',
+      headers: { 'content-type': 'application/json', 'Idempotency-Key': randomIdempotencyKey() },
       body: JSON.stringify({ account_address: address, amount }),
-    }),
+    });
+    const deadline = Date.now() + MINT_POLL_TIMEOUT_MS;
+    for (;;) {
+      const job = await request<JobStatus>(`/api/jobs/${encodeURIComponent(accepted.job_id)}`);
+      if (job.status === 'completed') return job;
+      if (job.status === 'failed' || job.status === 'cancelled') {
+        throw new Error(`mint job ${accepted.job_id} ${job.status}: ${job.error ?? 'unknown'}`);
+      }
+      if (Date.now() >= deadline) {
+        throw new Error(
+          `mint job ${accepted.job_id} did not reach a terminal state within ${MINT_POLL_TIMEOUT_MS}ms (last: ${job.status})`,
+        );
+      }
+      await new Promise((r) => setTimeout(r, MINT_POLL_FLOOR_MS));
+    }
+  },
 };
 
 /**
