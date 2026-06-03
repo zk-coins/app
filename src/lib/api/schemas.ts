@@ -16,28 +16,13 @@
  *     is exactly the failure mode we want to detect.
  *   - Optional fields are explicitly `.optional()` and may also be
  *     `.nullable()` where the server actually sends `null` (e.g.
- *     `proof_id` on a successful mint that emits no proof).
- *   - Inferred response types are re-exported from `client.ts` under
- *     their historical names (`SendResponse`, `BalanceResponse`, …).
- *     Consumers import the type from `client.ts`, the schema from here.
+ *     `proof_id` on a completed mint job that emits no proof).
+ *   - Inferred response types are re-exported from `client.ts`
+ *     (`BalanceResponse`, `InfoResponse`, `JobStatus`, …). Consumers
+ *     import the type from `client.ts`, the schema from here.
  */
 
 import { z } from 'zod';
-
-export const SendResponseSchema = z.object({
-  success: z.boolean(),
-  // Present on 4xx/5xx error bodies (server PR #31). Absent on success.
-  error: z.string().optional(),
-  proof_id: z.number().nullable().optional(),
-  account_state_hash: z.string().optional(),
-  output_coins_root: z.string().optional(),
-});
-
-// `mint` and `commit` return the same envelope as `send` today. Aliased
-// rather than re-defined so a future divergence is a single-file change
-// (and so the test-time mock helpers can pick a schema per endpoint).
-export const MintResponseSchema = SendResponseSchema;
-export const CommitResponseSchema = SendResponseSchema;
 
 export const BalanceResponseSchema = z.object({
   balance: z.number(),
@@ -111,4 +96,101 @@ export const InfoResponseSchema = z.object({
   // UI treats that as a loading state. Mismatched stages remain
   // visible because the post-#32 server reports its real hostname.
   username_domain: z.string().optional(),
+});
+
+// ---------------------------------------------------------------------------
+// Jobs API (`/api/jobs/*`)
+//
+// The node serves mint/send/commit as asynchronous jobs (node PR #161):
+// the synchronous `/api/{mint,send,commit}` routes were removed. These
+// schemas mirror the long-term canonical TypeScript surface in the SDK
+// (`@zkcoins/sdk` PR #19, `src/schemas.ts`), which in turn mirrors the
+// live node router DTOs in `zk-coins/node/node/src/router.rs`.
+//
+// No-fallback contract: a present-but-malformed field hard-fails at the
+// boundary (`ZodError`) rather than coercing to a default. `.optional()`
+// is reserved for fields the node legitimately omits per state.
+// ---------------------------------------------------------------------------
+
+/**
+ * Terminal + non-terminal job states — `job_store::JobStatus`
+ * (`serde(rename_all = "snake_case")`). Terminal: `completed`, `failed`,
+ * `cancelled` (`JobStatus::is_terminal`).
+ */
+export const JobStatusValueSchema = z.enum([
+  'queued',
+  'proving',
+  'awaiting_signature',
+  'broadcasting',
+  'completed',
+  'failed',
+  'cancelled',
+]);
+
+/** Job kind — `job_store::JobKind` (`serde(rename_all = "snake_case")`). */
+export const JobKindSchema = z.enum(['mint', 'send']);
+
+/**
+ * 202 admit body for `POST /api/jobs/{mint,send}` —
+ * `router::JobAcceptedResponse`. `job_id` is a UUID string; `status` is
+ * the snake_case `JobStatus` the row was admitted at (`"queued"` for a
+ * fresh job).
+ */
+export const JobAcceptedSchema = z.object({
+  job_id: z.string(),
+  status: z.string(),
+});
+
+/**
+ * Terminal `result` payload of a completed mint/send job — the JSON
+ * body `flow::{mint_flow,commit_flow}` returns, surfaced verbatim on the
+ * job row's `result` once `status = completed`, and (node #195) on an
+ * `awaiting_signature` send job so the wallet can build the commitment
+ * from JSON instead of decoding the binary CoinProof. Same envelope the
+ * pre-Jobs-API synchronous endpoints returned.
+ */
+export const JobResultSchema = z.object({
+  success: z.boolean(),
+  proof_id: z.number().nullable().optional(),
+  account_state_hash: z.string().optional(),
+  output_coins_root: z.string().optional(),
+});
+
+/**
+ * `GET /api/jobs/{id}` poll body **and** the SSE `data:` frame payload —
+ * `router::JobStatusResponse` / the SSE event builders.
+ *
+ * Field availability is status-dependent (the node only populates a
+ * field in the state where it is meaningful):
+ *
+ *   - `proof_id` — set when `status = awaiting_signature` (the id of the
+ *     server-side send proof; echoed back in the commit body).
+ *   - `result` — set when `status = completed`, and (node #195) when
+ *     `status = awaiting_signature` so the wallet can read
+ *     `account_state_hash` / `output_coins_root` as JSON.
+ *   - `error` — set when `status = failed`.
+ *
+ * `job_id` / `kind` / `progress` are `.optional()` (absent from SSE
+ * frames); `proof_id` / `result` / `error` are `.nullable().optional()`
+ * (elided on poll, explicit `null` on SSE).
+ */
+export const JobStatusSchema = z.object({
+  job_id: z.string().optional(),
+  kind: JobKindSchema.optional(),
+  status: JobStatusValueSchema,
+  phase: z.string(),
+  progress: z.number().optional(),
+  proof_id: z.number().nullable().optional(),
+  result: JobResultSchema.nullable().optional(),
+  error: z.string().nullable().optional(),
+});
+
+/**
+ * Generic Jobs-API error envelope — `router::JobErrorResponse`
+ * (`{ error: string }`). The client's `ApiError` mapping reads `error`
+ * when present, so this also covers the legacy `{success:false, error}`
+ * shape.
+ */
+export const JobErrorResponseSchema = z.object({
+  error: z.string(),
 });
