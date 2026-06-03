@@ -2,39 +2,34 @@
  * SendPage end-to-end pipeline test (`src/app/send/page.tsx`).
  *
  * Drives the real component with mocked `fetch` / WASM / `next/navigation`
- * and exercises the branches that the existing `SendForm.test.tsx`
- * (amount-field validation) and `e2e/07-send.spec.ts` (happy-path
- * screenshots against the live DEV server) leave uncovered:
+ * over the async Jobs-API send lifecycle (`api.send`):
  *
- *   - Phase-1 (`/api/send`) + Phase-2 (`/api/commit`) round-trip,
- *     including the success-screen transition and a transaction-log
- *     row landing in the wallet store.
- *   - The 3-attempt commit retry loop with 2 s / 4 s back-off, both
- *     success-on-retry and full exhaustion → user-visible error.
- *   - The in-flight-commit crash recovery effect: the `recovering`
- *     banner state, `clearInflightCommit` on success, and the
- *     preservation of the inflight payload on failure (next reload
- *     retries).
- *   - Username resolution branches (`@zkcoins.app` suffix, `$`
- *     prefix, hex fast-path) — resolve is MVP and always available.
+ *   /api/balance (hydrate num_sends) → POST /api/jobs/send (202) →
+ *   poll /api/jobs/:id → awaiting_signature (proof_id + ash/ocr in
+ *   `result`) → POST /api/jobs/:id/commit → poll → completed →
+ *   post-send /api/balance refresh → success screen + transaction row.
+ *
+ * Covers:
+ *   - The happy-path round-trip, success-screen transition, store side
+ *     effects, and the signed send-body shape.
+ *   - Username resolution branches (`@zkcoins.app` suffix, `$` prefix,
+ *     hex fast-path, foreign-stage suffix safety) — resolve is MVP.
  *   - The `account.xpriv` defensive throw.
+ *   - Error surfacing: ApiError → translated message; JobFailedError →
+ *     its detail; the no-account redirect window.
  *
- * `vi.useFakeTimers()` advances the 2 s / 4 s backoff and the 100 ms
- * no-account redirect window deterministically; without that the
- * retry-exhaustion test would block the suite for 6 real seconds.
+ * `vi.useFakeTimers()` is used only for the redirect-window tests; the
+ * lifecycle tests use real timers and stub the `waitForJob` poll floor
+ * to a 0 s Retry-After so the polls resolve immediately.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, act } from '@testing-library/react';
+import { render, screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import SendPage from '@/app/send/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
 
-// Per-test toggle for FEATURES — exported as a mutable holder so the
-// mock factory below can read the current value at call time. Using
-// `vi.hoisted` keeps the holder defined when the hoisted `vi.mock`
-// factory evaluates.
 const FEATURES_STATE = vi.hoisted(() => ({
   APPS_DIRECTORY: false,
   PASSKEY: false,
@@ -45,9 +40,6 @@ const FEATURES_STATE = vi.hoisted(() => ({
   USERNAME_CLAIM: false,
 }));
 
-// `FEATURES` exposes build-time client flags only; runtime opt-in
-// capabilities (`USERNAME_CLAIM`, …) are served by `useFeatures()`.
-// The holder backs both so tests can keep flipping a single object.
 vi.mock('@/lib/features', () => ({
   FEATURES: FEATURES_STATE,
   useFeatures: () => FEATURES_STATE,
@@ -72,23 +64,64 @@ const RECIPIENT_HEX = 'b'.repeat(64);
 const mockFetch = vi.fn();
 const originalFetch = globalThis.fetch;
 
-/** Convenience: enqueue the next fetch call to resolve with a JSON body. */
-function enqueueOk<T>(data: T, status = 200) {
+/** A successful-job poll body with a 0 s Retry-After so the loop is fast. */
+function enqueueJob<T extends object>(body: T): void {
+  mockFetch.mockResolvedValueOnce({
+    ok: true,
+    status: 200,
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(JSON.stringify(body)),
+    headers: new Headers({ 'retry-after': '0' }),
+  });
+}
+
+function enqueueOk<T>(data: T, status = 200): void {
   mockFetch.mockResolvedValueOnce({
     ok: status >= 200 && status < 300,
     status,
     json: () => Promise.resolve(data),
     text: () => Promise.resolve(JSON.stringify(data)),
+    headers: new Headers(),
   });
 }
 
-function enqueueErr(status: number, body = 'error') {
+function enqueueErr(status: number, body = 'error'): void {
   mockFetch.mockResolvedValueOnce({
     ok: false,
     status,
     json: () => Promise.resolve({ error: body }),
     text: () => Promise.resolve(body),
+    headers: new Headers(),
   });
+}
+
+/**
+ * Enqueue the full happy-path send lifecycle after the username step:
+ * balance hydrate → send admit → awaiting_signature → commit accept →
+ * completed → post-send balance.
+ */
+function enqueueSendLifecycle(opts: { numSends?: number; proofId?: number } = {}): void {
+  const numSends = opts.numSends ?? ALICE.numPubkeys;
+  const proofId = opts.proofId ?? 1234;
+  enqueueOk({ balance: ONE_BTC_SATS, num_sends: numSends }); // pre-send balance
+  enqueueOk({ job_id: 'job-1', status: 'queued' }, 202); // send admit
+  enqueueJob({
+    job_id: 'job-1',
+    kind: 'send',
+    status: 'awaiting_signature',
+    phase: 'awaiting_signature',
+    proof_id: proofId,
+    result: { success: true, account_state_hash: 'abc123', output_coins_root: 'def456' },
+  });
+  enqueueOk({ status: 'broadcasting' }); // commit accept
+  enqueueJob({
+    job_id: 'job-1',
+    kind: 'send',
+    status: 'completed',
+    phase: 'completed',
+    result: { success: true, proof_id: proofId },
+  });
+  enqueueOk({ balance: ONE_BTC_SATS - SEND_AMOUNT_SATS, num_sends: numSends + 1 }); // post-send balance
 }
 
 function findCall(urlSubstring: string): RequestInit | undefined {
@@ -97,12 +130,9 @@ function findCall(urlSubstring: string): RequestInit | undefined {
 }
 
 beforeEach(() => {
-  // `vi.clearAllMocks()` only clears call history — `mockResolvedValueOnce`
-  // queues survive. Explicit reset of `mockFetch` is what drops the queue.
   mockFetch.mockReset();
   routerReplace.mockClear();
   routerPush.mockClear();
-  // Reset FEATURES to PRD-equivalent (everything off).
   Object.assign(FEATURES_STATE, {
     APPS_DIRECTORY: false,
     PASSKEY: false,
@@ -144,41 +174,18 @@ async function clickThroughToConfirm(user: ReturnType<typeof userEvent.setup>, r
   await screen.findByTestId('send-confirm-card');
 }
 
-describe('SendPage — Phase-1 + Phase-2 happy path', () => {
-  it('sends, commits, refreshes balance, prepends a transaction, and shows the success screen', async () => {
+describe('SendPage — jobs-API send lifecycle happy path', () => {
+  it('hydrates, admits, commits, refreshes balance, prepends a transaction, shows success', async () => {
     const user = userEvent.setup();
-    // Pre-send balance hydration. SendPage refetches the balance
-    // before signing so the BIP-32 child-index counter is hydrated
-    // from the server's authoritative `num_sends` (see the
-    // `BalanceResponseSchema.num_sends` doc on the schema). Returns
-    // `num_sends == ALICE.numPubkeys` so the local state stays in
-    // sync — see `state.account?.numPubkeys` assertion below.
-    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys });
-    // /api/send — Phase-1 response carries the commitment material for Phase-2.
-    enqueueOk({
-      success: true,
-      proof_id: 1234,
-      account_state_hash: 'abc123',
-      output_coins_root: 'def456',
-    });
-    // /api/commit succeeds on the first attempt.
-    enqueueOk({ success: true, proof_id: 1234 });
-    // Post-send balance refresh. `num_sends` bumped to the next
-    // index now that the send completed.
-    enqueueOk({
-      balance: ONE_BTC_SATS - SEND_AMOUNT_SATS,
-      num_sends: ALICE.numPubkeys + 1,
-    });
+    enqueueSendLifecycle();
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
     await user.click(screen.getByTestId('send-confirm-btn'));
 
-    // Success screen renders.
     expect(await screen.findByTestId('send-success-heading')).toHaveTextContent('Sent privately');
     expect(screen.getByTestId('proof-id')).toHaveTextContent('1234');
 
-    // Side effects landed in the store.
     const state = useWalletStore.getState();
     expect(state.balance).toBe(ONE_BTC_SATS - SEND_AMOUNT_SATS);
     expect(state.account?.numPubkeys).toBe(ALICE.numPubkeys + 1);
@@ -190,201 +197,104 @@ describe('SendPage — Phase-1 + Phase-2 happy path', () => {
       proofId: '1234',
     });
 
-    // Inflight commit was cleared at the end of the loop.
-    expect(localStorage.getItem('zkcoins_inflight_commit')).toBeNull();
-
-    // The /api/send request shape is what the server expects.
-    const sendCall = findCall('/api/send');
+    // The signed send admit hits /api/jobs/send with an Idempotency-Key.
+    const sendCall = findCall('/api/jobs/send');
     expect(sendCall?.method).toBe('POST');
+    expect((sendCall?.headers as Record<string, string>)['Idempotency-Key']).toBeDefined();
     const sendBody = JSON.parse(sendCall!.body as string);
     expect(sendBody.account_address).toBe(ALICE.address);
     expect(sendBody.recipient).toBe(RECIPIENT_HEX);
     expect(sendBody.amount).toBe(SEND_AMOUNT_SATS);
-    // sendSigned attaches signature + timestamp — exact values come from WASM mock.
     expect(typeof sendBody.signature).toBe('string');
     expect(typeof sendBody.timestamp).toBe('number');
-    // numPubkeys=2 → prev_commitment_pubkey is set.
+    // num_sends = 2 → prev_commitment_pubkey is set.
     expect(sendBody.prev_commitment_pubkey).toBeDefined();
+
+    // The commit attaches the WASM-built commitment, keyed by job id.
+    const commitCall = findCall('/commit');
+    expect(commitCall?.method).toBe('POST');
+    const commitBody = JSON.parse(commitCall!.body as string);
+    expect(commitBody.proof_id).toBe(1234);
+    expect(commitBody.message).toBeDefined();
   });
 
-  it('skips the Phase-2 commit when the server omits commitment material', async () => {
-    // The Phase-2 block is gated by `account_state_hash && output_coins_root
-    // && proof_id`. A mint-style envelope without commitment material is a
-    // legitimate path the page must tolerate.
+  it('omits prev_commitment_pubkey for a first-ever send (num_sends = 0)', async () => {
     const user = userEvent.setup();
-    // Pre-send balance hydration (see PR notes for rationale).
-    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys });
-    enqueueOk({ success: true, proof_id: 99 });
-    enqueueOk({
-      balance: ONE_BTC_SATS - SEND_AMOUNT_SATS,
-      num_sends: ALICE.numPubkeys + 1,
-    });
+    enqueueSendLifecycle({ numSends: 0, proofId: 7 });
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
     await user.click(screen.getByTestId('send-confirm-btn'));
-
     await screen.findByTestId('send-success-heading');
-    // Only /api/send + /api/balance were called — no /api/commit.
-    expect(mockFetch.mock.calls.some(([url]) => String(url).includes('/api/commit'))).toBe(false);
-    expect(useWalletStore.getState().transactions).toHaveLength(1);
+
+    const sendBody = JSON.parse(findCall('/api/jobs/send')!.body as string);
+    expect(sendBody.prev_commitment_pubkey).toBeUndefined();
   });
 });
 
-describe('SendPage — commit retry loop', () => {
-  /**
-   * Collapse the 2 s / 4 s retry back-off to a microtask so the assertions
-   * run inside the default test budget. Only the retry tests need this —
-   * the rest of the suite uses real timers. Only delays of exactly 2 s
-   * or 4 s (the back-off pattern in `send()`) are intercepted; every
-   * other `setTimeout` call (incl. the 120 s `AbortController` guard
-   * in `request()` and userEvent's internal scheduling) is delegated to
-   * the real timer so the wider page lifecycle is untouched.
-   */
-  function stubBackoffToMicrotask() {
-    const real = globalThis.setTimeout;
-    return vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
-      cb: (...args: unknown[]) => void,
-      delay?: number,
-      ...args: unknown[]
-    ) => {
-      if (delay === 2_000 || delay === 4_000) {
-        queueMicrotask(() => cb());
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      }
-      return real(cb, delay as number, ...(args as []));
-    }) as unknown as typeof setTimeout);
-  }
-
-  it('succeeds on the second commit attempt after backing off 2 s', async () => {
+describe('SendPage — error surfacing', () => {
+  it('shows the JobFailedError detail when the server omits ash/ocr (pre-#195 node)', async () => {
     const user = userEvent.setup();
-    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys });
-    enqueueOk({
-      success: true,
-      proof_id: 7,
-      account_state_hash: 'asm',
-      output_coins_root: 'ocr',
+    enqueueOk({ balance: ONE_BTC_SATS, num_sends: 0 }); // pre-send balance
+    enqueueOk({ job_id: 'job-x', status: 'queued' }, 202); // send admit
+    // awaiting_signature WITHOUT account_state_hash / output_coins_root.
+    enqueueJob({
+      job_id: 'job-x',
+      kind: 'send',
+      status: 'awaiting_signature',
+      phase: 'awaiting_signature',
+      proof_id: 5,
     });
-    enqueueErr(500, 'commit failed'); // attempt 1
-    enqueueOk({ success: true, proof_id: 7 }); // attempt 2
-    enqueueOk({ balance: 50_000, num_sends: ALICE.numPubkeys + 1 });
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
-    const timerSpy = stubBackoffToMicrotask();
     await user.click(screen.getByTestId('send-confirm-btn'));
 
-    await screen.findByTestId('send-success-heading');
-
-    const commitCalls = mockFetch.mock.calls.filter(([url]) => String(url).includes('/api/commit'));
-    expect(commitCalls).toHaveLength(2);
-    expect(localStorage.getItem('zkcoins_inflight_commit')).toBeNull();
-    // The retry loop ran one back-off (2 s) before attempt 2.
-    expect(timerSpy).toHaveBeenCalledWith(expect.any(Function), 2_000);
-    timerSpy.mockRestore();
+    expect(await screen.findByTestId('send-error')).toHaveTextContent(/account_state_hash/);
+    // No /commit call — the wallet refuses to fabricate a commitment.
+    expect(mockFetch.mock.calls.some(([u]) => String(u).includes('/commit'))).toBe(false);
   });
 
-  it('exhausts all three commit attempts, shows the delivery-failed error, and keeps the inflight payload', async () => {
+  it('surfaces a translated ApiError when the send admit is rejected', async () => {
     const user = userEvent.setup();
-    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys });
-    enqueueOk({
-      success: true,
-      proof_id: 8,
-      account_state_hash: 'asm',
-      output_coins_root: 'ocr',
-    });
-    enqueueErr(500); // attempt 1
-    enqueueErr(500); // attempt 2
-    enqueueErr(500); // attempt 3
+    enqueueOk({ balance: ONE_BTC_SATS, num_sends: 0 });
+    enqueueErr(422, 'Insufficient balance');
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
-    const timerSpy = stubBackoffToMicrotask();
+    await user.click(screen.getByTestId('send-confirm-btn'));
+
+    expect(await screen.findByTestId('send-error')).toBeVisible();
+    expect(mockFetch.mock.calls.some(([u]) => String(u).includes('/commit'))).toBe(false);
+  });
+
+  it('surfaces the JobFailedError detail when the job fails during proving', async () => {
+    const user = userEvent.setup();
+    enqueueOk({ balance: ONE_BTC_SATS, num_sends: 0 });
+    enqueueOk({ job_id: 'job-f', status: 'queued' }, 202);
+    enqueueJob({
+      job_id: 'job-f',
+      kind: 'send',
+      status: 'failed',
+      phase: 'failed',
+      error: 'prove_account_update failed',
+    });
+
+    render(<SendPage />);
+    await clickThroughToConfirm(user, RECIPIENT_HEX);
     await user.click(screen.getByTestId('send-confirm-btn'));
 
     expect(await screen.findByTestId('send-error')).toHaveTextContent(
-      /Transaction sent but delivery to recipient failed/,
+      /prove_account_update failed/,
     );
-
-    const commitCalls = mockFetch.mock.calls.filter(([url]) => String(url).includes('/api/commit'));
-    expect(commitCalls).toHaveLength(3);
-    // Back-offs of 2 s and 4 s ran; the third attempt has no follow-up wait.
-    expect(timerSpy).toHaveBeenCalledWith(expect.any(Function), 2_000);
-    expect(timerSpy).toHaveBeenCalledWith(expect.any(Function), 4_000);
-    // Inflight payload survives so a future SendPage mount can retry.
-    const inflight = JSON.parse(localStorage.getItem('zkcoins_inflight_commit')!);
-    expect(inflight.proof_id).toBe(8);
-    timerSpy.mockRestore();
-  });
-});
-
-describe('SendPage — in-flight commit recovery on mount', () => {
-  it('replays the persisted commit, clears the payload, and refreshes balance', async () => {
-    // Pre-seed the in-flight payload as if the previous session crashed
-    // after `saveInflightCommit` but before `clearInflightCommit`.
-    localStorage.setItem(
-      'zkcoins_inflight_commit',
-      JSON.stringify({
-        proof_id: 42,
-        public_key: '02' + 'cc'.repeat(32),
-        signature: 'dd'.repeat(64),
-        message: 'ee'.repeat(32),
-      }),
-    );
-    enqueueOk({ success: true, proof_id: 42 }); // recovery /api/commit
-    enqueueOk({ balance: 12345, num_sends: ALICE.numPubkeys + 1 }); // recovery balance refresh
-
-    render(<SendPage />);
-
-    await waitFor(() => {
-      expect(localStorage.getItem('zkcoins_inflight_commit')).toBeNull();
-    });
-    expect(mockFetch.mock.calls[0][0]).toContain('/api/commit');
-    expect(useWalletStore.getState().balance).toBe(12345);
-    expect(useWalletStore.getState().account?.numPubkeys).toBe(ALICE.numPubkeys + 1);
-  });
-
-  it('keeps the inflight payload when recovery commit fails', async () => {
-    const payload = {
-      proof_id: 99,
-      public_key: '02' + 'cc'.repeat(32),
-      signature: 'dd'.repeat(64),
-      message: 'ee'.repeat(32),
-    };
-    localStorage.setItem('zkcoins_inflight_commit', JSON.stringify(payload));
-    enqueueErr(503, 'server unavailable');
-
-    render(<SendPage />);
-
-    await waitFor(() => {
-      expect(mockFetch.mock.calls[0][0]).toContain('/api/commit');
-    });
-    // Payload preserved so the *next* SendPage mount tries again.
-    const stillThere = JSON.parse(localStorage.getItem('zkcoins_inflight_commit')!);
-    expect(stillThere).toEqual(payload);
-    // No balance fetch followed.
-    expect(mockFetch.mock.calls).toHaveLength(1);
-  });
-
-  it('treats a malformed inflight blob as "no recovery"', async () => {
-    localStorage.setItem('zkcoins_inflight_commit', '{ broken json');
-    render(<SendPage />);
-    // Allow any deferred effects to drain.
-    await new Promise((r) => setTimeout(r, 10));
-    expect(mockFetch).not.toHaveBeenCalled();
-    // The page still renders the form (not the recovering banner).
-    expect(screen.queryByTestId('send-recovering-banner')).not.toBeInTheDocument();
   });
 });
 
 describe('SendPage — username resolution (MVP, always on)', () => {
   it('strips the @zkcoins.app suffix and calls /api/username/resolve', async () => {
     const user = userEvent.setup();
-
     enqueueOk({ username: 'bob', address: RECIPIENT_HEX }); // resolveUsername
-    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys }); // pre-send balance hydration
-    enqueueOk({ success: true, proof_id: 1 });
-    enqueueOk({ balance: 1, num_sends: ALICE.numPubkeys + 1 });
+    enqueueSendLifecycle({ numSends: 0 });
 
     render(<SendPage />);
     await clickThroughToConfirm(user, 'bob@zkcoins.app');
@@ -394,18 +304,14 @@ describe('SendPage — username resolution (MVP, always on)', () => {
     expect(mockFetch.mock.calls[0][0]).toBe(
       'https://test-api.zkcoins.app/api/username/resolve/bob',
     );
-    // The send body must carry the *resolved* hex recipient, not the username.
-    const sendBody = JSON.parse(findCall('/api/send')!.body as string);
+    const sendBody = JSON.parse(findCall('/api/jobs/send')!.body as string);
     expect(sendBody.recipient).toBe(RECIPIENT_HEX);
   });
 
   it('strips the leading $ prefix before resolving', async () => {
     const user = userEvent.setup();
-
     enqueueOk({ username: 'alice', address: RECIPIENT_HEX });
-    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys });
-    enqueueOk({ success: true, proof_id: 1 });
-    enqueueOk({ balance: 1, num_sends: ALICE.numPubkeys + 1 });
+    enqueueSendLifecycle({ numSends: 0 });
 
     render(<SendPage />);
     await clickThroughToConfirm(user, '$alice');
@@ -419,29 +325,20 @@ describe('SendPage — username resolution (MVP, always on)', () => {
 
   it('skips resolution for a 64-char hex recipient', async () => {
     const user = userEvent.setup();
-
-    enqueueOk({ balance: ONE_BTC_SATS, num_sends: ALICE.numPubkeys }); // pre-send balance
-    enqueueOk({ success: true, proof_id: 1 });
-    enqueueOk({ balance: 1, num_sends: ALICE.numPubkeys + 1 });
+    enqueueSendLifecycle({ numSends: 0 });
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
     await user.click(screen.getByTestId('send-confirm-btn'));
     await screen.findByTestId('send-success-heading');
 
-    // First call is /api/balance (pre-send hydration), then /api/send.
+    // First call is /api/balance (pre-send hydration), then /api/jobs/send.
     expect(mockFetch.mock.calls[0][0]).toContain('/api/balance');
-    expect(mockFetch.mock.calls[1][0]).toContain('/api/send');
+    expect(mockFetch.mock.calls[1][0]).toContain('/api/jobs/send');
   });
 
   it('does NOT strip a foreign-stage suffix — cross-network safety', async () => {
-    // On a PRD wallet (usernameDomain = "zkcoins.app"), a DEV-suffixed
-    // recipient must not collapse to a bare username and route against
-    // the wrong stage. The unrecognised suffix falls through to the
-    // username resolver, which the server rejects cleanly.
-    FEATURES_STATE.USERNAMES = true;
     const user = userEvent.setup();
-
     enqueueErr(404, 'Username not found');
 
     render(<SendPage />);
@@ -449,17 +346,16 @@ describe('SendPage — username resolution (MVP, always on)', () => {
     await user.click(screen.getByTestId('send-confirm-btn'));
 
     expect(await screen.findByTestId('send-error')).toHaveTextContent(/Username not found/);
-    // The full foreign-suffixed string was forwarded to resolve — no
-    // silent strip to `bob` against the PRD account map.
     expect(mockFetch.mock.calls[0][0]).toBe(
       'https://test-api.zkcoins.app/api/username/resolve/bob%40dev.zkcoins.app',
     );
-    expect(mockFetch.mock.calls.every(([url]) => !String(url).includes('/api/send'))).toBe(true);
+    expect(mockFetch.mock.calls.every(([url]) => !String(url).includes('/api/jobs/send'))).toBe(
+      true,
+    );
   });
 
   it('surfaces the API error when username resolution fails', async () => {
     const user = userEvent.setup();
-
     enqueueErr(404, 'Username not found');
 
     render(<SendPage />);
@@ -467,8 +363,9 @@ describe('SendPage — username resolution (MVP, always on)', () => {
     await user.click(screen.getByTestId('send-confirm-btn'));
 
     expect(await screen.findByTestId('send-error')).toHaveTextContent(/Username not found/);
-    // /api/send was never reached.
-    expect(mockFetch.mock.calls.every(([url]) => !String(url).includes('/api/send'))).toBe(true);
+    expect(mockFetch.mock.calls.every(([url]) => !String(url).includes('/api/jobs/send'))).toBe(
+      true,
+    );
   });
 });
 
@@ -493,9 +390,7 @@ describe('SendPage — defensive branches', () => {
 
     vi.useFakeTimers();
     render(<SendPage />);
-    // The placeholder is rendered immediately because `account` is null.
     expect(screen.getByTestId('redirecting-placeholder')).toBeInTheDocument();
-    // The redirect is gated by a 100 ms grace timeout.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(150);
     });
@@ -507,7 +402,6 @@ describe('SendPage — defensive branches', () => {
 
     vi.useFakeTimers();
     render(<SendPage />);
-    // Account lands before the 100 ms timer expires — the redirect is suppressed.
     act(() => {
       useWalletStore.setState({ account: ALICE, balance: ONE_BTC_SATS });
     });
