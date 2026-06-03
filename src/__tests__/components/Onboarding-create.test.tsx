@@ -149,7 +149,7 @@ describe('Onboarding — SeedFlow stage transitions', () => {
 
 describe('Onboarding — full create happy path', () => {
   it('writes account + authMethod=seed + balance through the entire create flow', async () => {
-    vi.spyOn(api, 'balance').mockResolvedValue({ balance: 555 });
+    vi.spyOn(api, 'balance').mockResolvedValue({ balance: 555, num_sends: 0 });
 
     const user = userEvent.setup();
     render(<Onboarding />);

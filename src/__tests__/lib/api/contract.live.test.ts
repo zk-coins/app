@@ -33,7 +33,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { api } from '@/lib/api/client';
 import { useNetworkStore } from '@/stores/network';
-import { BalanceResponseSchema, InfoResponseSchema } from '@/lib/api/schemas';
+import { BalanceResponseSchema, InfoResponseSchema } from '@zkcoins/sdk';
 
 const RUN = process.env.RUN_API_CONTRACT === 'true';
 const API_URL = process.env.E2E_API_URL ?? 'https://dev-api.zkcoins.app';

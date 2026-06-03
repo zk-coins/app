@@ -7,7 +7,7 @@ import {
   InfoResponseSchema,
   JobAcceptedSchema,
   JobStatusSchema,
-} from '@/lib/api/schemas';
+} from '@zkcoins/sdk';
 import { useNetworkStore } from '@/stores/network';
 
 const mockFetch = vi.fn();
@@ -67,6 +67,30 @@ describe('api.mintJob', () => {
   });
 });
 
+describe('api.sendJob', () => {
+  it('POSTs /api/jobs/send with the Idempotency-Key header (signed body passthrough)', async () => {
+    mockJsonResponse<JobAccepted>({ job_id: 'send-admit', status: 'queued' }, 202);
+    const accepted = await api.sendJob(
+      {
+        account_address: 'aa'.repeat(32),
+        recipient: 'bb'.repeat(32),
+        amount: 1000,
+        public_key: 'pk',
+        next_public_key: 'npk',
+        signature: 'sig',
+        timestamp: 1700000000,
+      },
+      'idem-send-1',
+    );
+    const [url, init] = mockFetch.mock.calls[0];
+    expect(url).toBe('https://test-api.zkcoins.app/api/jobs/send');
+    expect(init.method).toBe('POST');
+    expect((init.headers as Record<string, string>)['Idempotency-Key']).toBe('idem-send-1');
+    expect(JSON.parse(init.body).signature).toBe('sig');
+    expect(accepted.job_id).toBe('send-admit');
+  });
+});
+
 describe('api.mint (lifecycle)', () => {
   it('admits the job, polls to completed, and returns the terminal status', async () => {
     mockJsonResponse<JobAccepted>({ job_id: 'job-2', status: 'queued' }, 202);
@@ -109,7 +133,7 @@ describe('api.mint (lifecycle)', () => {
     });
     await expect(api.mint('abc123')).rejects.toMatchObject({
       name: 'JobFailedError',
-      detail: 'mint exploded',
+      serverError: 'mint exploded',
     });
   });
 
@@ -236,7 +260,7 @@ describe('api.send (lifecycle)', () => {
 
     await expect(api.send(SEND_PARAMS)).rejects.toMatchObject({
       name: 'JobFailedError',
-      detail: expect.stringContaining('account_state_hash'),
+      serverError: expect.stringContaining('account_state_hash'),
     });
     // No /commit call was made.
     expect(mockFetch.mock.calls.some(([u]) => String(u).includes('/commit'))).toBe(false);
@@ -415,13 +439,14 @@ describe('api.info', () => {
   it('parses the capabilities object when the server includes it', async () => {
     mockJsonResponse<z.infer<typeof InfoResponseSchema>>({
       network: 'Mutinynet',
-      capabilities: { address_list: true, username_claim: true, lnurl: false },
+      capabilities: { address_list: true, username_claim: true, lnurl: false, multi_asset: false },
     });
     const result = await api.info();
     expect(result.capabilities).toEqual({
       address_list: true,
       username_claim: true,
       lnurl: false,
+      multi_asset: false,
     });
   });
 
@@ -519,7 +544,7 @@ describe('ApiError (structured failure contract)', () => {
       expect(apiErr.status).toBe(422);
       expect(apiErr.serverError).toBe('Insufficient funds');
       expect(apiErr.rawBody).toContain('Insufficient funds');
-      expect(apiErr.message).toBe('API error 422: Insufficient funds');
+      expect(apiErr.message).toBe('zkCoins API error 422: Insufficient funds');
     }
   });
 
