@@ -58,9 +58,15 @@ const MVP_EXEMPT_TESTIDS = new Set([
   // reliably catch them without artificially slowing WASM calls.
   'seed-creating-btn',
   'seed-import-restoring-btn',
-  // Faucet error toast (issue #99) -- only fires when /api/mint returns
-  // an ApiError; covered by the unit-level mapping tests, not reachable
-  // in the happy-path E2E flow.
+  // Transient send-job phase label (queued/proving/awaiting_signature/
+  // broadcasting) shown only while a send is in flight. Like the
+  // dropped "Creating proof..." shot it flips faster than Playwright can
+  // reliably catch; the phase transitions are covered by the client
+  // lifecycle unit tests' `onPhase` assertions instead.
+  'send-phase',
+  // Faucet error toast (issue #99) -- only fires when /api/jobs/mint
+  // returns an ApiError; covered by the unit-level mapping tests, not
+  // reachable in the happy-path E2E flow.
   'wallet-mint-error',
 ]);
 
