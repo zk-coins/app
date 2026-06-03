@@ -1,20 +1,20 @@
 import { create } from 'zustand';
-import type { z } from 'zod';
 import { api } from '@/lib/api/client';
-import { CapabilitiesSchema } from '@/lib/api/schemas';
+import type { Capabilities } from '@zkcoins/sdk';
 
-export type Capabilities = z.infer<typeof CapabilitiesSchema>;
+export type { Capabilities };
 
 // Fail-closed default: every opt-in feature bit (`address_list`,
-// `username_claim`, `lnurl`) is OFF until `/api/info` has been parsed
-// and the real capabilities have replaced the defaults. A network
-// failure, a Zod error, or a server that pre-dates the capabilities
-// discovery patch (zk-coins/node#29) all land here, which is the safe
-// outcome — capability-driven UI hides instead of 404-ing.
+// `username_claim`, `lnurl`, `multi_asset`) is OFF until `/api/info` has
+// been parsed and the real capabilities have replaced the defaults. A
+// network failure, a Zod error, or a server that pre-dates the
+// capabilities discovery patch (zk-coins/node#29) all land here, which is
+// the safe outcome — capability-driven UI hides instead of 404-ing.
 const FAIL_CLOSED: Capabilities = {
   address_list: false,
   username_claim: false,
   lnurl: false,
+  multi_asset: false,
 };
 
 interface CapabilitiesState {

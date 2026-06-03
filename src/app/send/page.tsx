@@ -134,7 +134,7 @@ export default function SendPage() {
       if (err instanceof ApiError) {
         setError(userMessageFor(err));
       } else if (err instanceof JobFailedError) {
-        setError(err.detail ?? `Transaction ${err.jobStatus}`);
+        setError(err.serverError ?? `Transaction ${err.status}`);
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
