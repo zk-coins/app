@@ -90,7 +90,18 @@ export const CapabilitiesSchema = z.object({
 });
 
 export const InfoResponseSchema = z.object({
+  // Human-readable display string (`"Mainnet"`, `"Mutinynet"`, …) —
+  // free-text, capitalisation set by the node and only safe to render,
+  // never to branch on. Kept for the network badge in settings.
   network: z.string(),
+  // Normalised network enum, lower-case, derived server-side from
+  // `is_mainnet` (zk-coins/node#193). Unlike `network` it is a closed
+  // set with stable casing, so protocol-level decisions (e.g. whether
+  // the faucet may be offered) branch on this field — see
+  // `WalletScreen`'s `showFaucet`. Optional (fail-open) so an app
+  // talking to a pre-#193 node that only ships `network` still parses;
+  // the consumer falls back to the free-text field in that case.
+  bitcoin_network: z.enum(['mainnet', 'mutinynet']).optional(),
   // Optional so a fresh app talking to a pre-capabilities server
   // (zk-coins/node pre-#29) doesn't trip the Zod gate. The
   // capabilities store applies a fail-closed default in that case.

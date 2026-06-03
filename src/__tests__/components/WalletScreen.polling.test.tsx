@@ -72,7 +72,9 @@ beforeEach(() => {
   useNetworkStore.setState({
     apiUrl: 'https://test.api',
     networkName: '',
+    bitcoinNetwork: '',
     setNetworkName: useNetworkStore.getState().setNetworkName,
+    setBitcoinNetwork: useNetworkStore.getState().setBitcoinNetwork,
   });
   useWalletStore.setState({
     account: ALICE,
@@ -240,25 +242,58 @@ describe('WalletScreen — balance polling', () => {
     expect(useWalletStore.getState().account?.username).toBe('pinned');
   });
 
-  it('writes the network name and username_domain from /api/info on mount', async () => {
-    infoSpy.mockResolvedValue({ network: 'mainnet', username_domain: 'zkcoins.app' });
+  it('writes networkName, bitcoin_network and username_domain from /api/info on mount', async () => {
+    infoSpy.mockResolvedValue({
+      network: 'Mainnet',
+      bitcoin_network: 'mainnet',
+      username_domain: 'zkcoins.app',
+    });
     balanceSpy.mockResolvedValue({ balance: 0, num_sends: 0 });
 
     render(<WalletScreen />);
     await waitFor(() => {
-      expect(useNetworkStore.getState().networkName).toBe('mainnet');
+      expect(useNetworkStore.getState().networkName).toBe('Mainnet');
+      expect(useNetworkStore.getState().bitcoinNetwork).toBe('mainnet');
       expect(useNetworkStore.getState().usernameDomain).toBe('zkcoins.app');
     });
     expect(infoSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('leaves bitcoinNetwork empty when a pre-#193 node omits the field', async () => {
+    infoSpy.mockResolvedValue({ network: 'Mutinynet', username_domain: 'dev.zkcoins.app' });
+    balanceSpy.mockResolvedValue({ balance: 0, num_sends: 0 });
+
+    render(<WalletScreen />);
+    await waitFor(() => {
+      expect(useNetworkStore.getState().networkName).toBe('Mutinynet');
+    });
+    expect(useNetworkStore.getState().bitcoinNetwork).toBe('');
+  });
 });
 
 describe('WalletScreen — faucet button gating', () => {
-  it('hides the faucet button when the node reports network "Mainnet" (CamelCase)', async () => {
-    // The node ships network names as display strings — see
-    // `node::router::info_handler` — and Mainnet is the only value
-    // the faucet must never appear on. Casing was the regression
-    // vector: `"Mainnet" !== "mainnet"` rendered the faucet on PRD.
+  it('hides the faucet button when the node reports bitcoin_network "mainnet"', async () => {
+    // Branch on the normalised enum (zk-coins/node#193): a lower-case
+    // closed set with no casing ambiguity, so the faucet is reliably
+    // suppressed on mainnet.
+    infoSpy.mockResolvedValue({ network: 'Mainnet', bitcoin_network: 'mainnet' });
+    balanceSpy.mockResolvedValue({ balance: 0 });
+
+    const { queryByTestId } = render(<WalletScreen />);
+    await waitFor(() => {
+      expect(useNetworkStore.getState().bitcoinNetwork).toBe('mainnet');
+    });
+    await waitFor(() => {
+      expect(useWalletStore.getState().balance).toBe(0);
+    });
+    expect(queryByTestId('faucet-btn')).toBeNull();
+  });
+
+  it('hides the faucet on a pre-#193 mainnet node via the free-text fallback (CamelCase)', async () => {
+    // Pre-#193 nodes ship only the display string `"Mainnet"` (capital
+    // M). The previous `network !== 'mainnet'` guard collapsed on this
+    // casing and rendered the faucet on PRD; the lower-cased fallback
+    // keeps it hidden until the typed field is everywhere.
     infoSpy.mockResolvedValue({ network: 'Mainnet' });
     balanceSpy.mockResolvedValue({ balance: 0 });
 
@@ -272,7 +307,18 @@ describe('WalletScreen — faucet button gating', () => {
     expect(queryByTestId('faucet-btn')).toBeNull();
   });
 
-  it('renders the faucet button on a testnet (e.g. Mutinynet) with empty balance', async () => {
+  it('renders the faucet button when the node reports bitcoin_network "mutinynet"', async () => {
+    infoSpy.mockResolvedValue({ network: 'Mutinynet', bitcoin_network: 'mutinynet' });
+    balanceSpy.mockResolvedValue({ balance: 0 });
+
+    const { findByTestId } = render(<WalletScreen />);
+    expect(await findByTestId('faucet-btn')).toBeTruthy();
+  });
+
+  it('renders the faucet button on a pre-#193 testnet node (only free-text network)', async () => {
+    // DEV runs this path today: `/api/info` ships `network: "Mutinynet"`
+    // without the typed enum. The faucet must still appear so the
+    // empty-wallet CTA (e2e 06-balance) keeps working.
     infoSpy.mockResolvedValue({ network: 'Mutinynet' });
     balanceSpy.mockResolvedValue({ balance: 0 });
 

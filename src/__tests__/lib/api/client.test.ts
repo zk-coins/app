@@ -169,6 +169,31 @@ describe('api.info', () => {
     const result = await api.info();
     expect(result.capabilities).toBeUndefined();
   });
+
+  it('parses the normalised bitcoin_network enum when the node includes it', async () => {
+    mockJsonResponse<z.infer<typeof InfoResponseSchema>>({
+      network: 'Mainnet',
+      bitcoin_network: 'mainnet',
+    });
+    const result = await api.info();
+    expect(result.bitcoin_network).toBe('mainnet');
+  });
+
+  it('leaves bitcoin_network undefined when the node omits it (pre-#193 compat)', async () => {
+    mockJsonResponse<z.infer<typeof InfoResponseSchema>>({ network: 'Mutinynet' });
+    const result = await api.info();
+    expect(result.bitcoin_network).toBeUndefined();
+  });
+
+  it('rejects a bitcoin_network value outside the enum (server drift)', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ network: 'Signet', bitcoin_network: 'signet' }),
+      text: () => Promise.resolve('{"network":"Signet","bitcoin_network":"signet"}'),
+    });
+    await expect(api.info()).rejects.toThrow();
+  });
 });
 
 describe('error handling', () => {
