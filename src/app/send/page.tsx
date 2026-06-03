@@ -7,31 +7,10 @@ import { ArrowLeft, Check, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { ApiError, api, type CommitRequest } from '@/lib/api/client';
+import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
-import { initWasm } from '@zkcoins/wasm';
 import { SATS_PER_BTC, formatBtc, formatBtcCompact } from '@/lib/format';
 import { FEATURES } from '@/lib/features';
-
-/* --- In-flight commit crash recovery --- */
-
-const INFLIGHT_KEY = 'zkcoins_inflight_commit';
-
-function saveInflightCommit(payload: CommitRequest): void {
-  localStorage.setItem(INFLIGHT_KEY, JSON.stringify(payload));
-}
-function clearInflightCommit(): void {
-  localStorage.removeItem(INFLIGHT_KEY);
-}
-function getInflightCommit(): CommitRequest | null {
-  const raw = localStorage.getItem(INFLIGHT_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
 
 export default function SendPage() {
   const router = useRouter();
@@ -49,34 +28,11 @@ export default function SendPage() {
     }
   }, [account, router]);
 
-  // Recover incomplete commits from previous session.
-  const [recovering, setRecovering] = useState(false);
-  useEffect(() => {
-    const inflight = getInflightCommit();
-    if (!inflight) return;
-    setRecovering(true);
-    api
-      .commit(inflight)
-      .then(() => {
-        clearInflightCommit();
-        incrementPubkeys();
-        if (account) {
-          api.balance(account.address).then((res) => {
-            setBalance(res.balance);
-            syncNumPubkeys(res.num_sends);
-          });
-        }
-      })
-      .catch(() => {
-        // Keep in localStorage for next retry.
-      })
-      .finally(() => setRecovering(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [phase, setPhase] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ amount: number; proofId?: string } | null>(null);
 
@@ -108,8 +64,11 @@ export default function SendPage() {
     const sats = Math.round(btcNum * SATS_PER_BTC);
 
     setSending(true);
+    setPhase(null);
     setError(null);
     try {
+      if (!account.xpriv) throw new Error('No private key');
+
       // Resolve username to address if the recipient looks like one.
       // Username resolve is MVP and always available on every node —
       // raw hex addresses skip the round-trip via the regex fast-path.
@@ -133,120 +92,49 @@ export default function SendPage() {
         resolvedRecipient = resolved.address;
       }
 
-      const wasm = await initWasm();
-      if (!account.xpriv) throw new Error('No private key');
-
-      // Hydrate the BIP-32 child-index counter from the server BEFORE
-      // signing. A seed-restored wallet has no local memory of past
-      // sends (`numPubkeys` is reset to 0 by the restore flow). Without
-      // this pre-send sync the wallet would either omit
-      // `prev_commitment_pubkey` (server: 400 "prev_commitment_pubkey
-      // required for account update", mapped to "Vorheriger Public Key
-      // fehlt.") or sign the next send with pubkey[0] again and
-      // collide on the same SMT slot at commit time. The matching
-      // server change is zk-coins/node `Account.num_sends` +
-      // `BalanceResponse.num_sends` (PR #129).
-      //
-      // The WalletScreen 5 s poll usually keeps the counter in sync;
-      // re-fetching here closes the worst-case window where the user
-      // navigated directly to `/send` faster than one polling tick.
-      const preSend = await api.balance(account.address);
-      setBalance(preSend.balance);
-      syncNumPubkeys(preSend.num_sends);
-      const effectiveNumPubkeys = preSend.num_sends;
-
-      const keys = wasm.derivePublicKeys(account.xpriv, effectiveNumPubkeys);
-      const prevPk =
-        effectiveNumPubkeys > 0
-          ? wasm.derivePublicKeys(account.xpriv, effectiveNumPubkeys - 1).publicKey
-          : undefined;
-
-      const res = await api.sendSigned(
+      // Drive the async Jobs-API send lifecycle. `api.send` re-fetches
+      // the balance to hydrate the BIP-32 child index from the server's
+      // authoritative `num_sends` before signing (thin-client invariant),
+      // admits the send job, polls to `awaiting_signature`, builds the
+      // commitment from the JSON `result` (no binary decode, no fabricated
+      // commitment), attaches it, and polls to `completed`. The job's
+      // phase transitions drive the inline progress label.
+      const result = await api.send(
         {
           account_address: account.address,
           recipient: resolvedRecipient,
           amount: sats,
-          public_key: keys.publicKey,
-          next_public_key: keys.nextPublicKey,
-          prev_commitment_pubkey: prevPk,
+          xpriv: account.xpriv,
         },
-        account.xpriv,
-        effectiveNumPubkeys,
+        { onPhase: (job: JobStatus) => setPhase(job.phase) },
       );
 
-      // Pre-PR-#31 servers reply 200 + `{success: false}` (no error
-      // string). Normalise to ApiError so the catch path treats both
-      // contracts uniformly.
-      if (!res.success) {
-        throw new ApiError(200, res.error ?? 'legacy: success false with no error string');
-      }
-
-      // Phase 2: Create and submit commitment so the recipient receives the coins.
-      if (res.account_state_hash && res.output_coins_root && res.proof_id) {
-        // Sign the commitment at the same index the prior send-signing
-        // used — `effectiveNumPubkeys`, not the stale `account.numPubkeys`
-        // that may still be 0 from a fresh restore. The server's
-        // commit_handler verifies the Schnorr signature against the
-        // pubkey at this index; using a mismatched index would surface
-        // as "Commitment signature invalid" (401).
-        const commitment = wasm.createCommitment(
-          account.xpriv,
-          effectiveNumPubkeys,
-          res.account_state_hash,
-          res.output_coins_root,
-        );
-        const commitPayload: CommitRequest = {
-          proof_id: res.proof_id,
-          public_key: commitment.publicKey,
-          signature: commitment.signature,
-          message: commitment.message,
-        };
-
-        // Persist in-flight commit before attempting (crash recovery).
-        saveInflightCommit(commitPayload);
-
-        let committed = false;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            await api.commit(commitPayload);
-            committed = true;
-            clearInflightCommit();
-            break;
-          } catch {
-            if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
-          }
-        }
-
-        if (!committed) {
-          throw new Error(
-            'Transaction sent but delivery to recipient failed. ' +
-              'The app will retry automatically on next load.',
-          );
-        }
-      }
+      const proofId = result.result?.proof_id ?? undefined;
 
       incrementPubkeys();
       addTransaction({
-        id: res.proof_id?.toString() ?? `send-${Date.now()}`,
+        id: proofId?.toString() ?? `send-${Date.now()}`,
         type: 'send',
         amount: sats,
         counterparty: recipient.trim(),
         timestamp: Date.now(),
-        proofId: res.proof_id?.toString(),
+        proofId: proofId?.toString(),
       });
 
       const postSend = await api.balance(account.address);
       setBalance(postSend.balance);
       // Re-sync from the server after the commit phase landed so the
       // store reflects the bumped counter (server's `num_sends` should
-      // now be `effectiveNumPubkeys + 1`). `incrementPubkeys()` above
-      // already advanced the local counter — this is the belt-and-
-      // braces tick against the server's source of truth.
+      // now be the next index). `incrementPubkeys()` above already
+      // advanced the local counter — this is the belt-and-braces tick
+      // against the server's source of truth.
       syncNumPubkeys(postSend.num_sends);
-      setSuccess({ amount: sats, proofId: res.proof_id?.toString() });
+      setSuccess({ amount: sats, proofId: proofId?.toString() });
     } catch (err) {
       if (err instanceof ApiError) {
         setError(userMessageFor(err));
+      } else if (err instanceof JobFailedError) {
+        setError(err.detail ?? `Transaction ${err.jobStatus}`);
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
@@ -254,6 +142,7 @@ export default function SendPage() {
       }
     } finally {
       setSending(false);
+      setPhase(null);
     }
   }, [
     account,
@@ -340,15 +229,6 @@ export default function SendPage() {
             Privately. The chain never sees the amount or the recipient.
           </p>
         </div>
-
-        {recovering && (
-          <div
-            data-testid="send-recovering-banner"
-            className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3 text-[12px] text-ink2"
-          >
-            Recovering a previous in-flight transaction…
-          </div>
-        )}
 
         {/* Available */}
         <div className="rounded-md border border-line bg-surface p-3 text-[12px]">
@@ -481,6 +361,12 @@ export default function SendPage() {
           >
             Send privately
           </button>
+        )}
+
+        {sending && phase && (
+          <p data-testid="send-phase" className="text-center text-[11px] text-ink3">
+            {phase}
+          </p>
         )}
       </form>
     </AppShell>
