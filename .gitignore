@@ -12,6 +12,9 @@ rust/target/
 packages/zkcoins-wasm/src/pkg/README.md
 test-results/
 playwright-report/
+# HTML report + failure artifacts copied out of the local E2E container
+# (scripts/e2e-local.sh). Local-only, never committed.
+playwright-report-local/
 coverage/
 
 # local design iteration artifacts (screenshots, helper scripts, references)
