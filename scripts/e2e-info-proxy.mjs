@@ -123,7 +123,7 @@ const server = http.createServer(async (req, res) => {
     const body = await readBody(req);
     const upstream = await fetch(`${NODE_URL}${req.url}`, {
       method: req.method,
-      headers: stripHostHeader(req.headers),
+      headers: forwardHeaders(req.headers),
       body,
       redirect: 'manual',
     });
@@ -152,11 +152,25 @@ const server = http.createServer(async (req, res) => {
   }
 });
 
-/** Node's fetch rejects a forwarded `host` header; drop it. */
-function stripHostHeader(headers) {
+/**
+ * Headers to forward upstream, minus the ones that break the hop:
+ *
+ *   - `host`: Node's fetch rejects a forwarded `host` header.
+ *   - `accept-encoding`: when the caller sets this header explicitly,
+ *     undici forwards it verbatim and does NOT auto-decompress the
+ *     response — `upstream.json()` then chokes on raw gzip/br/zstd
+ *     bytes and the pass-through leg would relay a compressed body
+ *     after `copyHeaders` dropped `content-encoding`. Browsers always
+ *     send `accept-encoding`, so forwarding it 502'd every browser
+ *     request while curl (no such header) sailed through. Dropping it
+ *     lets undici negotiate + transparently decompress, which is what
+ *     both response paths assume.
+ */
+function forwardHeaders(headers) {
+  const drop = new Set(['host', 'accept-encoding']);
   const out = {};
   for (const [k, v] of Object.entries(headers)) {
-    if (k.toLowerCase() === 'host') continue;
+    if (drop.has(k.toLowerCase())) continue;
     if (v !== undefined) out[k] = v;
   }
   return out;
