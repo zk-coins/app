@@ -91,18 +91,20 @@ export default defineConfig({
 
 The existing `fullyParallel: true`, `retries: 1`, and 30 s per-test timeout stay put. The new helpers must respect them — no `test.describe.configure({ mode: 'serial' })` unless a spec genuinely needs it.
 
-### 4.2 Dynamic target — `dev` (CI) vs `local` (local node)
+### 4.2 Dynamic target — `local` (served PR build, CI) vs `dev` (hosted stack)
 
 The suite runs against two interchangeable targets selected by **`E2E_TARGET`**. Both run the **same spec files** and assert against the **same `*-chromium-linux.png` baselines** — that is the whole point: a local run reproduces exactly what CI sees.
 
-| `E2E_TARGET`    | Frontend                           | Node                                             | webServer | Used by                            |
-| --------------- | ---------------------------------- | ------------------------------------------------ | --------- | ---------------------------------- |
-| `dev` (default) | `https://dev.zkcoins.app`          | `https://dev-api.zkcoins.app`                    | none      | CI (`ci.yaml`), `npm run test:e2e` |
-| `local`         | locally-served standalone PR build | local node (default `host.docker.internal:4242`) | reuse     | `npm run test:e2e:local`           |
+| `E2E_TARGET`    | Frontend                           | Node                                                       | webServer | Used by                                   |
+| --------------- | ---------------------------------- | ---------------------------------------------------------- | --------- | ----------------------------------------- |
+| `local`         | locally-served standalone PR build | upstream via info-proxy (CI: dev-api; dev box: local node) | reuse     | CI (`ci.yaml`), `npm run test:e2e:local`  |
+| `dev` (default) | `https://dev.zkcoins.app`          | `https://dev-api.zkcoins.app`                              | none      | `npm run test:e2e` (deployed-stack smoke) |
 
-**`dev` is the default and CI is unchanged.** Leaving `E2E_TARGET` unset reproduces the historical behaviour byte-for-byte: `baseURL = E2E_BASE_URL || https://dev.zkcoins.app`, no `webServer`, helpers point at `E2E_API_URL || https://dev-api.zkcoins.app`. `ci.yaml` does not set `E2E_TARGET`, so the hosted-stack run is untouched.
+**CI runs the `local` target against the PR's own build.** `ci.yaml` builds the standalone bundle with the same-origin proxy config baked in, starts the `/api/info` normalisation proxy with `E2E_NODE_URL=https://dev-api.zkcoins.app` as upstream, serves the bundle on the runner, and runs both legs with `E2E_TARGET=local`. A red E2E therefore means the PR is wrong — not that the dev deployment (which reflects `develop`, never the PR branch) lags the code under test; during the Jobs-API migration that lag made every frontend-behaviour spec fail for reasons unrelated to the PR. The runner is `ubuntu-latest`, so visual diffs compare against the committed `*-chromium-linux.png` baselines on their native platform. The hosted DEV **node** stays the upstream — real ZK proof generation and broadcast, exactly as before.
 
-**`local` is a one-command flow:** `npm run test:e2e:local` → `scripts/e2e-local.sh`. It is idempotent and self-cleaning.
+**`dev` stays the default when `E2E_TARGET` is unset** and reproduces the historical hosted-stack behaviour byte-for-byte: `baseURL = E2E_BASE_URL || https://dev.zkcoins.app`, no `webServer`, helpers point at `E2E_API_URL || https://dev-api.zkcoins.app`. Useful as a deployed-environment smoke check after a `develop` deploy.
+
+**`local` on a developer machine is a one-command flow:** `npm run test:e2e:local` → `scripts/e2e-local.sh` (Docker, defaults to a local node at `host.docker.internal:4242`; override `E2E_NODE_URL=https://dev-api.zkcoins.app` to mirror CI exactly). It is idempotent and self-cleaning.
 
 #### Why a Linux container (visual baselines are platform-specific)
 

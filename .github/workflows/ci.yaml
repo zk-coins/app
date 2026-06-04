@@ -110,19 +110,37 @@ jobs:
     name: E2E Tests
     runs-on: ubuntu-latest
     needs: [lint-and-build]
-    # This job is the `dev` E2E target: it runs against the hosted DEV
-    # stack (dev.zkcoins.app / dev-api.zkcoins.app) and is deliberately
-    # left untouched — `E2E_TARGET` is unset, so playwright.config.ts
-    # resolves to the historical dev behaviour. The complementary `local`
-    # target (same specs + same baselines, but against a locally-served
-    # standalone build + a local node in a pinned Linux Playwright
-    # container) is a developer-machine flow run via `npm run test:e2e:local`
-    # — it is NOT wired into CI. See e2e/README.md § 4.2.
+    # ── Served-local E2E: CI tests the PR's OWN build ─────────────────
+    #
+    # This job builds the PR's standalone bundle, serves it on the
+    # runner, and drives the Playwright suite against it. The upstream
+    # node is the hosted DEV API (dev-api.zkcoins.app), fronted by the
+    # test-only /api/info normalisation proxy (scripts/e2e-info-proxy.mjs)
+    # so the capability surface matches the committed baselines.
+    #
+    # Why not the previous shape (navigate to https://dev.zkcoins.app)?
+    # That tested whatever frontend was DEPLOYED — i.e. `develop` —
+    # not the PR's code. During the Jobs-API migration that gap became
+    # load-bearing: the node dropped /api/mint + /api/send while the
+    # deployed frontend still called them, so every frontend-behaviour
+    # spec was red for reasons unrelated to the PR under test
+    # (deployment lag). Serving the PR's own build removes the lag
+    # term entirely: a red E2E now means the PR is wrong, not that the
+    # deploy queue is behind. The hosted DEV *node* stays the upstream
+    # (real ZK proof gen, real broadcast) — exactly as before.
+    #
+    # Baseline platform: the committed *-chromium-linux.png baselines
+    # are rendered by Linux Chromium. This job runs on ubuntu-latest,
+    # so the visual diffs compare like-for-like (same platform the
+    # regenerate-visual-baselines workflow uses). The developer-machine
+    # equivalent is `npm run test:e2e:local` (Docker, same image
+    # family) — see e2e/README.md § 4.2.
+    #
     # Cap the job so a hung browser process or stuck globalSetup
     # cannot consume the default 6 h budget. Realistic wall-clock is
-    # ~5-7 min (step 1: 3 min parallel, step 2: 2-4 min serial) plus
-    # ~3 min for install/browser-fetch — 30 min is the conservative
-    # ceiling.
+    # ~5-7 min (leg 1: 3 min parallel, leg 2: 2-4 min serial) plus
+    # ~3 min for install/browser-fetch and ~1 min for the standalone
+    # build — 30 min is the conservative ceiling.
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -140,42 +158,90 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      # Two-step E2E run.
+      # Build the PR's standalone bundle with the same-origin proxy
+      # config baked in (Next applies `rewrites()` only via the
+      # standalone `node server.js`, and NEXT_PUBLIC_* values are
+      # inlined at build time):
+      #   NEXT_PUBLIC_API_URL      → the app's own origin, so browser
+      #                              SDK calls stay same-origin (no
+      #                              Idempotency-Key CORS preflight)
+      #   LOCAL_NODE_PROXY_TARGET  → the /api/info normalisation proxy
+      - name: Build standalone bundle (same-origin proxy baked in)
+        run: npm run build
+        env:
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:3090
+          NEXT_PUBLIC_EXPLORER_URL: https://zkcoins.space
+          LOCAL_NODE_PROXY_TARGET: http://127.0.0.1:4243
+
+      # `output: standalone` emits a minimal server tree but does not
+      # copy `public/` or `.next/static` into it (the Dockerfile does
+      # this manually). Mirror that here so the standalone server can
+      # serve assets + static chunks.
+      - name: Assemble standalone tree
+        run: |
+          cp -r public .next/standalone/public
+          mkdir -p .next/standalone/.next
+          cp -r .next/static .next/standalone/.next/static
+
+      # Serve + test in ONE step so the background proxy/server share
+      # this step's lifetime (no cross-step process reaping concerns).
       #
-      # Step 1 runs the parallel-safe bulk of the suite (75 specs) with
-      # the default fullyParallel: true + 2 workers — the fast path that
-      # exercises onboarding, balance, network, PWA, redirects, and the
-      # 12 non-mutating Send tests.
-      #
-      # Step 2 runs the single `send-success` test on its own with
-      # --workers=1. send-success is the one spec that drives a real
-      # /api/send + /api/commit through the DEV node, blocking on
-      # server-side ZK proof generation. Running it concurrently with
-      # the rest of the suite (mint/balance traffic from 09 / 10 / 11
-      # all hitting the same node) starved its proof-gen pipeline for
-      # minutes at a time, causing repeated test-timeout failures even
-      # at a 12-min budget. Giving it exclusive DEV-node bandwidth
-      # drops the realistic upper bound back to ~3-4 min and removes
-      # the parallel-load term from the variance.
+      # Two-leg shape, same as before:
+      #   Leg 1 — the parallel-safe bulk of the suite.
+      #   Leg 2 — `send-success` alone with --workers=1: it drives ONE
+      #   real send (admit → prove → commit → broadcast) through the
+      #   DEV node and needs exclusive proof-gen bandwidth; see the
+      #   prior incident notes in e2e/README.md § 4 and § 5.
       #
       # globalSetup runs once per playwright invocation and mints
-      # fresh Alice + Bob, so each step gets a clean fixture set —
-      # step 2 doesn't depend on step 1's Alice having any specific
-      # remaining balance. See e2e/README.md § 4 and § 5.
-      - name: Run E2E tests (parallel, excluding send-success)
-        run: npx playwright test --project=chromium --grep-invert "send-success"
-        env:
-          E2E_BASE_URL: https://dev.zkcoins.app
-          E2E_API_URL: https://dev-api.zkcoins.app
-          E2E_NETWORK_EXPECTED: signet
-          E2E_FAUCET_CALLS: '1'
-          E2E_NEED_FIXTURES: 'true'
+      # fresh Alice + Bob via the Jobs API, so each leg gets a clean
+      # fixture set.
+      - name: Serve standalone build + run E2E (both legs)
+        run: |
+          set -euo pipefail
 
-      - name: Run E2E tests (send-success, exclusive DEV-node bandwidth)
-        run: npx playwright test --project=chromium --grep "send-success" --workers=1
+          node scripts/e2e-info-proxy.mjs &
+          PROXY_PID=$!
+          PORT=3090 HOSTNAME=127.0.0.1 node .next/standalone/server.js &
+          APP_PID=$!
+          trap 'kill "$PROXY_PID" "$APP_PID" 2>/dev/null || true' EXIT
+
+          echo "waiting for info-proxy :4243 and app :3090"
+          for i in $(seq 1 60); do
+            if curl -sf http://127.0.0.1:4243/api/info >/dev/null 2>&1 &&
+              curl -sf http://127.0.0.1:3090/ >/dev/null 2>&1; then
+              break
+            fi
+            if [ "$i" = "60" ]; then
+              echo "::error::info-proxy or standalone app did not come up within 60s"
+              curl -s http://127.0.0.1:4243/api/info || true
+              exit 1
+            fi
+            sleep 1
+          done
+
+          # Sanity: the proxy must report the DEV capability surface
+          # (caps OFF). A mismatch would silently shift ~16 baselines,
+          # so fail loud here instead of in a wall of visual diffs.
+          PROXY_INFO="$(curl -s http://127.0.0.1:4243/api/info)"
+          echo "proxied /api/info → ${PROXY_INFO}"
+          case "$PROXY_INFO" in
+            *'"username_claim":true'*)
+              echo "::error::proxy did not normalise username_claim to false"
+              exit 1
+              ;;
+          esac
+
+          npx playwright test --project=chromium --grep-invert "send-success"
+          npx playwright test --project=chromium --grep "send-success" --workers=1
         env:
-          E2E_BASE_URL: https://dev.zkcoins.app
-          E2E_API_URL: https://dev-api.zkcoins.app
+          E2E_TARGET: local
+          E2E_BASE_URL: http://127.0.0.1:3090
+          E2E_API_URL: http://127.0.0.1:4243
+          E2E_LOCAL_APP_PORT: '3090'
+          E2E_INFO_PROXY_PORT: '4243'
+          E2E_NODE_URL: https://dev-api.zkcoins.app
+          E2E_INFO_USERNAME_DOMAIN: dev.zkcoins.app
           E2E_NETWORK_EXPECTED: signet
           E2E_FAUCET_CALLS: '1'
           E2E_NEED_FIXTURES: 'true'
