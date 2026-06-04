@@ -27,15 +27,36 @@ const HIDDEN = '••••';
 export function WalletScreen() {
   const { account, balance, transactions, setBalance, setUsername, syncNumPubkeys } =
     useWalletStore();
-  const { networkName, usernameDomain, setNetworkName, setUsernameDomain } = useNetworkStore();
+  const {
+    networkName,
+    bitcoinNetwork,
+    usernameDomain,
+    setNetworkName,
+    setBitcoinNetwork,
+    setUsernameDomain,
+  } = useNetworkStore();
   const features = useFeatures();
   // Faucet is MVP — every node ships `/api/mint`. The only gate is
-  // defence in depth against accidentally calling it against mainnet:
-  // the node reports `network` as a display string (`"Mainnet"`,
-  // `"Mutinynet"`, …) — see `node::router::info_handler`. Compare
-  // lowercased so a casing change on the server can't accidentally
-  // re-enable the faucet button on production.
-  const showFaucet = networkName !== '' && networkName.toLowerCase() !== 'mainnet';
+  // defence in depth against accidentally calling it against mainnet.
+  //
+  // The node now reports a normalised `bitcoin_network` enum
+  // (`'mainnet' | 'mutinynet'`, lower-case, derived from `is_mainnet`
+  // server-side — zk-coins/node#193). Branching on that typed field
+  // removes the latent casing bug: the free-text `network` ships as a
+  // display string (`"Mainnet"`, capital M), so the previous
+  // `network !== 'mainnet'` guard always evaluated true and rendered the
+  // faucet on PRD until it was patched to lower-case at the call site.
+  //
+  // `bitcoin_network` is optional (a pre-#193 node ships only
+  // `network`), so fall back to a lower-cased free-text compare when it
+  // is absent. Either signal saying "mainnet" hides the faucet; we only
+  // show it once the first /api/info tick has resolved (both fields
+  // empty == loading).
+  const isMainnet =
+    bitcoinNetwork === 'mainnet' ||
+    (bitcoinNetwork === '' && networkName.toLowerCase() === 'mainnet');
+  const networkResolved = bitcoinNetwork !== '' || networkName !== '';
+  const showFaucet = networkResolved && !isMainnet;
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [minting, setMinting] = useState(false);
@@ -51,13 +72,17 @@ export function WalletScreen() {
       .info()
       .then((info) => {
         setNetworkName(info.network);
+        // Pre-#193 nodes omit the normalised enum; the store stays at the
+        // empty-string default and `showFaucet` falls back to the
+        // free-text `network` compare above.
+        setBitcoinNetwork(info.bitcoin_network ?? '');
         // Pre-#32 servers omit this field; the store stays at the empty
         // string default so `toZkAddress` keeps returning `''` (loading
         // state) until a post-#32 server reports its hostname.
         setUsernameDomain(info.username_domain ?? '');
       })
       .catch(() => {});
-  }, [setNetworkName, setUsernameDomain]);
+  }, [setNetworkName, setBitcoinNetwork, setUsernameDomain]);
 
   // Balance polling. Username display is MVP, so the server always
   // returns a `username` field when one is bound; pin the local copy
