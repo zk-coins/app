@@ -16,7 +16,17 @@ export default defineConfig({
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     coverage: {
       provider: 'v8',
-      include: ['src/lib/**', 'src/stores/**', 'src/components/**', 'src/app/**'],
+      include: [
+        'src/lib/**',
+        'src/stores/**',
+        'src/components/**',
+        'src/app/**',
+        // E2E-only `/api/info` proxy. Not app code, but it is security-
+        // sensitive (it handles upstream errors + logs), so its pure
+        // logic is unit-tested and pinned at 100 % below. The standalone
+        // entry that binds a port is `c8 ignore`d (E2E-exercised only).
+        'scripts/e2e-info-proxy.mjs',
+      ],
       // Exclude code paths that are not part of the MVP activated surface.
       // The PRD bundle is built with every NEXT_PUBLIC_ENABLE_* flag off, so
       // these files are unreachable from any user-facing route and we don't
@@ -80,6 +90,16 @@ export default defineConfig({
         // covered, matching the prior per-file invariant.
         'src/lib/**': { lines: 100, statements: 100, functions: 100, branches: 100 },
         'src/stores/**': { lines: 100, statements: 100, functions: 100, branches: 100 },
+        // Security-sensitive E2E proxy (CodeQL: stack-trace-exposure +
+        // clear-text-logging were fixed here) — keep every reachable
+        // line/branch test-covered so the hardened behaviour cannot
+        // silently regress.
+        'scripts/e2e-info-proxy.mjs': {
+          lines: 100,
+          statements: 100,
+          functions: 100,
+          branches: 100,
+        },
       },
     },
   },
