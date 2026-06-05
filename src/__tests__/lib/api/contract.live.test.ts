@@ -18,13 +18,13 @@
  * **Endpoint choice.** The probe deliberately stays on endpoints that
  * do not require Schnorr-signed payloads:
  *
- *   - `GET  /api/info`                     → InfoResponseSchema
- *   - `POST /api/mint   {address, amount}` → MintResponseSchema
- *   - `GET  /api/balance?address=…`        → BalanceResponseSchema
+ *   - `GET  /api/info`                            → InfoResponseSchema
+ *   - `POST /api/jobs/mint` + poll to `completed` → JobAccepted / JobStatus
+ *   - `GET  /api/balance?address=…`               → BalanceResponseSchema
  *
- * `SendResponseSchema` and `CommitResponseSchema` are aliases of
- * `MintResponseSchema`, so the mint round-trip covers their shape too.
- * Adding a real `/api/send` probe would mean running real WASM, and
+ * The mint lifecycle exercises `JobAcceptedSchema` (202 admit) and
+ * `JobStatusSchema` (poll body, incl. the completed `result` envelope).
+ * Adding a real `/api/jobs/send` probe would mean running real WASM, and
  * the real WASM module does not load under vitest's happy-dom runner
  * (`isWasm === false`, JS fallback throws on every method) — that
  * branch belongs in the Playwright e2e suite, not here.
@@ -33,7 +33,7 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { api } from '@/lib/api/client';
 import { useNetworkStore } from '@/stores/network';
-import { BalanceResponseSchema, InfoResponseSchema, MintResponseSchema } from '@/lib/api/schemas';
+import { BalanceResponseSchema, InfoResponseSchema } from '@zkcoins/sdk';
 
 const RUN = process.env.RUN_API_CONTRACT === 'true';
 const API_URL = process.env.E2E_API_URL ?? 'https://dev-api.zkcoins.app';
@@ -64,11 +64,11 @@ describe.skipIf(!RUN)('live API contract', () => {
   const MINT_TIMEOUT_MS = 120_000;
 
   it(
-    'POST /api/mint parses against MintResponseSchema',
+    'POST /api/jobs/mint completes and returns a success result',
     async () => {
-      const minted = await api.mint(randomAddress());
-      expect(() => MintResponseSchema.parse(minted)).not.toThrow();
-      expect(minted.success).toBe(true);
+      const terminal = await api.mint(randomAddress());
+      expect(terminal.status).toBe('completed');
+      expect(terminal.result?.success).toBe(true);
     },
     MINT_TIMEOUT_MS,
   );

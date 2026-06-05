@@ -32,6 +32,7 @@ describe('useFeatures (build-time + runtime merged)', () => {
         address_list: false,
         username_claim: false,
         lnurl: false,
+        multi_asset: false,
       },
       loaded: false,
     });
@@ -59,6 +60,7 @@ describe('useFeatures (build-time + runtime merged)', () => {
         address_list: false,
         username_claim: true,
         lnurl: false,
+        multi_asset: false,
       },
       loaded: true,
     });
