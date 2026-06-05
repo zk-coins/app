@@ -186,11 +186,11 @@ export function WalletScreen() {
         {/* Username + address */}
         {account && (
           <div className="mt-2 space-y-1.5">
-            <p className="mono text-[12px] text-ink2">
-              {account.username && usernameDomain
-                ? `${account.username}@${usernameDomain}`
-                : zkAddress}
-            </p>
+            {account.username && usernameDomain && (
+              <p className="mono text-[12px] text-ink2">
+                {`${account.username}@${usernameDomain}`}
+              </p>
+            )}
             {features.USERNAME_CLAIM && !account.username && (
               <form
                 className="flex items-center gap-2"
