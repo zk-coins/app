@@ -85,12 +85,11 @@ afterEach(() => {
 });
 
 describe('SettingsPage — header + sections', () => {
-  it('renders the heading, network badge, and the three always-on sections', () => {
+  it('renders the heading, network badge, and the two always-on sections', () => {
     render(<SettingsPage />);
     expect(screen.getByTestId('settings-heading')).toHaveTextContent('Settings');
     expect(screen.getByTestId('settings-network-badge')).toHaveTextContent('signet');
     expect(screen.getByTestId('settings-section-security')).toBeInTheDocument();
-    expect(screen.getByTestId('settings-section-resources')).toBeInTheDocument();
     expect(screen.getByTestId('settings-section-about')).toBeInTheDocument();
   });
 

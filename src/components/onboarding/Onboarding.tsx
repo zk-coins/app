@@ -5,12 +5,10 @@ import { Lock, Zap, Key, type LucideIcon } from 'lucide-react';
 import { PixelIcon } from '../PixelIcon';
 import { PixelLogo } from '../icons/PixelLogo';
 import { Logo } from '../icons/Logo';
-import { FooterLinks } from '../FooterLinks';
 import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api/client';
 import { initWasm } from '@zkcoins/wasm';
-import { APP_VERSION } from '@/lib/format';
 import {
   createPasskey,
   authenticatePasskey,
@@ -82,13 +80,6 @@ export function Onboarding() {
           <PasskeyRestoreFlow onBack={() => setStep('seed-import')} />
         )}
       </div>
-
-      {/* Resource links — outside the card on desktop */}
-      <div className="relative mx-auto max-w-[480px] px-6 pb-12">
-        <div className="pt-6">
-          <FooterLinks />
-        </div>
-      </div>
     </div>
   );
 }
@@ -152,7 +143,7 @@ function Welcome({ onNext, onRestore }: { onNext: () => void; onRestore: () => v
           />
           <Benefit
             icon={Zap}
-            title="Just Bitcoin. No altcoin."
+            title="Just Bitcoin, not a new blockchain"
             description="Shielded CSV uses Client-Side Validation + ZK proofs on Bitcoin as it exists today. No soft fork, no new chain, no sidechain to bridge into."
           />
           <Benefit
@@ -182,10 +173,6 @@ function Welcome({ onNext, onRestore }: { onNext: () => void; onRestore: () => v
             Restore existing wallet
           </button>
         </div>
-
-        <p className="mt-8 text-center mono text-[11px] tracking-[0.3em] text-ink2 uppercase">
-          Shielded CSV · v{APP_VERSION}
-        </p>
       </div>
     </div>
   );

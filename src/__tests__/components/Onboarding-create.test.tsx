@@ -73,7 +73,7 @@ describe('Onboarding — Welcome screen', () => {
     render(<Onboarding />);
     expect(screen.getByTestId('welcome-heading')).toHaveTextContent('Welcome to zkCoins');
     expect(screen.getByText('Truly private by default')).toBeInTheDocument();
-    expect(screen.getByText('Just Bitcoin. No altcoin.')).toBeInTheDocument();
+    expect(screen.getByText('Just Bitcoin, not a new blockchain')).toBeInTheDocument();
     expect(screen.getByText('You hold the keys')).toBeInTheDocument();
   });
 

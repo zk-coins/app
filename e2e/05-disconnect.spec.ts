@@ -6,7 +6,6 @@
  *
  * DEV-only widgets visible in these baselines (per § 8.0 (b)):
  *   - Apps tab in BottomNav (FEATURES.APPS_DIRECTORY)
- *   - `dev-*` hostnames in the FooterLinks grid inside § Resources
  *
  * Locators: testid-based. The `disconnect-confirm-dialog` test still
  * asserts on the dialog's literal message — the browser-native

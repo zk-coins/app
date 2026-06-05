@@ -8,10 +8,6 @@
  * the valid-input path. Wrong-count and bad-BIP39 paths use hand-built
  * strings.
  *
- * DEV-only widgets visible in these baselines (per § 8.0 (b)):
- *   - `dev-*` hostnames in the FooterLinks below the card on the Welcome
- *     screen reachable via `back-from-input`.
- *
  * `beforeEach` wipes IDB + localStorage so the test starts on the Welcome
  * screen, not the wallet.
  *

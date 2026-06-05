@@ -2,22 +2,18 @@
 
 import { ReactNode } from 'react';
 import { BottomNav } from './BottomNav';
-import { FooterLinks } from './FooterLinks';
 
 /**
  * Mobile-first shell with a centered column. On large viewports, the column
- * is rendered as a bordered "card" frame; resource links sit outside the
- * frame so they read as ambient app chrome rather than wallet content.
+ * is rendered as a bordered "card" frame.
  */
 export function AppShell({
   children,
   showNav = true,
-  showFooterLinks = true,
   maxWidth = 'max-w-[480px]',
 }: {
   children: ReactNode;
   showNav?: boolean;
-  showFooterLinks?: boolean;
   maxWidth?: string;
 }) {
   return (
@@ -46,14 +42,8 @@ export function AppShell({
         {children}
       </div>
 
-      {/* Resource links — sit OUTSIDE the card frame, above the floating nav */}
-      {showFooterLinks && (
-        <div className={`relative mx-auto ${maxWidth} px-6 ${showNav ? 'pb-32' : 'pb-12'}`}>
-          <div className="pt-6">
-            <FooterLinks />
-          </div>
-        </div>
-      )}
+      {/* Bottom spacer so the floating nav never overlaps page content */}
+      {showNav && <div aria-hidden className="pb-32" />}
 
       {showNav && <BottomNav />}
     </div>
