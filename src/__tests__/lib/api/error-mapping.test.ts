@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ApiError } from '@/lib/api/client';
+import { ApiError, JobFailedError } from '@/lib/api/client';
 import {
   KNOWN_SERVER_ERRORS,
   SERVER_ERROR_TO_USER_MESSAGE,
@@ -76,5 +76,39 @@ describe('userMessageFor', () => {
         expect(SERVER_ERROR_TO_USER_MESSAGE[serverError]).toBeDefined();
       },
     );
+  });
+
+  describe('async JobFailedError mapping (issue #99, async leg)', () => {
+    // The node emits the same failure-contract strings on both legs:
+    // synchronously at admit time (ApiError) and asynchronously when a
+    // queued job ends in `failed` / `cancelled` (JobFailedError, e.g.
+    // a proving failure detected long after the 202). The send toast
+    // must show the same German copy either way.
+
+    it('maps a known server error carried by an async job failure', () => {
+      const jobErr = new JobFailedError('job-1', 'failed', 'prove failed');
+      expect(userMessageFor(jobErr)).toBe(
+        'Beweisgenerierung fehlgeschlagen. Bitte später erneut versuchen.',
+      );
+    });
+
+    it('maps family-pattern diagnostics on the async leg too', () => {
+      const jobErr = new JobFailedError('job-2', 'failed', 'Failed to broadcast inscription');
+      expect(userMessageFor(jobErr)).toBe(
+        'Bitcoin-Broadcast fehlgeschlagen. Bitte später erneut versuchen.',
+      );
+    });
+
+    it('falls back to "Serverfehler <status>: <raw>" for an unmapped async error string', () => {
+      const jobErr = new JobFailedError('job-3', 'cancelled', 'operator pulled the plug');
+      expect(userMessageFor(jobErr)).toBe('Serverfehler cancelled: operator pulled the plug');
+    });
+
+    it('falls back with a German placeholder when the job carries no error string', () => {
+      // The node may terminate a job without an `error` field —
+      // `JobFailedError.serverError` is undefined then.
+      const jobErr = new JobFailedError('job-4', 'failed');
+      expect(userMessageFor(jobErr)).toBe('Serverfehler failed: unbekannter Fehler');
+    });
   });
 });
