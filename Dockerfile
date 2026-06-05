@@ -4,6 +4,13 @@ FROM base AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/zkcoins-wasm/package.json ./packages/zkcoins-wasm/
+# `@zkcoins/sdk` is a vendored tarball dependency
+# (`"@zkcoins/sdk": "file:vendor/zkcoins-sdk-<ver>.tgz"`), so the file
+# must be present before `npm ci` resolves it — otherwise the install
+# fails with `ENOENT … vendor/zkcoins-sdk-*.tgz`. This COPY mirrors the
+# `packages/zkcoins-wasm/package.json` copy above, which exists for the
+# same reason (the other `file:` dependency).
+COPY vendor ./vendor
 RUN npm ci
 
 FROM base AS builder
