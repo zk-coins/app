@@ -1,5 +1,36 @@
 import { defineConfig, devices } from '@playwright/test';
 
+// E2E target selector. Two modes share the *same* spec files and the
+// same `*-chromium-linux.png` baselines:
+//
+//   dev   (default, CI): run against the hosted DEV stack
+//                        (https://dev.zkcoins.app + https://dev-api.zkcoins.app).
+//                        No webServer — Playwright drives the live deployment.
+//                        This is the historical behaviour; leaving E2E_TARGET
+//                        unset reproduces it exactly, so CI is untouched.
+//
+//   local:              run against a locally-served standalone PR build plus
+//                        a local zkCoins node (default host.docker.internal:4242).
+//                        Orchestrated by `scripts/e2e-local.sh`, which builds the
+//                        app with the same-origin proxy config, starts the
+//                        standalone server + the test-only `/api/info`
+//                        capability-normalisation proxy, then invokes Playwright.
+//                        See e2e/README.md § 4.2.
+const E2E_TARGET = process.env.E2E_TARGET === 'local' ? 'local' : 'dev';
+
+// In local mode `scripts/e2e-local.sh` has already started the standalone
+// server (it bakes `NEXT_PUBLIC_API_URL` / `LOCAL_NODE_PROXY_TARGET` at build
+// time, which `next start` would ignore). The webServer block below therefore
+// only ever *reuses* that running server — `reuseExistingServer: true` plus a
+// no-op command means Playwright never tries to start its own. The app port is
+// taken from E2E_LOCAL_APP_PORT (default 3090) and mirrored into E2E_BASE_URL
+// by the script.
+const LOCAL_APP_PORT = process.env.E2E_LOCAL_APP_PORT || '3090';
+const LOCAL_BASE_URL = process.env.E2E_BASE_URL || `http://127.0.0.1:${LOCAL_APP_PORT}`;
+
+const baseURL =
+  E2E_TARGET === 'local' ? LOCAL_BASE_URL : process.env.E2E_BASE_URL || 'https://dev.zkcoins.app';
+
 export default defineConfig({
   testDir: './e2e',
   // Helpers and global-setup files live under e2e/ but should not be
@@ -56,8 +87,28 @@ export default defineConfig({
   fullyParallel: true,
   reporter: [['html', { open: 'never' }]],
 
+  // Local mode only: reuse the standalone server `scripts/e2e-local.sh`
+  // already started. The command is a no-op (`true`) because the build
+  // bakes `NEXT_PUBLIC_API_URL` / `rewrites()` at build time, which a
+  // Playwright-spawned `next start` would ignore (Next standalone applies
+  // rewrites only via `node server.js`). `reuseExistingServer: true` makes
+  // Playwright skip the command entirely when the URL is already up, which
+  // it always is here — the block exists purely so Playwright waits for /
+  // health-checks the base URL before the first navigation. Omitted in dev
+  // mode so the hosted-stack behaviour is byte-for-byte unchanged.
+  ...(E2E_TARGET === 'local'
+    ? {
+        webServer: {
+          command: 'true',
+          url: baseURL,
+          reuseExistingServer: true,
+          timeout: 120_000,
+        },
+      }
+    : {}),
+
   use: {
-    baseURL: process.env.E2E_BASE_URL || 'https://dev.zkcoins.app',
+    baseURL,
     headless: true,
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',

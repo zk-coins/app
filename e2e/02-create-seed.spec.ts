@@ -44,21 +44,48 @@ test.describe('Create wallet — seed phrase', () => {
     await clearWalletState(page);
   });
 
-  test('seed-generating', async ({ page }) => {
-    // Race the WASM with a small artificial slowdown so the `generating`
-    // stage is captured before it transitions to `reveal`.
-    await page.route('**/zkcoins_wasm_bg.wasm', async (route) => {
-      await new Promise((r) => setTimeout(r, 800));
-      await route.continue();
+  test.describe('generating stage', () => {
+    // The PWA service worker (public/sw.js) serves static assets
+    // cache-first, and requests answered by a worker bypass
+    // `page.route()` entirely — so the WASM hold below would never
+    // fire. Same reasoning as spec 13's file-level block; scoped to
+    // this inner describe because only this capture depends on
+    // intercepting the WASM fetch.
+    test.use({ serviceWorkers: 'block' });
+
+    test('seed-generating', async ({ page }) => {
+      // Hold the WASM fetch so the `generating` stage is still on
+      // screen when the snapshot is taken, on any runner speed. The
+      // previous 800 ms budget raced `snap()`'s own pre-capture work
+      // (fonts.ready, the /api/info round-trip that builds the default
+      // masks, the stabilizer CSS): on a fast locally-served standalone
+      // build the WASM landed first, the seed grid rendered, and the
+      // (masked) grid no longer matched the text-only baseline. The
+      // 30 s hold cannot slow the test down — the spec ends right after
+      // `snap()` and Playwright aborts the still-pending request when
+      // the page closes; it only pins the UI in `generating` for
+      // however long the snapshot itself takes.
+      //
+      // Glob note: `@zkcoins/wasm` ships `client_bg.wasm`, which Next
+      // emits hashed as `client_bg.<hash>.wasm` under
+      // `/_next/static/media/`. The previous `**/zkcoins_wasm_bg.wasm`
+      // glob matched nothing, so the hold never fired and the captured
+      // frame was pure timing luck — fine on the slower hosted-stack
+      // round-trip, broken on a fast locally-served build where the
+      // grid rendered before the snapshot.
+      await page.route('**/client_bg*.wasm', async (route) => {
+        await new Promise((r) => setTimeout(r, 30_000));
+        await route.continue().catch(() => {});
+      });
+      await page.goto('/');
+      await page.getByTestId('onboarding-create-btn').click();
+      const passkeySkip = page.getByTestId('passkey-other-options-btn');
+      if (await passkeySkip.isVisible({ timeout: 1500 }).catch(() => false)) {
+        await passkeySkip.click();
+      }
+      await expect(page.getByTestId('seed-generating')).toBeVisible({ timeout: 5_000 });
+      await snap(page, '02-seed-generating');
     });
-    await page.goto('/');
-    await page.getByTestId('onboarding-create-btn').click();
-    const passkeySkip = page.getByTestId('passkey-other-options-btn');
-    if (await passkeySkip.isVisible({ timeout: 1500 }).catch(() => false)) {
-      await passkeySkip.click();
-    }
-    await expect(page.getByTestId('seed-generating')).toBeVisible({ timeout: 5_000 });
-    await snap(page, '02-seed-generating');
   });
 
   test('seed-reveal-hidden', async ({ page }) => {

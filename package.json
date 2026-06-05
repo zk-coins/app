@@ -15,7 +15,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "test:e2e": "npx playwright test"
+    "test:e2e": "npx playwright test",
+    "test:e2e:local": "bash scripts/e2e-local.sh"
   },
   "dependencies": {
     "@zkcoins/sdk": "file:vendor/zkcoins-sdk-0.3.1.tgz",
