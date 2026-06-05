@@ -55,16 +55,19 @@
  *   E2E_INFO_USERNAME_DOMAIN  domain to report   (default dev.zkcoins.app)
  *
  * No dependencies — Node ≥ 18 built-ins only (http, fetch).
+ *
+ * The pure helpers and the server factory are exported for the unit
+ * suite (`src/__tests__/scripts/e2e-info-proxy.test.ts`); importing this
+ * module never binds a port — only the standalone entry at the bottom
+ * calls `.listen()`.
  */
 
 import http from 'node:http';
+import { fileURLToPath } from 'node:url';
 
-const PORT = Number.parseInt(process.env.E2E_INFO_PROXY_PORT ?? '4243', 10);
-const NODE_URL = (process.env.E2E_NODE_URL ?? 'http://host.docker.internal:4242').replace(
-  /\/+$/,
-  '',
-);
-const USERNAME_DOMAIN = process.env.E2E_INFO_USERNAME_DOMAIN ?? 'dev.zkcoins.app';
+const DEFAULT_PORT = '4243';
+const DEFAULT_NODE_URL = 'http://host.docker.internal:4242';
+const DEFAULT_USERNAME_DOMAIN = 'dev.zkcoins.app';
 
 // The DEV capability surface the committed baselines were captured
 // against — every opt-in feature OFF. Mirrors `dev-api.zkcoins.app`.
@@ -76,13 +79,13 @@ const DEV_CAPABILITIES = {
 };
 
 /** Normalise an upstream `/api/info` body to the hosted-DEV surface. */
-function normalizeInfo(upstream) {
+export function normalizeInfo(upstream, usernameDomain) {
   // Start from the upstream object so any future field the node adds is
   // preserved by default, then overwrite the three baseline-affecting
   // dimensions and drop `bitcoin_network` (DEV omits it).
   const normalized = { ...upstream };
   normalized.capabilities = DEV_CAPABILITIES;
-  normalized.username_domain = USERNAME_DOMAIN;
+  normalized.username_domain = usernameDomain;
   delete normalized.bitcoin_network;
   return normalized;
 }
@@ -97,6 +100,8 @@ function readBody(req) {
     const chunks = [];
     req.on('data', (c) => chunks.push(c));
     req.on('end', () => resolve(Buffer.concat(chunks)));
+    /* c8 ignore next — socket-level read error, not reachable with an
+       in-process test client */
     req.on('error', reject);
   });
 }
@@ -115,43 +120,6 @@ function copyHeaders(from, to) {
   }
 }
 
-const server = http.createServer(async (req, res) => {
-  const url = new URL(req.url ?? '/', 'http://localhost');
-  const isInfo = req.method === 'GET' && url.pathname === '/api/info';
-
-  try {
-    const body = await readBody(req);
-    const upstream = await fetch(`${NODE_URL}${req.url}`, {
-      method: req.method,
-      headers: forwardHeaders(req.headers),
-      body,
-      redirect: 'manual',
-    });
-
-    if (isInfo && upstream.ok) {
-      const json = await upstream.json();
-      const normalized = JSON.stringify(normalizeInfo(json));
-      res.setHeader('content-type', 'application/json');
-      // Preserve the node's permissive CORS so the browser path behaves
-      // identically whether it hits the node or the proxy.
-      res.setHeader('access-control-allow-origin', '*');
-      res.statusCode = upstream.status;
-      res.end(normalized);
-      return;
-    }
-
-    // Pass-through for everything else (and for a non-OK /api/info).
-    copyHeaders(upstream.headers, res);
-    res.statusCode = upstream.status;
-    const buf = Buffer.from(await upstream.arrayBuffer());
-    res.end(buf);
-  } catch (err) {
-    res.statusCode = 502;
-    res.setHeader('content-type', 'application/json');
-    res.end(JSON.stringify({ error: 'e2e-info-proxy upstream failure', detail: String(err) }));
-  }
-});
-
 /**
  * Headers to forward upstream, minus the ones that break the hop:
  *
@@ -166,7 +134,7 @@ const server = http.createServer(async (req, res) => {
  *     lets undici negotiate + transparently decompress, which is what
  *     both response paths assume.
  */
-function forwardHeaders(headers) {
+export function forwardHeaders(headers) {
   const drop = new Set(['host', 'accept-encoding']);
   const out = {};
   for (const [k, v] of Object.entries(headers)) {
@@ -176,9 +144,105 @@ function forwardHeaders(headers) {
   return out;
 }
 
-server.listen(PORT, '0.0.0.0', () => {
-  // eslint-disable-next-line no-console
-  console.log(
-    `[e2e-info-proxy] :${PORT} → ${NODE_URL} (normalising GET /api/info to caps=false, username_domain=${USERNAME_DOMAIN})`,
-  );
-});
+/**
+ * Client-facing body for an upstream failure.
+ *
+ * Deliberately carries NO `detail` / error string / stack fragment: the
+ * underlying exception can embed server internals (paths, the upstream
+ * URL, undici frames), and exposing those to the HTTP caller is a
+ * stack-trace-exposure vector (CWE-209, CodeQL `js/stack-trace-exposure`).
+ * The cause is logged server-side in the request handler instead, where
+ * the operator reads it — the caller only needs to know the hop failed.
+ */
+export function upstreamFailureBody() {
+  return { error: 'e2e-info-proxy upstream failure' };
+}
+
+/**
+ * Startup diagnostic line.
+ *
+ * Deliberately free of any process.env-derived string (upstream URL,
+ * username domain): an upstream URL can embed credentials
+ * (`https://user:secret@host`), and writing environment-sourced values
+ * to the log in clear text is CWE-312 (CodeQL `js/clear-text-logging`).
+ * The operator already controls the env; the log only needs to confirm
+ * the proxy is up and where it listens.
+ */
+export function startupMessage(port) {
+  return `[e2e-info-proxy] listening on :${port} (normalising GET /api/info to the DEV capability surface)`;
+}
+
+/**
+ * Build the proxy server for a given upstream + reported username domain.
+ * Exported as a factory (rather than a module-level singleton) so the
+ * unit suite can point it at a mock upstream on an ephemeral port.
+ */
+export function createProxyServer({ nodeUrl, usernameDomain }) {
+  const base = nodeUrl.replace(/\/+$/, '');
+
+  return http.createServer(async (req, res) => {
+    // Normalise once and use the same value for the route check AND the
+    // upstream fetch — the previous code fell back to '/' only for the
+    // parse and would have forwarded the literal string "undefined".
+    /* c8 ignore next — node's http server always sets req.url; the `?? '/'`
+       only satisfies the `string | undefined` type, it is never taken */
+    const reqUrl = req.url ?? '/';
+    const url = new URL(reqUrl, 'http://localhost');
+    const isInfo = req.method === 'GET' && url.pathname === '/api/info';
+
+    try {
+      const body = await readBody(req);
+      const upstream = await fetch(`${base}${reqUrl}`, {
+        method: req.method,
+        headers: forwardHeaders(req.headers),
+        body,
+        redirect: 'manual',
+      });
+
+      if (isInfo && upstream.ok) {
+        const json = await upstream.json();
+        const normalized = JSON.stringify(normalizeInfo(json, usernameDomain));
+        res.setHeader('content-type', 'application/json');
+        // Preserve the node's permissive CORS so the browser path behaves
+        // identically whether it hits the node or the proxy.
+        res.setHeader('access-control-allow-origin', '*');
+        res.statusCode = upstream.status;
+        res.end(normalized);
+        return;
+      }
+
+      // Pass-through for everything else (and for a non-OK /api/info).
+      copyHeaders(upstream.headers, res);
+      res.statusCode = upstream.status;
+      const buf = Buffer.from(await upstream.arrayBuffer());
+      res.end(buf);
+    } catch (err) {
+      // Operator-facing detail goes to stderr only; the HTTP caller gets
+      // the generic body (see `upstreamFailureBody` for the rationale).
+      // eslint-disable-next-line no-console
+      console.error('[e2e-info-proxy] upstream failure:', err);
+      res.statusCode = 502;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify(upstreamFailureBody()));
+    }
+  });
+}
+
+/* c8 ignore start — standalone entry (`node scripts/e2e-info-proxy.mjs`):
+   binds the real port from env config. Exercised by every served-local
+   E2E run (ci.yaml + e2e-local.sh); unit tests import the factory and
+   never take this path. */
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
+  const port = Number.parseInt(process.env.E2E_INFO_PROXY_PORT ?? DEFAULT_PORT, 10);
+  const nodeUrl = process.env.E2E_NODE_URL ?? DEFAULT_NODE_URL;
+  const usernameDomain = process.env.E2E_INFO_USERNAME_DOMAIN ?? DEFAULT_USERNAME_DOMAIN;
+  const server = createProxyServer({ nodeUrl, usernameDomain });
+  server.listen(port, '0.0.0.0', () => {
+    // Log the port the OS actually bound (server.address()), not the
+    // env-derived config value — the diagnostic stays accurate and no
+    // process.env-sourced data flows into the log line.
+    // eslint-disable-next-line no-console
+    console.log(startupMessage(server.address().port));
+  });
+}
+/* c8 ignore stop */
