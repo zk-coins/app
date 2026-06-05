@@ -15,8 +15,9 @@
  *   - Username resolution branches (`@zkcoins.app` suffix, `$` prefix,
  *     hex fast-path, foreign-stage suffix safety) — resolve is MVP.
  *   - The `account.xpriv` defensive throw.
- *   - Error surfacing: ApiError → translated message; JobFailedError →
- *     its detail; the no-account redirect window.
+ *   - Error surfacing: ApiError AND JobFailedError → the translated
+ *     `userMessageFor` copy (issue #99 covers both the admit-time and
+ *     the async job-failure leg); the no-account redirect window.
  *
  * `vi.useFakeTimers()` is used only for the redirect-window tests; the
  * lifecycle tests use real timers and stub the `waitForJob` poll floor
@@ -268,12 +269,36 @@ describe('SendPage — error surfacing', () => {
     expect(mockFetch.mock.calls.some(([u]) => String(u).includes('/commit'))).toBe(false);
   });
 
-  it('surfaces the JobFailedError detail when the job fails during proving', async () => {
+  it('shows the German userMessage when the job fails during proving (issue #99, async leg)', async () => {
     const user = userEvent.setup();
     enqueueOk({ balance: ONE_BTC_SATS, num_sends: 0 });
     enqueueOk({ job_id: 'job-f', status: 'queued' }, 202);
     enqueueJob({
       job_id: 'job-f',
+      kind: 'send',
+      status: 'failed',
+      phase: 'failed',
+      // A failure-contract string from the node's table — the async
+      // JobFailedError leg must translate it exactly like an
+      // admit-time ApiError would be.
+      error: 'prove failed',
+    });
+
+    render(<SendPage />);
+    await clickThroughToConfirm(user, RECIPIENT_HEX);
+    await user.click(screen.getByTestId('send-confirm-btn'));
+
+    expect(await screen.findByTestId('send-error')).toHaveTextContent(
+      /Beweisgenerierung fehlgeschlagen\. Bitte später erneut versuchen\./,
+    );
+  });
+
+  it('wraps an unmapped async job-failure string in the German fallback', async () => {
+    const user = userEvent.setup();
+    enqueueOk({ balance: ONE_BTC_SATS, num_sends: 0 });
+    enqueueOk({ job_id: 'job-g', status: 'queued' }, 202);
+    enqueueJob({
+      job_id: 'job-g',
       kind: 'send',
       status: 'failed',
       phase: 'failed',
@@ -284,8 +309,11 @@ describe('SendPage — error surfacing', () => {
     await clickThroughToConfirm(user, RECIPIENT_HEX);
     await user.click(screen.getByTestId('send-confirm-btn'));
 
+    // Unmapped diagnostic → `Serverfehler <status>: <raw>` fallback, so
+    // the raw string stays visible for debugging but inside the German
+    // frame (never a bare stringly-typed blob, per issue #99).
     expect(await screen.findByTestId('send-error')).toHaveTextContent(
-      /prove_account_update failed/,
+      /Serverfehler failed: prove_account_update failed/,
     );
   });
 });

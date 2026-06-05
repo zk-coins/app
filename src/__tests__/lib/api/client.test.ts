@@ -131,10 +131,11 @@ describe('api.mint (lifecycle)', () => {
       phase: 'failed',
       error: 'mint exploded',
     });
-    await expect(api.mint('abc123')).rejects.toMatchObject({
-      name: 'JobFailedError',
-      serverError: 'mint exploded',
-    });
+    // `instanceof` (not a `name`-string match) so a different error
+    // class carrying a copied name can never satisfy this assertion.
+    const err = await api.mint('abc123').catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(JobFailedError);
+    expect((err as JobFailedError).serverError).toBe('mint exploded');
   });
 
   it('throws ApiError on a non-2xx admit (e.g. faucet unavailable)', async () => {
@@ -258,10 +259,9 @@ describe('api.send (lifecycle)', () => {
       proof_id: 5,
     });
 
-    await expect(api.send(SEND_PARAMS)).rejects.toMatchObject({
-      name: 'JobFailedError',
-      serverError: expect.stringContaining('account_state_hash'),
-    });
+    const err = await api.send(SEND_PARAMS).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(JobFailedError);
+    expect((err as JobFailedError).serverError).toContain('account_state_hash');
     // No /commit call was made.
     expect(mockFetch.mock.calls.some(([u]) => String(u).includes('/commit'))).toBe(false);
   });

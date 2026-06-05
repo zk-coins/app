@@ -131,10 +131,13 @@ export default function SendPage() {
       syncNumPubkeys(postSend.num_sends);
       setSuccess({ amount: sats, proofId: proofId?.toString() });
     } catch (err) {
-      if (err instanceof ApiError) {
+      if (err instanceof ApiError || err instanceof JobFailedError) {
+        // Same translation for both legs of the node failure contract:
+        // admit-time rejections (ApiError) and async job failures
+        // (JobFailedError) carry the same server-error strings, so the
+        // toast shows the German `userMessageFor` mapping either way
+        // (issue #99 — async leg included).
         setError(userMessageFor(err));
-      } else if (err instanceof JobFailedError) {
-        setError(err.serverError ?? `Transaction ${err.status}`);
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
