@@ -790,3 +790,33 @@ node e2e/_audit/coverage.mjs --report-only # always exit 0 (escape hatch for tra
 **Allowlisting**
 
 If a testid is intentionally out-of-scope (e.g. PASSKEY non-MVP code, transient loading states), add it to `MVP_EXEMPT_TESTIDS` in `e2e/_audit/coverage.mjs`. If a file contains generic wrapper components whose `<button>`s legitimately have no testid (the testid lives on the wrapper's usage site), add the file path to `MVP_EXEMPT_FILES`. For a button sitting inside a `{FEATURES.X && (...)}` JSX block — dead-stripped from the PRD bundle — add it to `MVP_EXEMPT_BUTTON_SNIPPETS` pinned to a stable substring of the surrounding code. All three lists demand a one-line comment justifying the exemption.
+
+## 15. Golden-Coverage-Audit (`_audit/golden-coverage.mjs`)
+
+The sibling of §14 at the **screen** level (issue #167): it fails CI when an active, ungated screen ships without a page-level visual golden — the `/network` / #166 failure mode. A naive filename check false-passes (spec 09 emits `09-network-badge-*.png`, but those are shot on `/settings`), so coverage is asserted against a declarative registry that pins each screen to its **exact** baseline name(s).
+
+Two source-of-truth layers:
+
+- **Route screens** — auto-inventoried from `src/app/<seg>/page.tsx`, minus the env-gated routes. A route is treated as gated when its body is `!FEATURES.<flag>) notFound()` for a `<flag>` in `ENV_GATED_FEATURES` (`e2e/_audit/gates.mjs`) — the **same** shared flag set the §14 button audit uses for its `MVP_EXEMPT_BUTTON_SNIPPETS`, so the two audits cannot drift on what "env-gated" means.
+- **State-driven `/` views** (Onboarding / Unlock / Wallet) — not routes, so declared explicitly in the registry `e2e/_audit/screens.ts`.
+
+**Fails when** (a) a non-gated `page.tsx` route is absent from the registry (the "won't happen again" guarantee — a new route without a registered golden breaks CI), or (b) a registered screen's expected baseline file(s) are missing from the matching `e2e/*.spec.ts-snapshots/` directory; plus integrity failures (stale registry entry, unknown `gate`, or a registry gate that disagrees with the route's actual `notFound()` guard).
+
+**Run locally**
+
+```bash
+node e2e/_audit/golden-coverage.mjs              # strict: exit 1 on an uncovered screen or missing golden
+node e2e/_audit/golden-coverage.mjs --markdown   # output formatted for PR comments
+node e2e/_audit/golden-coverage.mjs --json       # machine-readable
+node e2e/_audit/golden-coverage.mjs --report-only # always exit 0 (escape hatch for transient debugging)
+```
+
+(Imports the typed registry `screens.ts` directly via Node's built-in TypeScript type-stripping — Node ≥ 22.18, same `node-version: '22'` the workflows pin.)
+
+**CI integration**
+
+`.github/workflows/audit-golden-coverage.yml` mirrors the button audit's trigger matrix (every PR regardless of target branch + push to `develop`) and posts a sticky comment (`audit-golden-coverage`) with the screen → golden table.
+
+**Registering / exempting**
+
+Add a new ungated screen to `SCREENS` in `e2e/_audit/screens.ts` with its expected baseline name(s), then land the golden via the `regenerate-visual-baselines` workflow. To exempt a route, env-gate it in source with `!FEATURES.<flag>) notFound()` and ensure `<flag>` is in `ENV_GATED_FEATURES` (`e2e/_audit/gates.mjs`) — that one list is the shared env-gate allowlist for both audits.
