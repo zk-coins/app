@@ -43,6 +43,13 @@ import {
   buildClaimMessage,
   ApiError,
   JobFailedError,
+  // History wire schemas (issue #145). Imported here so the app can
+  // re-export them under the issue's names — the SDK is the single source
+  // of truth for the `/api/history` contract (see the re-export note
+  // below); the app does not re-declare it.
+  TxItemSchema,
+  HistoryResponseSchema,
+  JobErrorResponseSchema,
   type JobStatus,
   type JobAccepted,
   type BalanceResponse,
@@ -52,6 +59,9 @@ import {
   type ClaimUsernameResponse,
   type SignedSendRequest,
   type CommitRequest,
+  type HistoryResponse,
+  type TxItem,
+  type JobErrorResponse,
 } from '@zkcoins/sdk';
 
 import { useNetworkStore } from '@/stores/network';
@@ -62,6 +72,19 @@ import { initWasm } from '@zkcoins/wasm';
 // keep flowing through `userMessageFor` (see `./errorMessages.ts`) and the
 // `instanceof` checks in the send page / wallet screen unchanged.
 export { ApiError, JobFailedError, newIdempotencyKey };
+// Issue #145 history schemas, re-exported under the names the issue
+// specifies. The `@zkcoins/sdk` migration moved wire-schema ownership into
+// the SDK and deleted the app's old `src/lib/api/schemas.ts` (see the
+// coverage note in `vitest.config.ts`), so re-creating that module would
+// reverse a deliberate architectural decision. Instead the app surfaces the
+// SDK's canonical, cross-rust-verified schemas — `TxItem` is the SDK's name
+// for one `HistoryItem` row, `JobErrorResponse` is the shared flat
+// `{ error: string }` envelope used by the 422/500 branches.
+export {
+  TxItemSchema as HistoryItemSchema,
+  HistoryResponseSchema,
+  JobErrorResponseSchema as HistoryErrorResponseSchema,
+};
 export type {
   JobStatus,
   JobAccepted,
@@ -70,6 +93,9 @@ export type {
   UsernameResponse,
   ResolveUsernameResponse,
   ClaimUsernameResponse,
+  HistoryResponse,
+  TxItem as HistoryItem,
+  JobErrorResponse as HistoryErrorResponse,
 };
 
 /**
@@ -347,6 +373,33 @@ export const api = {
   balance: (address: string): Promise<BalanceResponse> => client().balance(address),
 
   info: (): Promise<InfoResponse> => client().info(),
+
+  /**
+   * Per-address transaction history — `GET /api/history` (issue #145).
+   *
+   * Delegates to the SDK's `ZkCoinsClient.history`, which performs the
+   * fetch and validates the body against the canonical
+   * `HistoryResponseSchema` (the cross-rust-verified mirror of the node's
+   * `router::HistoryResponse` serde). Routing through the SDK keeps the
+   * adapter's no-direct-HTTP invariant intact — the same reason `balance`
+   * and `info` delegate rather than `fetch` here.
+   *
+   * Pagination is caller-driven: pass `limit` (node default 50, hard cap
+   * 200) and `offset` (>= 0). The response carries the node-*filtered*
+   * `total` — only `mint` / `send` / `receive` rows are counted — so the
+   * caller can page without a second query. Malformed input 422s and a DB
+   * failure 500s; both surface as `ApiError` carrying the node's
+   * `{ error }` string on `.serverError`, exactly like `balance`.
+   *
+   * `status` may be `"pending"` as a steady **state**, not only a
+   * transient one: the node defaults to it when the on-chain side is not
+   * yet known (node #153 round-2 fix), so callers must treat `pending` as
+   * a valid resting value.
+   */
+  getHistory: (
+    address: string,
+    opts: { limit?: number; offset?: number } = {},
+  ): Promise<HistoryResponse> => client().history(address, opts),
 
   claimUsername: async (params: ClaimUsernameParams): Promise<ClaimUsernameResponse> => {
     const signed = await signClaimRequest(params);
