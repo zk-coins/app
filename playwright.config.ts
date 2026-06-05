@@ -73,11 +73,12 @@ export default defineConfig({
   //   10-pwa.spec.ts                    (PR #27)
   //   11-cross-spec-redirects.spec.ts   (PR #27)
   //
-  // All exhaustive specs are now active. The testIgnore array is empty
-  // outside of `E2E_REGENERATING`. We keep the conditional in place
-  // (rather than removing the field) so a future spec PR has a clear
-  // place to stage itself behind a regen.
-  testIgnore: process.env.E2E_REGENERATING === 'true' ? [] : [],
+  // Staged behind a regen (baselines not yet committed):
+  //   14-network-activity.spec.ts       (issue #166) — remove from the
+  //   list below in the same commit that lands its
+  //   `e2e/14-network-activity.spec.ts-snapshots/` PNGs, so the regular
+  //   CI run starts diffing it the moment its baselines exist.
+  testIgnore: process.env.E2E_REGENERATING === 'true' ? [] : ['14-network-activity.spec.ts'],
   // Seed Alice + Bob once before any worker starts; remove the fixture
   // file afterwards. See e2e/_global-setup.ts and e2e/_global-teardown.ts.
   globalSetup: require.resolve('./e2e/_global-setup.ts'),

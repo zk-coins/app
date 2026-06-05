@@ -534,7 +534,24 @@ keeps the allowlist entry until the next DEV deploy lands — the spec
 runs against DEV, so the entry only becomes false after the deploy.
 A trailing follow-up PR empties the array once DEV is live.
 
-### 8.14 Totals
+### 8.14 `14-network-activity.spec.ts` (2 tests / 2 shots)
+
+The `/network` "Network activity" page (issue #166) — the last always-on, ungated user-facing screen without a page-level golden. With these two shots, golden coverage of the live, ungated screens reaches 100% (env-gated features — PASSKEY, `/apps`, `/simulate` + `/reset` — stay excluded while their flags default to `false`). Spec 09 only shoots the network _badge_ on the Settings header, never `/network` itself.
+
+No login: `/network` has no route guard and reads no wallet state, so the spec navigates directly. No fixture dependency — the baselines are immune to DEV wallet state.
+
+Determinism (the page renders a live, self-advancing chart — three variance sources are pinned):
+
+1. **Clock** — `page.clock.install` + `page.clock.pauseAt(FIXED)` _before_ navigating freeze `Date.now()` and halt every timer (install alone resumes real time and would let the `POLL_MS = 8000` interval fire past ~8 s, appending a `nextSample()` built from unseeded `Math.random`). Frozen, `buildHistory({ endTs = Date.now(), seed = 1337 })` yields the identical 220-sample waveform every run and the chart can never tick before the snapshot.
+2. **Timezone + locale** — `timezoneId: 'UTC'` + `locale: 'en-US'` pin the `toLocaleTimeString` x-axis tick labels across runners (CI is UTC, dev machines usually aren't).
+3. **Data source** — the cross-origin explorer probe is `route.abort()`ed so `getNetworkActivity` always falls back to `source: 'simulated'`, regardless of the build's `NEXT_PUBLIC_EXPLORER_URL` (served-local CI bakes the not-yet-live PRD explorer URL; builds with the var unset never fetch, leaving the route inert). A visible-text guard on the explorer-preview note fails the spec loudly if the simulated path ever stops rendering. Service workers are blocked so the PWA SW cannot bypass the `page.route` intercept.
+
+| #   | Step                     | Notes                                                       |
+| --- | ------------------------ | ----------------------------------------------------------- |
+| 1   | network-activity-desktop | Frozen simulated chart, status row + explorer-preview note. |
+| 2   | network-activity-mobile  | Same on 375 × 812.                                          |
+
+### 8.15 Totals
 
 | Spec file                         | Tests  | Screenshots (linux only) |
 | --------------------------------- | ------ | ------------------------ |
@@ -550,9 +567,11 @@ A trailing follow-up PR empties the array once DEV is live.
 | `10-pwa.spec.ts`                  | 4      | 4                        |
 | `11-cross-spec-redirects.spec.ts` | 3      | 3                        |
 | `12-a11y.spec.ts`                 | 6      | 0                        |
-| **Σ**                             | **79** | **70**                   |
+| `13-send-server-errors.spec.ts`   | 4      | 3                        |
+| `14-network-activity.spec.ts`     | 2      | 2                        |
+| **Σ**                             | **85** | **75**                   |
 
-70 linux baselines, 79 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated. The accessibility spec is screenshot-free by design.
+75 linux baselines, 85 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated. The accessibility spec is screenshot-free by design.
 
 ## 9. CI integration
 
@@ -641,7 +660,7 @@ Local iteration without CI: `E2E_BASE_URL=https://dev.zkcoins.app npx playwright
 ### 11.1 Adding a new MVP feature
 
 1. Add the feature to `README.md § Features` (mvp row).
-2. Add a step to the relevant spec or a new spec file in this plan (update §8 and the totals in §8.13).
+2. Add a step to the relevant spec or a new spec file in this plan (update §8 and the totals in §8.15).
 3. Implement the test. Add `data-testid` to the component only if a screenshot can't otherwise be stable (see §7).
 4. Run the baseline regen workflow on the feature branch.
 5. PR with `e2e-visual` green.
@@ -674,6 +693,7 @@ The implementation order **matters** because later specs depend on earlier helpe
 11. **PR-11** ✅: §8.10 `10-pwa.spec.ts` _(closes MVP triage gap)_.
 12. **PR-12** ✅: §8.11 `11-cross-spec-redirects.spec.ts`.
 13. **PR-13** ✅: §9 CI integration — `e2e-tests` job in `ci.yaml` plus `E2E Tests` as a required branch-protection context on `develop`.
+14. **PR-14**: §8.14 `14-network-activity.spec.ts` (issue #166) — page-level golden for `/network`; closes the last ungated-screen golden gap (live, ungated screens → 100%).
 
 **Transactions coverage** (the original "06 transactions" spec) lives inside `07-send.spec.ts`: every send produces a tx row, and the spec asserts both Alice's outbound row and Bob's inbound row at the end. The transaction icon variants (send/receive/mint) are exercised in `06-balance.spec.ts:balance-zero-faucet-visible` followed by the faucet-mint in `balance-faucet-minting`. No dedicated spec.
 
@@ -685,7 +705,7 @@ Each PR:
 - Dispatches `regenerate-visual-baselines.yml` via `gh workflow run "Regenerate Visual Baselines" --ref develop -f branch=develop`. The workflow opens a side-branch PR `e2e/regen-baselines-<run-id>` against develop (it does not push directly — see §9.2).
 - **Admin-merges the regen PR**: `gh pr merge <N> --squash --delete-branch --admin`. The protection rule allows admin override (`enforce_admins: false`), which is the unblocking mechanism while the GITHUB_TOKEN cascade-trigger limitation persists.
 - After baselines land, removes the spec from `testIgnore` in a second commit. CI now exercises the spec on every push.
-- Updates §8.13 totals in this file when the spec lands.
+- Updates §8.15 totals in this file when the spec lands.
 - Is reviewed for the screenshot diff in the regen PR by a human (or, for autonomous Claude work, by the next reviewer).
 
 If a PR can't reach green inside 25 minutes of CI: don't merge, downgrade to focused work; do **not** raise the timeout.
@@ -726,6 +746,11 @@ e2e/
 ├── 10-pwa.spec.ts-snapshots/
 ├── 11-cross-spec-redirects.spec.ts        # §8.11
 ├── 11-cross-spec-redirects.spec.ts-snapshots/
+├── 12-a11y.spec.ts                        # §8.13 — axe-core, screenshot-free
+├── 13-send-server-errors.spec.ts          # send error-toast goldens
+├── 13-send-server-errors.spec.ts-snapshots/
+├── 14-network-activity.spec.ts            # §8.14
+├── 14-network-activity.spec.ts-snapshots/
 └── webauthn.spec.ts                       # unchanged — non-MVP DEV-bundle passkey coverage
 ```
 
