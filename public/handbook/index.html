@@ -622,7 +622,7 @@
           </ol>
         </nav>
 
-        <div class="toc-label">Specs (70 tests · 67 baselines)</div>
+        <div class="toc-label">Specs (76 tests · 72 baselines)</div>
         <nav class="toc">
           <ol>
             <li>
@@ -658,6 +658,12 @@
             <li>
               <a href="#spec-11"><span class="spec-num">11</span>Route guards</a>
             </li>
+            <li>
+              <a href="#spec-13"><span class="spec-num">13</span>Send — server error toasts</a>
+            </li>
+            <li>
+              <a href="#spec-14"><span class="spec-num">14</span>Network activity</a>
+            </li>
           </ol>
         </nav>
 
@@ -681,7 +687,7 @@
             <span>🟢 <b>PRD:</b> <a href="https://zkcoins.app">zkcoins.app</a></span>
             <span>🟡 <b>DEV:</b> <a href="https://dev.zkcoins.app">dev.zkcoins.app</a></span>
             <span>📂 <b>Code:</b> <a href="https://github.com/zk-coins/app">zk-coins/app</a></span>
-            <span>🧪 <b>Specs:</b> 11 · 70 tests · 67 baselines</span>
+            <span>🧪 <b>Specs:</b> 13 · 76 tests · 72 baselines</span>
           </div>
         </section>
 
@@ -2513,6 +2519,86 @@
           </div>
         </details>
 
+        <!-- SPEC 14 -->
+        <details id="spec-14" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">14</span>Network activity</h2>
+                <div class="file">e2e/14-network-activity.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>2 tests · 2 baselines</b>
+                <div class="links">
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/14-network-activity.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/14-network-activity.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            The <code>/network</code> "Network activity" add-on page — the last always-on, ungated
+            screen to gain a page-level golden (issue #166). The live, self-advancing chart is
+            frozen via <code>page.clock</code> (install + pause before navigation), pinned to UTC /
+            en-US, and forced onto the deterministic simulated data source, so the seeded 6-hour
+            waveform is byte-stable run-to-run.
+          </p>
+
+          <div class="tests">
+            <div class="test">
+              <div class="head">
+                <span class="name">network-activity</span>
+                <div class="vp-toggle" data-vp-toggle>
+                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
+                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
+                </div>
+                <span class="src">
+                  <a
+                    data-vp-target="mobile"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/14-network-activity.spec.ts#L95"
+                    >L95</a
+                  >
+                  <a
+                    data-vp-target="desktop"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/14-network-activity.spec.ts#L89"
+                    hidden
+                    >L89</a
+                  >
+                </span>
+              </div>
+              <div class="img">
+                <img
+                  data-vp-target="mobile"
+                  src="/handbook/screenshots/14-network-activity-mobile.png"
+                  alt="network activity mobile"
+                />
+                <img
+                  data-vp-target="desktop"
+                  src="/handbook/screenshots/14-network-activity-desktop.png"
+                  alt="network activity desktop"
+                  hidden
+                />
+              </div>
+              <div class="desc">
+                <span data-vp-target="mobile">
+                  Mobile: header, frozen IN/OUT mirror chart, simulated-source status row +
+                  explorer-preview note.
+                </span>
+                <span data-vp-target="desktop" hidden>
+                  Desktop 1440 × 900: the same frozen chart — seed-1337 waveform, UTC x-axis ticks,
+                  IN/OUT readouts.
+                </span>
+              </div>
+            </div>
+          </div>
+        </details>
+
         <hr class="sep" />
 
         <!-- COVERAGE -->
@@ -2633,7 +2719,7 @@
             <li><code>Lint &amp; Build</code></li>
             <li><code>Unit Tests</code></li>
             <li><code>Rust Crypto Tests</code></li>
-            <li><code>E2E Tests</code> — all 70 tests including 67 visual-baseline comparisons</li>
+            <li><code>E2E Tests</code> — all 76 tests including 72 visual-baseline comparisons</li>
           </ul>
 
           <h3>Baseline regeneration</h3>
@@ -2652,10 +2738,6 @@
             <li>
               <strong>Passkey flows</strong> (gated) — covered functionally via
               <code>webauthn.spec.ts</code>, no visual baseline.
-            </li>
-            <li>
-              <strong>Network activity chart</strong> (keep) — simulated data breaks pixel diff, no
-              dedicated test.
             </li>
             <li><strong>Native browser install dialog</strong> — not headless-exercisable.</li>
             <li>
