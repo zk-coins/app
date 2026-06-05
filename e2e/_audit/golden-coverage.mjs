@@ -79,6 +79,15 @@ function findPageFiles(dir) {
 // Detect a build-time route gate: `!FEATURES.<FLAG>) notFound()`.
 const GATE_GUARD_RE = /!\s*FEATURES\.([A-Z0-9_]+)\s*\)\s*notFound\s*\(\s*\)/g;
 
+// Strip block + line comments before gate detection so a commented-out
+// guard (`// if (!FEATURES.X) notFound()`) can't mark a live route as
+// exempt. The `[^:]` lookbehind on the line-comment arm preserves `://`
+// in URL string literals (e.g. `url: 'https://…'`), which never share a
+// line with a real guard.
+function stripComments(source) {
+  return source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/.*$/gm, '$1');
+}
+
 function detectGate(source) {
   let recognized = null;
   const unrecognized = [];
@@ -95,7 +104,7 @@ function detectGate(source) {
 
 const routes = findPageFiles(appDir)
   .map((file) => {
-    const source = fs.readFileSync(file, 'utf8');
+    const source = stripComments(fs.readFileSync(file, 'utf8'));
     const { recognized, unrecognized } = detectGate(source);
     return {
       route: routeOf(file),
@@ -169,6 +178,20 @@ for (const s of SCREENS) {
     if (!isEnvGatedFeature(s.gate)) {
       findings.gateProblems.push(
         `screen \`${s.id}\` declares unknown gate \`${s.gate}\` (not in ENV_GATED_FEATURES)`,
+      );
+    }
+    // Reverse gate check: a registry `gate` MUST be backed by an actual
+    // `!FEATURES.<gate>) notFound()` guard in the route's source. Without
+    // this, mislabelling a live screen (e.g. `/send`) as gated would skip
+    // its baseline check below and pass green while it ships with no
+    // golden — the exact gap this audit exists to close.
+    const src = routeByPath.get(reachRoute);
+    if (src && src.gatedBy !== s.gate) {
+      findings.gateProblems.push(
+        `screen \`${s.id}\` declares gate \`${s.gate}\` but its route \`${reachRoute}\` ` +
+          (src.gatedBy
+            ? `is \`!FEATURES.${src.gatedBy}) notFound()\` in source`
+            : 'is not env-gated in source (the route is active and needs a golden)'),
       );
     }
     if (s.baselines.length > 0) {
