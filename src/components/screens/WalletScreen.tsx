@@ -15,18 +15,23 @@ import {
 } from 'lucide-react';
 import { Logo } from '../icons/Logo';
 import { PwaPrompt } from '../PwaPrompt';
-import { useWalletStore, type Transaction } from '@/stores/wallet';
+import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { ApiError, api } from '@/lib/api/client';
+import { ApiError, api, type HistoryItem } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { formatBtc, formatBtcCompact, formatUsd, toZkAddress } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
+import { useHistory } from '@/hooks/useHistory';
 
 const HIDDEN = '••••';
 
 export function WalletScreen() {
-  const { account, balance, transactions, setBalance, setUsername, syncNumPubkeys } =
-    useWalletStore();
+  const { account, balance, setBalance, setUsername, syncNumPubkeys } = useWalletStore();
+  // Server-truth transaction history (issue #175): fetched on mount and
+  // re-polled on the balance cadence — never reconstructed from local
+  // actions, so a fresh tab / restored seed / second device all render
+  // the same list the node holds.
+  const { items: history, loaded: historyLoaded } = useHistory(account?.address);
   const {
     networkName,
     bitcoinNetwork,
@@ -337,13 +342,16 @@ export function WalletScreen() {
       {/* PWA install prompt */}
       <PwaPrompt />
 
-      {/* Transactions */}
+      {/* Transactions — rendered from the server's `/api/history` response.
+          While the first fetch for an account is in flight, render neither
+          state (mirrors the balance `data-loading` pattern) so a funded
+          wallet never flashes "No transactions yet". */}
       <div>
-        {transactions.length === 0 ? (
+        {history.length > 0 ? (
+          <TransactionsList items={history.slice(0, 10)} />
+        ) : !account || historyLoaded ? (
           <EmptyTransactions hasWallet={!!account} />
-        ) : (
-          <TransactionsList transactions={transactions.slice(0, 10)} />
-        )}
+        ) : null}
       </div>
     </section>
   );
@@ -396,13 +404,17 @@ function EmptyTransactions({ hasWallet }: { hasWallet: boolean }) {
   );
 }
 
-function TransactionsList({ transactions }: { transactions: Transaction[] }) {
+function TransactionsList({ items }: { items: HistoryItem[] }) {
   return (
     <ul className="space-y-2">
-      {transactions.map((tx) => {
-        const positive = tx.type !== 'send';
-        const label = tx.type === 'mint' ? 'Faucet' : tx.type === 'send' ? 'Sent' : 'Received';
-        const Icon = tx.type === 'send' ? ArrowUpRight : tx.type === 'mint' ? Plus : ArrowDownLeft;
+      {items.map((tx) => {
+        // The node returns an absolute `amount` and encodes the sign in
+        // `direction`: sends are debits, mints / receives are credits.
+        const positive = tx.direction !== 'send';
+        const label =
+          tx.direction === 'mint' ? 'Faucet' : tx.direction === 'send' ? 'Sent' : 'Received';
+        const Icon =
+          tx.direction === 'send' ? ArrowUpRight : tx.direction === 'mint' ? Plus : ArrowDownLeft;
         return (
           <li
             key={tx.id}
@@ -419,7 +431,8 @@ function TransactionsList({ transactions }: { transactions: Transaction[] }) {
               <div>
                 <p className="text-[13px] font-medium text-ink">{label}</p>
                 <p data-testid="tx-row-time" className="mono text-[11px] text-ink3 tabular-nums">
-                  {new Date(tx.timestamp).toLocaleTimeString([], {
+                  {/* The wire `timestamp` is Unix seconds — convert to ms. */}
+                  {new Date(tx.timestamp * 1000).toLocaleTimeString([], {
                     hour: '2-digit',
                     minute: '2-digit',
                   })}
