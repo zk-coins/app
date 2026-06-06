@@ -5,9 +5,6 @@
  * affordances at three viewport widths, plus the two primary CTA hover
  * states. Five tests, five linux baselines.
  *
- * DEV-only widgets visible in these baselines (per § 8.0 (b)):
- *   - `dev-*` hostnames in the FooterLinks row at the bottom of the card.
- *
  * No fixture login — this spec is the user's very first contact with the
  * app and must run from a blank-slate state.
  */

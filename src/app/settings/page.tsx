@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/AppShell';
-import { FooterLinks } from '@/components/FooterLinks';
 import { useNetworkStore } from '@/stores/network';
 import { APP_VERSION } from '@/lib/format';
 import { useWalletStore } from '@/stores/wallet';
@@ -136,12 +135,6 @@ export default function SettingsPage() {
             )}
           </Section>
         )}
-
-        <Section title="Resources">
-          <div className="py-4">
-            <FooterLinks variant="grid" />
-          </div>
-        </Section>
 
         <Section title="About">
           <div className="flex items-start justify-between gap-6 py-4">

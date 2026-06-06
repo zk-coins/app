@@ -1,9 +1,9 @@
 /**
  * SettingsPage tests (`src/app/settings/page.tsx`).
  *
- * The settings surface is read-only chrome (Resources links + the
- * About card listing version, network, and the connected node host)
- * plus one load-bearing action: the `Disconnect Wallet` button that
+ * The settings surface is read-only chrome (the About card listing
+ * version, network, and the connected node host) plus one load-bearing
+ * action: the `Disconnect Wallet` button that
  * wipes `useWalletStore` + `useAuthStore` and removes the IndexedDB
  * credential, gated by a `window.confirm` dialog.
  *
@@ -82,10 +82,9 @@ afterEach(() => {
 });
 
 describe('SettingsPage — header + sections', () => {
-  it('renders the heading, the Resources + About sections, and the node host', () => {
+  it('renders the heading, the About section, and the node host', () => {
     render(<SettingsPage />);
     expect(screen.getByTestId('settings-heading')).toHaveTextContent('Settings');
-    expect(screen.getByTestId('settings-section-resources')).toBeInTheDocument();
     expect(screen.getByTestId('settings-section-about')).toBeInTheDocument();
     expect(screen.getByText('signet')).toBeInTheDocument();
     // Node host is the configured apiUrl with the scheme stripped.

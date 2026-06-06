@@ -299,7 +299,7 @@ The `setViewport` helper defaults to `mobile` when called without an explicit vi
 
 ## 8. Test inventory (the exhaustive step list)
 
-This section is the result of a line-by-line audit of every MVP component (`src/components/onboarding/Onboarding.tsx`, `src/components/screens/WalletScreen.tsx`, `src/app/page.tsx`, `src/app/send/page.tsx`, `src/app/receive/page.tsx`, `src/app/settings/page.tsx`, `src/components/AppShell.tsx`, `src/components/BottomNav.tsx`, `src/components/FooterLinks.tsx`, `src/components/PwaPrompt.tsx`). **Every button, every visible visual state, every conditional render** that the MVP user can reach is enumerated below. Each row is one `test()` and one screenshot baseline (unless marked `(no shot)`).
+This section is the result of a line-by-line audit of every MVP component (`src/components/onboarding/Onboarding.tsx`, `src/components/screens/WalletScreen.tsx`, `src/app/page.tsx`, `src/app/send/page.tsx`, `src/app/receive/page.tsx`, `src/app/settings/page.tsx`, `src/components/AppShell.tsx`, `src/components/BottomNav.tsx`, `src/components/PwaPrompt.tsx`). **Every button, every visible visual state, every conditional render** that the MVP user can reach is enumerated below. Each row is one `test()` and one screenshot baseline (unless marked `(no shot)`).
 
 ### 8.0 DEV-bundle vs PRD-bundle — what we screenshot
 
@@ -324,7 +324,6 @@ On screens we DO screenshot, the DEV bundle renders extra widgets the PRD bundle
 | Username claim input + button on the wallet              | `features.USERNAME_CLAIM` (runtime cap; off in hosted DEV+PRD)                | §8.6 `balance-funded-desktop/mobile`             |
 | Faucet button on empty-balance banner                    | `networkName !== mainnet` (MVP, no flag) — DEV runs Mutinynet, so it IS shown | §8.6 `balance-zero-faucet-visible`               |
 | `@user` / `$user` resolver hint placeholder on Send      | MVP — always rendered (username resolve is permanent)                         | §8.7 `send-default`, `recipient-valid-username`  |
-| `dev-*` hostnames in FooterLinks                         | runtime (`hostname.startsWith('dev')`)                                        | §8.1, §8.5, §8.9 (any screen with FooterLinks)   |
 | "Buy private BTC through DFX" link in no-balance variant | `FEATURES.APPS_DIRECTORY`                                                     | §8.7 `send-no-funds-banner`                      |
 
 A future PRD smoke pass (out of scope here) is the only way to assert the PRD-stripped variants exist. These specs deliberately do **not** try to assert PRD behaviour.
@@ -335,13 +334,13 @@ A future PRD smoke pass (out of scope here) is the only way to assert the PRD-st
 
 The landing entry plus both onward affordances. Onboarding has its own visual style (full-bleed hero on mobile, framed card on desktop, decorative pixel-grid background) that needs to lock in.
 
-| #   | Step                  | Notes                                                                                                                           |
-| --- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | welcome-desktop       | Default 1440 × 900. PixelLogo, "Welcome to zkCoins" + ghost icon, 3 Benefit cards, both buttons, footer label, FooterLinks row. |
-| 2   | welcome-mobile        | 375 × 812. Same content stacked.                                                                                                |
-| 3   | welcome-tablet        | 768 × 1024 — the mid-breakpoint where the card frame appears (`md:border md:bg-surface`).                                       |
-| 4   | welcome-create-hover  | Hover on "CREATE WALLET" — colour shift to `bg-bitcoin-hover`. (Trace `:hover` via `page.hover()`.)                             |
-| 5   | welcome-restore-hover | Hover on "Restore existing wallet" — text colour shifts to bitcoin orange.                                                      |
+| #   | Step                  | Notes                                                                                               |
+| --- | --------------------- | --------------------------------------------------------------------------------------------------- |
+| 1   | welcome-desktop       | Default 1440 × 900. PixelLogo, "Welcome to zkCoins" + ghost icon, 3 Benefit cards, both buttons.    |
+| 2   | welcome-mobile        | 375 × 812. Same content stacked.                                                                    |
+| 3   | welcome-tablet        | 768 × 1024 — the mid-breakpoint where the card frame appears (`md:border md:bg-surface`).           |
+| 4   | welcome-create-hover  | Hover on "CREATE WALLET" — colour shift to `bg-bitcoin-hover`. (Trace `:hover` via `page.hover()`.) |
+| 5   | welcome-restore-hover | Hover on "Restore existing wallet" — text colour shifts to bitcoin orange.                          |
 
 ### 8.2 `02-create-seed.spec.ts` (10 tests / 9 shots, 1 no-shot)
 
@@ -466,18 +465,16 @@ The full Send pipeline plus every error branch. Alice → Bob, 1 000 sats.
 | 3   | receive-after-copy      | Click Copy address → button text flips to "Copied" with Check icon. |
 | 4   | receive-back-to-wallet  | Click Back → WalletScreen renders again.                            |
 
-### 8.9 `09-network-and-shell.spec.ts` (6 tests / 6 shots)
+### 8.9 `09-network-and-shell.spec.ts` (4 tests / 4 shots)
 
-AppShell + BottomNav + Network info badge. Covers the MVP "Network info badge" function plus the navigation chrome (`AppShell`, `BottomNav`, `FooterLinks`) that wraps every other screen — those aren't MVP functions on their own but every other spec inherits their pixels and would diff on chrome changes if we didn't lock them once here.
+AppShell + BottomNav + Network info badge. Covers the MVP "Network info badge" function plus the navigation chrome (`AppShell`, `BottomNav`) that wraps every other screen — those aren't MVP functions on their own but every other spec inherits their pixels and would diff on chrome changes if we didn't lock them once here.
 
 | #   | Step                            | Notes                                                                                               |
 | --- | ------------------------------- | --------------------------------------------------------------------------------------------------- |
 | 1   | shell-bottomnav-wallet-active   | WalletScreen rendered, Wallet tab orange, Apps + Settings inactive.                                 |
 | 2   | shell-bottomnav-settings-active | Navigate to Settings — Settings tab orange.                                                         |
-| 3   | shell-footerlinks-row           | Default row variant on Wallet screen — 7 entries dot-separated with dev-\* hosts.                   |
-| 4   | shell-footerlinks-grid          | Grid variant on Settings — same entries as 2-col cards with → and ↗ arrows.                         |
-| 5   | network-badge-signet            | Settings header right side — signet badge text + dot indicator. Subset shot of the badge area only. |
-| 6   | network-badge-loading           | Intercept `/api/info` with 1 s delay, screenshot Settings header before the badge appears.          |
+| 3   | network-info-node               | Connected node host shown in the Settings About card (`apiUrl` with the scheme stripped).            |
+| 4   | network-loading                 | Intercept `/api/info` with an 8 s delay, screenshot Settings while the Network row is absent.        |
 
 ### 8.10 `10-pwa.spec.ts` (4 tests / 4 shots)
 
@@ -563,15 +560,15 @@ Determinism (the page renders a live, self-advancing chart — three variance so
 | `06-balance.spec.ts`              | 6      | 6                        |
 | `07-send.spec.ts`                 | 13     | 12                       |
 | `08-receive.spec.ts`              | 4      | 4                        |
-| `09-network-and-shell.spec.ts`    | 6      | 6                        |
+| `09-network-and-shell.spec.ts`    | 4      | 4                        |
 | `10-pwa.spec.ts`                  | 4      | 4                        |
 | `11-cross-spec-redirects.spec.ts` | 3      | 3                        |
 | `12-a11y.spec.ts`                 | 6      | 0                        |
 | `13-send-server-errors.spec.ts`   | 4      | 3                        |
 | `14-network-activity.spec.ts`     | 2      | 2                        |
-| **Σ**                             | **85** | **75**                   |
+| **Σ**                             | **83** | **73**                   |
 
-75 linux baselines, 85 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated. The accessibility spec is screenshot-free by design.
+73 linux baselines, 83 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated. The accessibility spec is screenshot-free by design.
 
 ## 9. CI integration
 

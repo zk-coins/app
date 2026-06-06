@@ -4,11 +4,10 @@
  * Covers § 8.9 of e2e/README.md. The MVP "network info" surface — the
  * connected node host shown in the Settings About card — plus the
  * navigation chrome that wraps every other screen (BottomNav tab
- * states, FooterLinks row + grid variants). 6 tests, 6 baselines.
+ * states). 4 tests, 4 baselines.
  *
  * DEV mirrors PRD (issue #30) — no Apps tab in BottomNav (gated by
- * FEATURES.APPS_DIRECTORY, off by default), `dev-*` hostnames in the
- * FooterLinks row come from the runtime URL substitution.
+ * FEATURES.APPS_DIRECTORY, off by default).
  *
  * Locators: testid-based.
  */
@@ -40,24 +39,6 @@ test.describe('Network info + AppShell', () => {
     // settings page is fully laid out.
     await expect(page.getByTestId('settings-node-host')).toBeVisible({ timeout: 10_000 });
     await snap(page, '09-shell-bottomnav-settings-active', { fullPage: true });
-  });
-
-  test('shell-footerlinks-row', async ({ page }) => {
-    // The FooterLinks row variant lives under AppShell on every page.
-    // Capture from the wallet (Alice is already there). fullPage so the
-    // row at the bottom of the page is actually in the screenshot.
-    await expect(page.getByTestId('footer-links-row')).toBeVisible();
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
-    await snap(page, '09-shell-footerlinks-row', { fullPage: true });
-  });
-
-  test('shell-footerlinks-grid', async ({ page }) => {
-    // Grid variant is inside Settings § Resources. fullPage snap also
-    // captures the About card at the top, so wait for it.
-    await page.getByTestId('nav-settings').click();
-    await expect(page.getByTestId('footer-links-grid')).toBeVisible({ timeout: 10_000 });
-    await expect(page.getByTestId('settings-node-host')).toBeVisible({ timeout: 10_000 });
-    await snap(page, '09-shell-footerlinks-grid', { fullPage: true });
   });
 
   test('network-info-node', async ({ page }) => {
