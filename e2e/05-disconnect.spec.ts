@@ -6,7 +6,6 @@
  *
  * DEV-only widgets visible in these baselines (per § 8.0 (b)):
  *   - Apps tab in BottomNav (FEATURES.APPS_DIRECTORY)
- *   - `dev-*` hostnames in the FooterLinks grid inside § Resources
  *
  * Locators: testid-based. The `disconnect-confirm-dialog` test still
  * asserts on the dialog's literal message — the browser-native
@@ -26,20 +25,19 @@ import { snap, setViewport } from './_helpers/screenshot';
  * BottomNav Settings link is a Next.js `<Link>` and navigates client-side
  * with the store intact.
  *
- * Settings has two `{networkName && …}`-gated regions (the badge in the
- * header and the "Network" row in the About section). The store value
- * is populated by WalletScreen's `useEffect(api.info, …)`, which races
- * the in-app navigation here. Without waiting for the badge to land,
- * the snapshot can capture the page ~52 px shorter than the linux
- * baseline (badge + Network row missing) and fail visual regression.
+ * Settings has a `{networkName && …}`-gated "Network" row in the About
+ * section, populated by WalletScreen's `useEffect(api.info, …)`, which
+ * races the in-app navigation here. The node-host row in the same card
+ * is always present and renders synchronously, so we anchor on it to
+ * ensure the About card has laid out before snapshotting.
  */
 async function goToSettings(page: Page): Promise<void> {
   await page.getByTestId('nav-settings').click();
   await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
   // `networkName` is pre-warmed by `aliceLogin` (see `waitForNetworkInfo`
-  // in `e2e/_helpers/wallet.ts`), so the badge renders on first paint of
-  // /settings. Default 10 s timeout is plenty.
-  await expect(page.getByTestId('settings-network-badge')).toBeVisible({ timeout: 10_000 });
+  // in `e2e/_helpers/wallet.ts`); the node-host row renders on first paint
+  // of /settings. Default 10 s timeout is plenty.
+  await expect(page.getByTestId('settings-node-host')).toBeVisible({ timeout: 10_000 });
 }
 
 test.describe('Disconnect wallet', () => {

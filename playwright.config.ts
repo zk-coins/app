@@ -72,6 +72,7 @@ export default defineConfig({
   //   09-network-and-shell.spec.ts      (PR #26)
   //   10-pwa.spec.ts                    (PR #27)
   //   11-cross-spec-redirects.spec.ts   (PR #27)
+  //   14-network-activity.spec.ts       (PR #168, issue #166)
   //
   // All exhaustive specs are now active. The testIgnore array is empty
   // outside of `E2E_REGENERATING`. We keep the conditional in place

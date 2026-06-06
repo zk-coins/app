@@ -6,9 +6,6 @@
  * stage. 10 tests, 9 linux baselines, 1 no-shot. The `creating` shot from
  * the original plan was dropped — the state is too transient to snapshot.
  *
- * DEV-only widgets visible in these baselines (per § 8.0 (b)):
- *   - `dev-*` hostnames in the FooterLinks below the card on Welcome screens.
- *
  * `beforeEach` wipes IDB + localStorage so every test starts from a blank
  * slate (Onboarding renders, not WalletScreen / UnlockScreen).
  *

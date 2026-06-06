@@ -1,10 +1,10 @@
 /**
  * Tests for the AppShell + BottomNav navigation chrome.
  *
- * AppShell wraps every wallet route. Its props control whether the
- * bottom-nav and footer-links render; getting either wrong leaves
- * either the user stranded (no way back to /) or a non-MVP route
- * exposed inside a `showNav={false}` flow. BottomNav additionally
+ * AppShell wraps every wallet route. Its `showNav` prop controls
+ * whether the bottom-nav renders; getting it wrong leaves either the
+ * user stranded (no way back to /) or a non-MVP route exposed inside a
+ * `showNav={false}` flow. BottomNav additionally
  * dead-strips the `Apps` tab via `FEATURES.APPS_DIRECTORY` — a
  * regression that flipped that gate would leak DEV-only chrome into
  * the PRD bundle.
@@ -64,7 +64,7 @@ describe('AppShell — prop matrix', () => {
     expect(screen.getByText('shell-payload-marker')).toBeInTheDocument();
   });
 
-  it('renders BottomNav and FooterLinks by default', () => {
+  it('renders BottomNav by default', () => {
     render(
       <AppShell>
         <span />
@@ -72,8 +72,6 @@ describe('AppShell — prop matrix', () => {
     );
     expect(screen.getByTestId('nav-wallet')).toBeInTheDocument();
     expect(screen.getByTestId('nav-settings')).toBeInTheDocument();
-    // FooterLinks render at least one link.
-    expect(document.querySelectorAll('[data-testid^="footer-link-"]').length).toBeGreaterThan(0);
   });
 
   it('omits BottomNav when showNav={false}', () => {
@@ -84,15 +82,6 @@ describe('AppShell — prop matrix', () => {
     );
     expect(screen.queryByTestId('nav-wallet')).not.toBeInTheDocument();
     expect(screen.queryByTestId('nav-settings')).not.toBeInTheDocument();
-  });
-
-  it('omits FooterLinks when showFooterLinks={false}', () => {
-    render(
-      <AppShell showFooterLinks={false}>
-        <span />
-      </AppShell>,
-    );
-    expect(document.querySelectorAll('[data-testid^="footer-link-"]')).toHaveLength(0);
   });
 });
 

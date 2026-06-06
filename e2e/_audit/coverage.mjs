@@ -31,6 +31,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { ENV_GATED_FEATURES, isEnvGatedFeature } from './gates.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, '..', '..');
@@ -81,15 +82,39 @@ const MVP_EXEMPT_FILES = new Set([
 // stripped from the PRD bundle by Next.js DCE when the corresponding
 // NEXT_PUBLIC_ENABLE_* flag is off, and are therefore out of MVP scope.
 // Pinned by the snippet substring (not line number) so the allowlist
-// survives unrelated reflows of the surrounding code.
+// survives unrelated reflows of the surrounding code. The `feature` field
+// names the gating flag from the shared `ENV_GATED_FEATURES` set (see
+// `gates.mjs`) — the same source of truth the screen-level golden audit
+// subtracts, so the two audits cannot drift on what "env-gated" means.
 const MVP_EXEMPT_BUTTON_SNIPPETS = [
   // PasskeyFlow register button — FEATURES.PASSKEY gated, dead-stripped from PRD bundle.
-  { file: 'src/components/onboarding/Onboarding.tsx', snippet: 'onClick={register}' },
+  {
+    file: 'src/components/onboarding/Onboarding.tsx',
+    snippet: 'onClick={register}',
+    feature: 'PASSKEY',
+  },
   // PasskeyRestoreFlow authenticate button — FEATURES.PASSKEY gated, dead-stripped from PRD bundle.
   // Pinned to the unique button label rather than `onClick={restore}`, which also appears on the
   // SeedImport submit button (that one has its own `seed-import-submit-btn` testid).
-  { file: 'src/components/onboarding/Onboarding.tsx', snippet: 'Authenticate with passkey' },
+  {
+    file: 'src/components/onboarding/Onboarding.tsx',
+    snippet: 'Authenticate with passkey',
+    feature: 'PASSKEY',
+  },
 ];
+
+// Guard against drift: every snippet exemption must name a recognised
+// env-gate flag. If a future flag is removed from `ENV_GATED_FEATURES`
+// (or mistyped here) this fails loudly at load instead of silently
+// exempting a button that now ships.
+for (const { file, snippet, feature } of MVP_EXEMPT_BUTTON_SNIPPETS) {
+  if (!isEnvGatedFeature(feature)) {
+    throw new Error(
+      `coverage.mjs: MVP_EXEMPT_BUTTON_SNIPPETS entry {${file}: "${snippet}"} names feature ` +
+        `"${feature}", which is not in ENV_GATED_FEATURES (${ENV_GATED_FEATURES.join(', ')}).`,
+    );
+  }
+}
 
 const args = new Set(process.argv.slice(2));
 const FORMAT_MARKDOWN = args.has('--markdown');

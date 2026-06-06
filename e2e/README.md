@@ -299,7 +299,7 @@ The `setViewport` helper defaults to `mobile` when called without an explicit vi
 
 ## 8. Test inventory (the exhaustive step list)
 
-This section is the result of a line-by-line audit of every MVP component (`src/components/onboarding/Onboarding.tsx`, `src/components/screens/WalletScreen.tsx`, `src/app/page.tsx`, `src/app/send/page.tsx`, `src/app/receive/page.tsx`, `src/app/settings/page.tsx`, `src/components/AppShell.tsx`, `src/components/BottomNav.tsx`, `src/components/FooterLinks.tsx`, `src/components/PwaPrompt.tsx`). **Every button, every visible visual state, every conditional render** that the MVP user can reach is enumerated below. Each row is one `test()` and one screenshot baseline (unless marked `(no shot)`).
+This section is the result of a line-by-line audit of every MVP component (`src/components/onboarding/Onboarding.tsx`, `src/components/screens/WalletScreen.tsx`, `src/app/page.tsx`, `src/app/send/page.tsx`, `src/app/receive/page.tsx`, `src/app/settings/page.tsx`, `src/components/AppShell.tsx`, `src/components/BottomNav.tsx`, `src/components/PwaPrompt.tsx`). **Every button, every visible visual state, every conditional render** that the MVP user can reach is enumerated below. Each row is one `test()` and one screenshot baseline (unless marked `(no shot)`).
 
 ### 8.0 DEV-bundle vs PRD-bundle — what we screenshot
 
@@ -324,7 +324,6 @@ On screens we DO screenshot, the DEV bundle renders extra widgets the PRD bundle
 | Username claim input + button on the wallet              | `features.USERNAME_CLAIM` (runtime cap; off in hosted DEV+PRD)                | §8.6 `balance-funded-desktop/mobile`             |
 | Faucet button on empty-balance banner                    | `networkName !== mainnet` (MVP, no flag) — DEV runs Mutinynet, so it IS shown | §8.6 `balance-zero-faucet-visible`               |
 | `@user` / `$user` resolver hint placeholder on Send      | MVP — always rendered (username resolve is permanent)                         | §8.7 `send-default`, `recipient-valid-username`  |
-| `dev-*` hostnames in FooterLinks                         | runtime (`hostname.startsWith('dev')`)                                        | §8.1, §8.5, §8.9 (any screen with FooterLinks)   |
 | "Buy private BTC through DFX" link in no-balance variant | `FEATURES.APPS_DIRECTORY`                                                     | §8.7 `send-no-funds-banner`                      |
 
 A future PRD smoke pass (out of scope here) is the only way to assert the PRD-stripped variants exist. These specs deliberately do **not** try to assert PRD behaviour.
@@ -335,13 +334,13 @@ A future PRD smoke pass (out of scope here) is the only way to assert the PRD-st
 
 The landing entry plus both onward affordances. Onboarding has its own visual style (full-bleed hero on mobile, framed card on desktop, decorative pixel-grid background) that needs to lock in.
 
-| #   | Step                  | Notes                                                                                                                           |
-| --- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | welcome-desktop       | Default 1440 × 900. PixelLogo, "Welcome to zkCoins" + ghost icon, 3 Benefit cards, both buttons, footer label, FooterLinks row. |
-| 2   | welcome-mobile        | 375 × 812. Same content stacked.                                                                                                |
-| 3   | welcome-tablet        | 768 × 1024 — the mid-breakpoint where the card frame appears (`md:border md:bg-surface`).                                       |
-| 4   | welcome-create-hover  | Hover on "CREATE WALLET" — colour shift to `bg-bitcoin-hover`. (Trace `:hover` via `page.hover()`.)                             |
-| 5   | welcome-restore-hover | Hover on "Restore existing wallet" — text colour shifts to bitcoin orange.                                                      |
+| #   | Step                  | Notes                                                                                               |
+| --- | --------------------- | --------------------------------------------------------------------------------------------------- |
+| 1   | welcome-desktop       | Default 1440 × 900. PixelLogo, "Welcome to zkCoins" + ghost icon, 3 Benefit cards, both buttons.    |
+| 2   | welcome-mobile        | 375 × 812. Same content stacked.                                                                    |
+| 3   | welcome-tablet        | 768 × 1024 — the mid-breakpoint where the card frame appears (`md:border md:bg-surface`).           |
+| 4   | welcome-create-hover  | Hover on "CREATE WALLET" — colour shift to `bg-bitcoin-hover`. (Trace `:hover` via `page.hover()`.) |
+| 5   | welcome-restore-hover | Hover on "Restore existing wallet" — text colour shifts to bitcoin orange.                          |
 
 ### 8.2 `02-create-seed.spec.ts` (10 tests / 9 shots, 1 no-shot)
 
@@ -466,18 +465,16 @@ The full Send pipeline plus every error branch. Alice → Bob, 1 000 sats.
 | 3   | receive-after-copy      | Click Copy address → button text flips to "Copied" with Check icon. |
 | 4   | receive-back-to-wallet  | Click Back → WalletScreen renders again.                            |
 
-### 8.9 `09-network-and-shell.spec.ts` (6 tests / 6 shots)
+### 8.9 `09-network-and-shell.spec.ts` (4 tests / 4 shots)
 
-AppShell + BottomNav + Network info badge. Covers the MVP "Network info badge" function plus the navigation chrome (`AppShell`, `BottomNav`, `FooterLinks`) that wraps every other screen — those aren't MVP functions on their own but every other spec inherits their pixels and would diff on chrome changes if we didn't lock them once here.
+AppShell + BottomNav + Network info badge. Covers the MVP "Network info badge" function plus the navigation chrome (`AppShell`, `BottomNav`) that wraps every other screen — those aren't MVP functions on their own but every other spec inherits their pixels and would diff on chrome changes if we didn't lock them once here.
 
 | #   | Step                            | Notes                                                                                               |
 | --- | ------------------------------- | --------------------------------------------------------------------------------------------------- |
 | 1   | shell-bottomnav-wallet-active   | WalletScreen rendered, Wallet tab orange, Apps + Settings inactive.                                 |
 | 2   | shell-bottomnav-settings-active | Navigate to Settings — Settings tab orange.                                                         |
-| 3   | shell-footerlinks-row           | Default row variant on Wallet screen — 7 entries dot-separated with dev-\* hosts.                   |
-| 4   | shell-footerlinks-grid          | Grid variant on Settings — same entries as 2-col cards with → and ↗ arrows.                         |
-| 5   | network-badge-signet            | Settings header right side — signet badge text + dot indicator. Subset shot of the badge area only. |
-| 6   | network-badge-loading           | Intercept `/api/info` with 1 s delay, screenshot Settings header before the badge appears.          |
+| 3   | network-info-node               | Connected node host shown in the Settings About card (`apiUrl` with the scheme stripped).            |
+| 4   | network-loading                 | Intercept `/api/info` with an 8 s delay, screenshot Settings while the Network row is absent.        |
 
 ### 8.10 `10-pwa.spec.ts` (4 tests / 4 shots)
 
@@ -534,7 +531,24 @@ keeps the allowlist entry until the next DEV deploy lands — the spec
 runs against DEV, so the entry only becomes false after the deploy.
 A trailing follow-up PR empties the array once DEV is live.
 
-### 8.14 Totals
+### 8.14 `14-network-activity.spec.ts` (2 tests / 2 shots)
+
+The `/network` "Network activity" page (issue #166) — the last always-on, ungated user-facing screen without a page-level golden. With these two shots, golden coverage of the live, ungated screens reaches 100% (env-gated features — PASSKEY, `/apps`, `/simulate` + `/reset` — stay excluded while their flags default to `false`). Spec 09 only shoots the network _badge_ on the Settings header, never `/network` itself.
+
+No login: `/network` has no route guard and reads no wallet state, so the spec navigates directly. No fixture dependency — the baselines are immune to DEV wallet state.
+
+Determinism (the page renders a live, self-advancing chart — three variance sources are pinned):
+
+1. **Clock** — `page.clock.install` + `page.clock.pauseAt(FIXED)` _before_ navigating freeze `Date.now()` and halt every timer (install alone resumes real time and would let the `POLL_MS = 8000` interval fire past ~8 s, appending a `nextSample()` built from unseeded `Math.random`). Frozen, `buildHistory({ endTs = Date.now(), seed = 1337 })` yields the identical 220-sample waveform every run and the chart can never tick before the snapshot.
+2. **Timezone + locale** — `timezoneId: 'UTC'` + `locale: 'en-US'` pin the `toLocaleTimeString` x-axis tick labels across runners (CI is UTC, dev machines usually aren't).
+3. **Data source** — the cross-origin explorer probe is `route.abort()`ed so `getNetworkActivity` always falls back to `source: 'simulated'`, regardless of the build's `NEXT_PUBLIC_EXPLORER_URL` (served-local CI bakes the not-yet-live PRD explorer URL; builds with the var unset never fetch, leaving the route inert). A visible-text guard on the explorer-preview note fails the spec loudly if the simulated path ever stops rendering. Service workers are blocked so the PWA SW cannot bypass the `page.route` intercept.
+
+| #   | Step                     | Notes                                                       |
+| --- | ------------------------ | ----------------------------------------------------------- |
+| 1   | network-activity-desktop | Frozen simulated chart, status row + explorer-preview note. |
+| 2   | network-activity-mobile  | Same on 375 × 812.                                          |
+
+### 8.15 Totals
 
 | Spec file                         | Tests  | Screenshots (linux only) |
 | --------------------------------- | ------ | ------------------------ |
@@ -546,13 +560,15 @@ A trailing follow-up PR empties the array once DEV is live.
 | `06-balance.spec.ts`              | 6      | 6                        |
 | `07-send.spec.ts`                 | 13     | 12                       |
 | `08-receive.spec.ts`              | 4      | 4                        |
-| `09-network-and-shell.spec.ts`    | 6      | 6                        |
+| `09-network-and-shell.spec.ts`    | 4      | 4                        |
 | `10-pwa.spec.ts`                  | 4      | 4                        |
 | `11-cross-spec-redirects.spec.ts` | 3      | 3                        |
 | `12-a11y.spec.ts`                 | 6      | 0                        |
-| **Σ**                             | **79** | **70**                   |
+| `13-send-server-errors.spec.ts`   | 4      | 3                        |
+| `14-network-activity.spec.ts`     | 2      | 2                        |
+| **Σ**                             | **83** | **73**                   |
 
-70 linux baselines, 79 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated. The accessibility spec is screenshot-free by design.
+73 linux baselines, 83 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated. The accessibility spec is screenshot-free by design.
 
 ## 9. CI integration
 
@@ -641,7 +657,7 @@ Local iteration without CI: `E2E_BASE_URL=https://dev.zkcoins.app npx playwright
 ### 11.1 Adding a new MVP feature
 
 1. Add the feature to `README.md § Features` (mvp row).
-2. Add a step to the relevant spec or a new spec file in this plan (update §8 and the totals in §8.13).
+2. Add a step to the relevant spec or a new spec file in this plan (update §8 and the totals in §8.15).
 3. Implement the test. Add `data-testid` to the component only if a screenshot can't otherwise be stable (see §7).
 4. Run the baseline regen workflow on the feature branch.
 5. PR with `e2e-visual` green.
@@ -674,6 +690,7 @@ The implementation order **matters** because later specs depend on earlier helpe
 11. **PR-11** ✅: §8.10 `10-pwa.spec.ts` _(closes MVP triage gap)_.
 12. **PR-12** ✅: §8.11 `11-cross-spec-redirects.spec.ts`.
 13. **PR-13** ✅: §9 CI integration — `e2e-tests` job in `ci.yaml` plus `E2E Tests` as a required branch-protection context on `develop`.
+14. **PR-14**: §8.14 `14-network-activity.spec.ts` (issue #166) — page-level golden for `/network`; closes the last ungated-screen golden gap (live, ungated screens → 100%).
 
 **Transactions coverage** (the original "06 transactions" spec) lives inside `07-send.spec.ts`: every send produces a tx row, and the spec asserts both Alice's outbound row and Bob's inbound row at the end. The transaction icon variants (send/receive/mint) are exercised in `06-balance.spec.ts:balance-zero-faucet-visible` followed by the faucet-mint in `balance-faucet-minting`. No dedicated spec.
 
@@ -685,7 +702,7 @@ Each PR:
 - Dispatches `regenerate-visual-baselines.yml` via `gh workflow run "Regenerate Visual Baselines" --ref develop -f branch=develop`. The workflow opens a side-branch PR `e2e/regen-baselines-<run-id>` against develop (it does not push directly — see §9.2).
 - **Admin-merges the regen PR**: `gh pr merge <N> --squash --delete-branch --admin`. The protection rule allows admin override (`enforce_admins: false`), which is the unblocking mechanism while the GITHUB_TOKEN cascade-trigger limitation persists.
 - After baselines land, removes the spec from `testIgnore` in a second commit. CI now exercises the spec on every push.
-- Updates §8.13 totals in this file when the spec lands.
+- Updates §8.15 totals in this file when the spec lands.
 - Is reviewed for the screenshot diff in the regen PR by a human (or, for autonomous Claude work, by the next reviewer).
 
 If a PR can't reach green inside 25 minutes of CI: don't merge, downgrade to focused work; do **not** raise the timeout.
@@ -726,6 +743,11 @@ e2e/
 ├── 10-pwa.spec.ts-snapshots/
 ├── 11-cross-spec-redirects.spec.ts        # §8.11
 ├── 11-cross-spec-redirects.spec.ts-snapshots/
+├── 12-a11y.spec.ts                        # §8.13 — axe-core, screenshot-free
+├── 13-send-server-errors.spec.ts          # send error-toast goldens
+├── 13-send-server-errors.spec.ts-snapshots/
+├── 14-network-activity.spec.ts            # §8.14
+├── 14-network-activity.spec.ts-snapshots/
 └── webauthn.spec.ts                       # unchanged — non-MVP DEV-bundle passkey coverage
 ```
 
@@ -765,3 +787,33 @@ node e2e/_audit/coverage.mjs --report-only # always exit 0 (escape hatch for tra
 **Allowlisting**
 
 If a testid is intentionally out-of-scope (e.g. PASSKEY non-MVP code, transient loading states), add it to `MVP_EXEMPT_TESTIDS` in `e2e/_audit/coverage.mjs`. If a file contains generic wrapper components whose `<button>`s legitimately have no testid (the testid lives on the wrapper's usage site), add the file path to `MVP_EXEMPT_FILES`. For a button sitting inside a `{FEATURES.X && (...)}` JSX block — dead-stripped from the PRD bundle — add it to `MVP_EXEMPT_BUTTON_SNIPPETS` pinned to a stable substring of the surrounding code. All three lists demand a one-line comment justifying the exemption.
+
+## 15. Golden-Coverage-Audit (`_audit/golden-coverage.mjs`)
+
+The sibling of §14 at the **screen** level (issue #167): it fails CI when an active, ungated screen ships without a page-level visual golden — the `/network` / #166 failure mode. A naive filename check false-passes (spec 09 emits `09-network-badge-*.png`, but those are shot on `/settings`), so coverage is asserted against a declarative registry that pins each screen to its **exact** baseline name(s).
+
+Two source-of-truth layers:
+
+- **Route screens** — auto-inventoried from `src/app/<seg>/page.tsx`, minus the env-gated routes. A route is treated as gated when its body is `!FEATURES.<flag>) notFound()` for a `<flag>` in `ENV_GATED_FEATURES` (`e2e/_audit/gates.mjs`) — the **same** shared flag set the §14 button audit uses for its `MVP_EXEMPT_BUTTON_SNIPPETS`, so the two audits cannot drift on what "env-gated" means.
+- **State-driven `/` views** (Onboarding / Unlock / Wallet) — not routes, so declared explicitly in the registry `e2e/_audit/screens.ts`.
+
+**Fails when** (a) a non-gated `page.tsx` route is absent from the registry (the "won't happen again" guarantee — a new route without a registered golden breaks CI), or (b) a registered screen's expected baseline file(s) are missing from the matching `e2e/*.spec.ts-snapshots/` directory; plus integrity failures (stale registry entry, unknown `gate`, or a registry gate that disagrees with the route's actual `notFound()` guard).
+
+**Run locally**
+
+```bash
+node e2e/_audit/golden-coverage.mjs              # strict: exit 1 on an uncovered screen or missing golden
+node e2e/_audit/golden-coverage.mjs --markdown   # output formatted for PR comments
+node e2e/_audit/golden-coverage.mjs --json       # machine-readable
+node e2e/_audit/golden-coverage.mjs --report-only # always exit 0 (escape hatch for transient debugging)
+```
+
+(Imports the typed registry `screens.ts` directly via Node's built-in TypeScript type-stripping — Node ≥ 22.18, same `node-version: '22'` the workflows pin.)
+
+**CI integration**
+
+`.github/workflows/audit-golden-coverage.yml` mirrors the button audit's trigger matrix (every PR regardless of target branch + push to `develop`) and posts a sticky comment (`audit-golden-coverage`) with the screen → golden table.
+
+**Registering / exempting**
+
+Add a new ungated screen to `SCREENS` in `e2e/_audit/screens.ts` with its expected baseline name(s), then land the golden via the `regenerate-visual-baselines` workflow. To exempt a route, env-gate it in source with `!FEATURES.<flag>) notFound()` and ensure `<flag>` is in `ENV_GATED_FEATURES` (`e2e/_audit/gates.mjs`) — that one list is the shared env-gate allowlist for both audits.

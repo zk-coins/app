@@ -3,7 +3,6 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/AppShell';
-import { FooterLinks } from '@/components/FooterLinks';
 import { useNetworkStore } from '@/stores/network';
 import { APP_VERSION } from '@/lib/format';
 import { useWalletStore } from '@/stores/wallet';
@@ -77,9 +76,10 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { networkName } = useNetworkStore();
+  const { networkName, apiUrl } = useNetworkStore();
   const { account, deleteWallet } = useWalletStore();
-  const { authMethod, reset: resetAuth } = useAuthStore();
+  const { reset: resetAuth } = useAuthStore();
+  const nodeHost = apiUrl.replace(/^https?:\/\//, '');
 
   useEffect(() => {
     if (!account && typeof window !== 'undefined') {
@@ -111,62 +111,10 @@ export default function SettingsPage() {
           >
             Settings
           </h1>
-          <p className="text-[14px] text-ink2">Wallet, network, and privacy preferences</p>
         </div>
-        {networkName && (
-          <span
-            data-testid="settings-network-badge"
-            className="mt-2 inline-flex shrink-0 items-center gap-1.5 rounded-full border border-line2 bg-line/40 px-2.5 py-1 mono text-[10px] font-semibold tracking-[0.2em] text-ink2 uppercase"
-          >
-            <span className="h-1.5 w-1.5 rounded-full bg-ink2" />
-            {networkName}
-          </span>
-        )}
       </header>
 
       <div className="mt-8 space-y-6">
-        <Section title="Security">
-          <div className="flex items-start justify-between gap-6 py-4">
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium text-ink">Storage</p>
-              <p className="mt-0.5 text-[12px] text-ink3">
-                Keys encrypted with AES-256-GCM in IndexedDB. Never sent to any server.
-              </p>
-            </div>
-          </div>
-          <div className="flex items-start justify-between gap-6 py-4">
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium text-ink">Auth method</p>
-              <p className="mt-0.5 text-[12px] text-ink3">
-                {authMethod === 'passkey'
-                  ? 'Passkey — wallet derived from WebAuthn PRF output'
-                  : authMethod === 'seed'
-                    ? 'Seed phrase — wallet encrypted with your password'
-                    : 'Not configured'}
-              </p>
-            </div>
-          </div>
-          <div className="py-4">
-            <div className="min-w-0">
-              <p className="text-[13px] font-medium text-ink">Recovery</p>
-              <p className="mt-0.5 text-[12px] text-ink3">
-                {authMethod === 'passkey'
-                  ? 'Your wallet is derived from your passkey. As long as your passkey is synced via iCloud Keychain or Google Password Manager, you can restore it on any device.'
-                  : 'Your 12-word seed phrase was shown once during wallet creation. Use it to restore your wallet on any device. If you lost it, transfer your funds to a new wallet and create a fresh backup.'}
-              </p>
-            </div>
-          </div>
-          {FEATURES.AUTO_LOCK && (
-            <Toggle
-              label="Auto-lock"
-              description="Lock wallet after 5 minutes inactivity"
-              defaultOn
-              badge="Planned"
-              disabled
-            />
-          )}
-        </Section>
-
         {(FEATURES.ADDRESS_ROTATION || FEATURES.TOR_ROUTING) && (
           <Section title="Privacy">
             {FEATURES.ADDRESS_ROTATION && (
@@ -188,12 +136,6 @@ export default function SettingsPage() {
           </Section>
         )}
 
-        <Section title="Resources">
-          <div className="py-4">
-            <FooterLinks variant="grid" />
-          </div>
-        </Section>
-
         <Section title="About">
           <div className="flex items-start justify-between gap-6 py-4">
             <p className="text-[13px] font-medium text-ink">Version</p>
@@ -205,12 +147,15 @@ export default function SettingsPage() {
               <p className="mono text-[12px] text-ink2 lowercase">{networkName}</p>
             </div>
           )}
-          {account && (
-            <div className="py-4">
-              <p className="text-[13px] font-medium text-ink">Address</p>
-              <p className="mt-1 mono text-[11px] break-all text-ink3">{account.address}</p>
-            </div>
-          )}
+          <div className="flex items-start justify-between gap-6 py-4">
+            <p className="shrink-0 text-[13px] font-medium text-ink">Node</p>
+            <p
+              data-testid="settings-node-host"
+              className="mono text-[12px] break-all text-right text-ink2"
+            >
+              {nodeHost}
+            </p>
+          </div>
         </Section>
 
         {account && (
