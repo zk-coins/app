@@ -1,18 +1,15 @@
 /**
  * SettingsPage tests (`src/app/settings/page.tsx`).
  *
- * The settings surface is mostly read-only chrome (Section/Toggle
- * cards + version + network badge) plus one load-bearing action:
- * the `Disconnect Wallet` button that wipes `useWalletStore` +
- * `useAuthStore` and removes the IndexedDB credential, gated by a
- * `window.confirm` dialog.
+ * The settings surface is read-only chrome (Resources links + the
+ * About card listing version, network, and the connected node host)
+ * plus one load-bearing action: the `Disconnect Wallet` button that
+ * wipes `useWalletStore` + `useAuthStore` and removes the IndexedDB
+ * credential, gated by a `window.confirm` dialog.
  *
  * `e2e/05-disconnect.spec.ts` covers the styled output and the
  * dialog accept/cancel flow, but does not lock in the store-side
- * effects (no clean way to inspect Zustand from Playwright) nor
- * the `authMethod` → recovery-copy mapping that decides whether
- * the page tells the user about their seed phrase or their
- * passkey.
+ * effects (no clean way to inspect Zustand from Playwright).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -85,19 +82,21 @@ afterEach(() => {
 });
 
 describe('SettingsPage — header + sections', () => {
-  it('renders the heading, network badge, and the three always-on sections', () => {
+  it('renders the heading, the Resources + About sections, and the node host', () => {
     render(<SettingsPage />);
     expect(screen.getByTestId('settings-heading')).toHaveTextContent('Settings');
-    expect(screen.getByTestId('settings-network-badge')).toHaveTextContent('signet');
-    expect(screen.getByTestId('settings-section-security')).toBeInTheDocument();
     expect(screen.getByTestId('settings-section-resources')).toBeInTheDocument();
     expect(screen.getByTestId('settings-section-about')).toBeInTheDocument();
+    expect(screen.getByText('signet')).toBeInTheDocument();
+    // Node host is the configured apiUrl with the scheme stripped.
+    expect(screen.getByTestId('settings-node-host')).toHaveTextContent('test.api');
   });
 
-  it('hides the network badge when networkName is empty (pre-info-tick)', () => {
+  it('hides the Network row when networkName is empty (pre-info-tick) but still shows the node host', () => {
     useNetworkStore.setState({ networkName: '' });
     render(<SettingsPage />);
-    expect(screen.queryByTestId('settings-network-badge')).not.toBeInTheDocument();
+    expect(screen.queryByText('signet')).not.toBeInTheDocument();
+    expect(screen.getByTestId('settings-node-host')).toHaveTextContent('test.api');
   });
 
   it('hides the Privacy section when both gating flags are off (PRD bundle)', () => {
@@ -109,26 +108,6 @@ describe('SettingsPage — header + sections', () => {
     FEATURES_STATE.ADDRESS_ROTATION = true;
     render(<SettingsPage />);
     expect(screen.getByTestId('settings-section-privacy')).toBeInTheDocument();
-  });
-});
-
-describe('SettingsPage — recovery copy switches on authMethod', () => {
-  it('renders the seed-phrase recovery copy when authMethod=seed', () => {
-    useAuthStore.setState({ authMethod: 'seed' });
-    render(<SettingsPage />);
-    expect(screen.getByText(/12-word seed phrase was shown once/)).toBeInTheDocument();
-  });
-
-  it('renders the passkey recovery copy when authMethod=passkey', () => {
-    useAuthStore.setState({ authMethod: 'passkey', credentialId: 'cred' });
-    render(<SettingsPage />);
-    expect(screen.getByText(/Your wallet is derived from your passkey/)).toBeInTheDocument();
-  });
-
-  it('renders the "Not configured" auth-method copy when authMethod is null', () => {
-    useAuthStore.setState({ authMethod: null });
-    render(<SettingsPage />);
-    expect(screen.getByText(/Not configured/)).toBeInTheDocument();
   });
 });
 
@@ -207,22 +186,19 @@ describe('SettingsPage — no-account redirect', () => {
   });
 });
 
-describe('SettingsPage — Toggle interaction (Auto-lock card)', () => {
-  it('toggles on/off when clicked (defensive — wire is currently disabled-style but onClick still flips)', async () => {
-    FEATURES_STATE.AUTO_LOCK = true;
+describe('SettingsPage — Privacy toggle interaction', () => {
+  it('renders a disabled "Planned" toggle inside the Privacy section', async () => {
+    FEATURES_STATE.ADDRESS_ROTATION = true;
     const user = userEvent.setup();
     render(<SettingsPage />);
 
-    // The toggle inside the Auto-lock card has aria-pressed semantics.
-    // It's the only toggle inside the Security section.
-    const securitySection = screen.getByTestId('settings-section-security');
-    const toggle = securitySection.querySelector('button[aria-pressed]') as HTMLButtonElement;
+    const privacySection = screen.getByTestId('settings-section-privacy');
+    const toggle = privacySection.querySelector('button[aria-pressed]') as HTMLButtonElement;
     expect(toggle).toBeTruthy();
-    // Auto-lock starts on (defaultOn=true) and is disabled — onClick is a no-op.
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    // Planned toggles ship off + disabled — onClick is a no-op.
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
     expect(toggle).toBeDisabled();
     await user.click(toggle);
-    // Still on — the disabled guard prevents the flip.
-    expect(toggle).toHaveAttribute('aria-pressed', 'true');
+    expect(toggle).toHaveAttribute('aria-pressed', 'false');
   });
 });
