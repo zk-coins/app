@@ -321,7 +321,7 @@ describe('QrScanModal — camera unavailable', () => {
 
 describe('QrScanModal — upload fallback', () => {
   /** Install an Image stub whose load outcome we control. */
-  function stubImage(outcome: 'load' | 'error') {
+  function stubImage(outcome: 'load' | 'error' | 'pending') {
     vi.stubGlobal(
       'Image',
       class {
@@ -330,6 +330,8 @@ describe('QrScanModal — upload fallback', () => {
         naturalWidth = 100;
         naturalHeight = 100;
         set src(_v: string) {
+          // 'pending' never resolves — models a decode still in flight.
+          if (outcome === 'pending') return;
           queueMicrotask(() => (outcome === 'load' ? this.onload?.() : this.onerror?.()));
         }
       },
@@ -356,8 +358,8 @@ describe('QrScanModal — upload fallback', () => {
     stubGetUserMedia(() => new Promise<MediaStream>(() => {}));
     const ctx = stubCanvas();
     const onResult = vi.fn();
-    render(<QrScanModal onResult={onResult} onClose={vi.fn()} />);
-    return { ctx, onResult };
+    const utils = render(<QrScanModal onResult={onResult} onClose={vi.fn()} />);
+    return { ...utils, ctx, onResult };
   }
 
   it('decodes an uploaded QR image and resolves the scan', async () => {
@@ -400,6 +402,18 @@ describe('QrScanModal — upload fallback', () => {
     await uploadFile();
 
     expect(screen.getByTestId('qr-scan-file-error')).toHaveTextContent(/could not be read/);
+  });
+
+  it('revokes a still-decoding upload URL when the modal unmounts', async () => {
+    const { unmount } = await setup();
+    stubImage('pending'); // installs the URL.createObjectURL/revokeObjectURL spies
+
+    await uploadFile();
+    // The decode never resolves, so the URL is still held — unmount must
+    // release it.
+    expect(URL.revokeObjectURL).not.toHaveBeenCalled();
+    unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith('blob:fake');
   });
 
   it('ignores an empty file selection', async () => {

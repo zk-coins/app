@@ -60,6 +60,9 @@ export function QrScanModal({ onResult, onClose }: QrScanModalProps) {
   const [invalidPayload, setInvalidPayload] = useState(false);
   const [fileError, setFileError] = useState<string | null>(null);
   const invalidTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Object URL of an upload whose decode is still in flight — revoked on
+  // unmount so closing the modal mid-decode cannot leak the blob.
+  const pendingObjectUrlRef = useRef<string | null>(null);
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -77,21 +80,23 @@ export function QrScanModal({ onResult, onClose }: QrScanModalProps) {
     [onResult, stopStream],
   );
 
-  /** Route a decoded payload: finish on a recipient, flash on junk. */
-  const handlePayload = useCallback(
+  /** Finish on a recipient payload; report whether it was one. */
+  const tryFinish = useCallback(
     (payload: string): boolean => {
       const recipient = extractRecipient(payload);
-      if (recipient) {
-        finish(recipient);
-        return true;
-      }
-      setInvalidPayload(true);
-      if (invalidTimerRef.current) clearTimeout(invalidTimerRef.current);
-      invalidTimerRef.current = setTimeout(() => setInvalidPayload(false), INVALID_FLASH_MS);
-      return false;
+      if (!recipient) return false;
+      finish(recipient);
+      return true;
     },
     [finish],
   );
+
+  /** Flash the "not a zkCoins address" hint over the camera viewport. */
+  const flashInvalid = useCallback(() => {
+    setInvalidPayload(true);
+    if (invalidTimerRef.current) clearTimeout(invalidTimerRef.current);
+    invalidTimerRef.current = setTimeout(() => setInvalidPayload(false), INVALID_FLASH_MS);
+  }, []);
 
   // Camera lifecycle: request the stream on mount, sample frames on an
   // interval, tear everything down on unmount. An interval (not rAF) so
@@ -116,7 +121,7 @@ export function QrScanModal({ onResult, onClose }: QrScanModalProps) {
       ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
       const frame = ctx.getImageData(0, 0, canvas.width, canvas.height);
       const payload = decodeQr(frame.data, frame.width, frame.height);
-      if (payload) handlePayload(payload);
+      if (payload && !tryFinish(payload)) flashInvalid();
     };
 
     const start = async () => {
@@ -174,6 +179,15 @@ export function QrScanModal({ onResult, onClose }: QrScanModalProps) {
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [onClose]);
 
+  // Revoke an in-flight upload's object URL if the modal unmounts before
+  // the image finishes decoding (the load/error handlers revoke it on the
+  // normal path).
+  useEffect(() => {
+    return () => {
+      if (pendingObjectUrlRef.current) URL.revokeObjectURL(pendingObjectUrlRef.current);
+    };
+  }, []);
+
   const onFileChange = useCallback(
     (e: React.ChangeEvent<HTMLInputElement>) => {
       const file = e.target.files?.[0];
@@ -183,9 +197,14 @@ export function QrScanModal({ onResult, onClose }: QrScanModalProps) {
       setFileError(null);
 
       const url = URL.createObjectURL(file);
+      pendingObjectUrlRef.current = url;
+      const releaseUrl = () => {
+        URL.revokeObjectURL(url);
+        pendingObjectUrlRef.current = null;
+      };
       const img = new Image();
       img.onload = () => {
-        URL.revokeObjectURL(url);
+        releaseUrl();
         const canvas = canvasRef.current;
         /* c8 ignore next — the canvas is always mounted with the modal */
         if (!canvas) return;
@@ -201,17 +220,18 @@ export function QrScanModal({ onResult, onClose }: QrScanModalProps) {
           setFileError('No QR code was found in that image.');
           return;
         }
-        if (!handlePayload(payload)) {
+        // No camera flash here — the upload area has its own error line.
+        if (!tryFinish(payload)) {
           setFileError('That QR code is not a zkCoins address.');
         }
       };
       img.onerror = () => {
-        URL.revokeObjectURL(url);
+        releaseUrl();
         setFileError('That file could not be read as an image.');
       };
       img.src = url;
     },
-    [handlePayload],
+    [tryFinish],
   );
 
   return (
