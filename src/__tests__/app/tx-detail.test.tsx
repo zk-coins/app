@@ -1,0 +1,211 @@
+/**
+ * Transaction-detail page (`src/app/tx/[id]/page.tsx`).
+ *
+ * Drives the real page + the real `useTransaction` hook with a mocked
+ * `next/navigation` route param and a mocked `api.getTransaction`, so the
+ * id-parsing, account scoping, the loading / not-found / error / body
+ * states, and the per-field rendering are all exercised end-to-end.
+ */
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { render, screen, waitFor } from '@testing-library/react';
+import TransactionDetailPage from '@/app/tx/[id]/page';
+import { ApiError, api, type TxDetail } from '@/lib/api/client';
+import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
+
+const route = vi.hoisted(() => ({ id: '7' as string }));
+vi.mock('next/navigation', () => ({
+  useParams: () => ({ id: route.id }),
+}));
+
+const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+
+const MINT: TxDetail = {
+  id: 7,
+  address: 'a'.repeat(64),
+  txid: null,
+  timestamp: 1_780_000_000,
+  direction: 'mint',
+  amount: 10_000,
+  counterparty: null,
+  status: 'pending',
+  block_height: null,
+  memo: null,
+  balance_after: 10_000,
+  balance_before: null,
+  num_sends_after: 0,
+  commitment_public_key: null,
+  circuit_digest: 'cd'.repeat(32),
+  commit_output_value: null,
+};
+
+let spy: ReturnType<typeof vi.spyOn>;
+
+beforeEach(() => {
+  route.id = '7';
+  useNetworkStore.setState({ usernameDomain: 'dev.zkcoins.app' });
+  useWalletStore.setState({
+    account: ALICE,
+    balance: 10_000,
+    isLoading: false,
+    isLocked: false,
+    hasStoredWallet: false,
+    storedAddress: null,
+    storedAuthMethod: null,
+    error: null,
+  });
+  spy = vi.spyOn(api, 'getTransaction');
+});
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
+
+describe('TransactionDetailPage', () => {
+  it('shows the loading state while the fetch is in flight', () => {
+    spy.mockReturnValue(new Promise<never>(() => {}));
+    render(<TransactionDetailPage />);
+    expect(screen.getByTestId('tx-detail-loading')).toBeInTheDocument();
+  });
+
+  it('renders a funded mint detail with the decoded snapshot fields', async () => {
+    spy.mockResolvedValue(MINT);
+    render(<TransactionDetailPage />);
+
+    expect(await screen.findByTestId('tx-detail-body')).toBeInTheDocument();
+    expect(screen.getByTestId('tx-detail-label')).toHaveTextContent('Faucet');
+    expect(screen.getByTestId('tx-detail-status')).toHaveTextContent('pending');
+    expect(screen.getByTestId('tx-detail-v-balance-after')).toHaveTextContent('BTC');
+    // First-row mint: no prior balance, no commitment key, not broadcast.
+    expect(screen.getByTestId('tx-detail-v-balance-before')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-num-sends')).toHaveTextContent('0');
+    expect(screen.getByTestId('tx-detail-txid')).toHaveTextContent('Not yet broadcast');
+    expect(screen.getByTestId('tx-detail-counterparty')).toHaveTextContent('Private');
+    expect(screen.getByTestId('tx-detail-source')).toHaveTextContent('Your node');
+    // Pending → awaiting confirmation (no verified marker).
+    expect(screen.getByTestId('tx-detail-verification')).toHaveTextContent('Awaiting confirmation');
+    expect(spy).toHaveBeenCalledWith(7, ALICE.address);
+  });
+
+  it('renders a confirmed send: signed amount, verified marker, raw txid (no explorer)', async () => {
+    spy.mockResolvedValue({
+      ...MINT,
+      direction: 'send',
+      status: 'confirmed',
+      amount: 6_000,
+      balance_after: 4_000,
+      balance_before: 10_000,
+      num_sends_after: 1,
+      txid: 'ab'.repeat(32),
+      block_height: 900_001,
+      commitment_public_key: '02'.padEnd(66, 'a'),
+      commit_output_value: 546,
+    });
+    render(<TransactionDetailPage />);
+
+    expect(await screen.findByTestId('tx-detail-label')).toHaveTextContent('Sent');
+    // Debit → Unicode-minus signed amount.
+    expect(screen.getByTestId('tx-detail-v-amount')).toHaveTextContent('−');
+    expect(screen.getByTestId('tx-detail-verification')).toHaveTextContent('Proof verified');
+    expect(screen.getByTestId('tx-detail-v-txid')).toBeInTheDocument();
+    // No explorer env in unit tests → plain txid span, no outbound link.
+    expect(screen.queryByTestId('tx-detail-explorer-link')).not.toBeInTheDocument();
+    expect(screen.getByTestId('tx-detail-v-block-height')).toHaveTextContent('900001');
+  });
+
+  it('renders a receive detail label', async () => {
+    spy.mockResolvedValue({ ...MINT, direction: 'receive' });
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-label')).toHaveTextContent('Received');
+  });
+
+  it('falls back to a truncated raw address when the username domain is unset', async () => {
+    useNetworkStore.setState({ usernameDomain: '' });
+    spy.mockResolvedValue(MINT);
+    render(<TransactionDetailPage />);
+    // toZkAddress('', …) returns '' → the account row shows the
+    // truncated raw hex instead of the @domain chip.
+    const account = await screen.findByTestId('tx-detail-account');
+    expect(account).toHaveTextContent('aaaaaaaaaa...aaaaaaaa');
+  });
+
+  it('shows an em-dash for a null circuit digest', async () => {
+    spy.mockResolvedValue({ ...MINT, circuit_digest: null });
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-v-circuit-digest')).toHaveTextContent('—');
+  });
+
+  it('shows not-found for a non-integer route id without fetching', async () => {
+    route.id = 'not-a-number';
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
+      'Transaction not found',
+    );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('shows not-found when there is no unlocked account', async () => {
+    useWalletStore.setState({ account: null });
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
+      'Transaction not found',
+    );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('shows not-found when the node 404s the row', async () => {
+    spy.mockRejectedValue(new ApiError(404, 'Transaction not found'));
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
+      'Transaction not found',
+    );
+  });
+
+  it('shows the generic error state on a non-404 failure', async () => {
+    spy.mockRejectedValue(new ApiError(500, 'Database error'));
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
+      'Could not load transaction',
+    );
+  });
+});
+
+describe('TransactionDetailPage — explorer link', () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+    vi.restoreAllMocks();
+  });
+
+  it('links the txid to the configured block explorer', async () => {
+    vi.stubEnv('NEXT_PUBLIC_EXPLORER_URL', 'https://zkcoins.space');
+    vi.resetModules();
+    const { default: FreshPage } = await import('@/app/tx/[id]/page');
+    const freshApi = (await import('@/lib/api/client')).api;
+    const store = (await import('@/stores/wallet')).useWalletStore;
+    const net = (await import('@/stores/network')).useNetworkStore;
+    net.setState({ usernameDomain: 'dev.zkcoins.app' });
+    store.setState({
+      account: ALICE,
+      balance: 10_000,
+      isLoading: false,
+      isLocked: false,
+      hasStoredWallet: false,
+      storedAddress: null,
+      storedAuthMethod: null,
+      error: null,
+    });
+    vi.spyOn(freshApi, 'getTransaction').mockResolvedValue({
+      ...MINT,
+      direction: 'send',
+      status: 'confirmed',
+      txid: 'ab'.repeat(32),
+    });
+
+    render(<FreshPage />);
+    const link = await screen.findByTestId('tx-detail-explorer-link');
+    expect(link).toHaveAttribute('href', `https://zkcoins.space/tx/${'ab'.repeat(32)}`);
+    expect(link).toHaveAttribute('target', '_blank');
+  });
+});

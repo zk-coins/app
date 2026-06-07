@@ -61,6 +61,7 @@ import {
   type CommitRequest,
   type HistoryResponse,
   type TxItem,
+  type TxDetail,
   type JobErrorResponse,
 } from '@zkcoins/sdk';
 
@@ -95,6 +96,7 @@ export type {
   ClaimUsernameResponse,
   HistoryResponse,
   TxItem as HistoryItem,
+  TxDetail,
   JobErrorResponse as HistoryErrorResponse,
 };
 
@@ -400,6 +402,19 @@ export const api = {
     address: string,
     opts: { limit?: number; offset?: number } = {},
   ): Promise<HistoryResponse> => client().history(address, opts),
+
+  /**
+   * Full detail for one transaction — `GET /api/history/{id}` (the
+   * transaction-detail page's data source). Delegates to the SDK's
+   * `ZkCoinsClient.getTransaction`, which validates against the
+   * canonical `TxDetailSchema` (the mirror of the node's
+   * `router::TxDetail` serde) — same no-direct-HTTP rationale as
+   * `getHistory`. `id` is a `HistoryItem.id` from the list; `address`
+   * scopes the lookup (wrong-address / internal rows 404 as `ApiError`,
+   * malformed input 422s node-side).
+   */
+  getTransaction: (id: number, address: string): Promise<TxDetail> =>
+    client().getTransaction(id, address),
 
   claimUsername: async (params: ClaimUsernameParams): Promise<ClaimUsernameResponse> => {
     const signed = await signClaimRequest(params);
