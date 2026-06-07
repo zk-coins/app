@@ -61,6 +61,10 @@ const STABILIZE_CSS = `
   [data-testid="balance-amount-btc"] { display: inline-block; min-width: 220px; }
   [data-testid="tx-row-amount"] { display: inline-block; min-width: 96px; text-align: right; }
   [data-testid="proof-id"] { display: inline-block; min-width: 80px; }
+  /* Transaction-detail value cells: pin every masked value to a uniform
+     width so the mask box is identical regardless of the per-run value
+     (id, timestamp, circuit digest, amounts) — see the tx-detail spec. */
+  [data-testid^="tx-detail-v-"] { display: inline-block; min-width: 170px; }
 `;
 
 async function applyStabilizer(page: Page): Promise<void> {

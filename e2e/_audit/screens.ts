@@ -101,6 +101,15 @@ export const SCREENS: readonly Screen[] = [
     baselines: [{ spec: '07-send', name: '07-send-default' }],
   },
   {
+    id: 'tx-detail',
+    title: 'Transaction detail',
+    reach: { kind: 'route', path: '/tx/[id]' },
+    baselines: [
+      { spec: '15-tx-detail', name: '15-tx-detail-desktop' },
+      { spec: '15-tx-detail', name: '15-tx-detail-mobile' },
+    ],
+  },
+  {
     id: 'receive',
     title: 'Receive Bitcoin',
     reach: { kind: 'route', path: '/receive' },

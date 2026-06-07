@@ -653,6 +653,9 @@
             <li>
               <a href="#spec-14"><span class="spec-num">14</span>Network Activity</a>
             </li>
+            <li>
+              <a href="#spec-15"><span class="spec-num">15</span>Transaktionsdetail</a>
+            </li>
           </ol>
         </nav>
 
@@ -2565,6 +2568,114 @@
                   Desktop 1440 × 900: derselbe eingefrorene Chart — Seed-1337-Wellenform, UTC-Ticks
                   auf der X-Achse, IN/OUT-Readouts.
                 </span>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <hr class="sep" />
+
+        <details id="spec-15" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">15</span>Transaktionsdetail</h2>
+                <div class="file">e2e/15-tx-detail.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>4 Tests · 3 Baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/15-tx-detail.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/15-tx-detail.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            Die <code>/tx/[id]</code>-Detailseite: jede Verlaufszeile ist klickbar und öffnet eine
+            eigene Seite, die das vollständige Detail des Knotens
+            (<code>GET /api/history/{id}</code>) rendert — Richtung, Status, der dekodierte
+            Kontostand-Snapshot (Saldo davor/danach, Sende-Zähler, Commitment-Key), der
+            Verifier-Circuit-Digest und die On-Chain-Referenz. Laufabhängige Werte (ID, Zeitstempel,
+            Beträge, Hashes) tragen <code>tx-detail-v-*</code>-Testids und werden maskiert +
+            breitenfixiert, sodass die Goldens Layout, Labels und Status-Chrome prüfen.
+          </p>
+
+          <div class="tests">
+            <div class="test">
+              <div class="head">
+                <span class="name">tx-detail</span>
+                <div class="vp-toggle" data-vp-toggle>
+                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
+                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
+                </div>
+                <span class="src">
+                  <a
+                    data-vp-target="mobile"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/15-tx-detail.spec.ts#L76"
+                    >L76</a
+                  >
+                  <a
+                    data-vp-target="desktop"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/15-tx-detail.spec.ts#L48"
+                    hidden
+                    >L48</a
+                  >
+                </span>
+              </div>
+              <div class="img">
+                <img
+                  data-vp-target="mobile"
+                  src="/handbook/screenshots/15-tx-detail-mobile.png"
+                  alt="Transaktionsdetail mobil"
+                />
+                <img
+                  data-vp-target="desktop"
+                  src="/handbook/screenshots/15-tx-detail-desktop.png"
+                  alt="Transaktionsdetail Desktop"
+                  hidden
+                />
+              </div>
+              <div class="desc">
+                <span data-vp-target="mobile">
+                  Mobil (ganze Seite): Alices Faucet-Mint-Detail, geöffnet aus der Verlaufszeile —
+                  Hero mit Richtungs-Icon + vorzeichenbehaftetem Betrag + Status-Chip, dann die
+                  Abschnitte Übersicht, Beträge, Proof &amp; Verifikation, On-Chain und Privatsphäre.
+                  Laufabhängige Werte maskiert.
+                </span>
+                <span data-vp-target="desktop" hidden>
+                  Desktop 1440 × 900: dasselbe Mint-Detail — Labels und Abschnitts-Chrome sichtbar,
+                  laufabhängige Werte (Referenz-ID, Datum, Beträge, Circuit-Digest) auf einheitliche
+                  Boxen maskiert.
+                </span>
+              </div>
+            </div>
+
+            <div class="test">
+              <div class="head">
+                <span class="name">tx-detail-missing</span>
+                <span class="src">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/15-tx-detail.spec.ts#L94"
+                    >L94</a
+                  >
+                </span>
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/15-tx-detail-missing.png"
+                  alt="Transaktionsdetail nicht gefunden"
+                />
+              </div>
+              <div class="desc">
+                Die Nicht-gefunden-Ansicht: eine unbekannte ID (oder eine Zeile, die zu einer
+                anderen Wallet gehört) rendert „Transaction not found" mit einer
+                Zurück-zur-Wallet-Aktion — dieselbe Ansicht, zu der eine harte Navigation ohne
+                entsperrtes Konto auflöst.
               </div>
             </div>
           </div>

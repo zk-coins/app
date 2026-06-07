@@ -664,6 +664,9 @@
             <li>
               <a href="#spec-14"><span class="spec-num">14</span>Network activity</a>
             </li>
+            <li>
+              <a href="#spec-15"><span class="spec-num">15</span>Transaction detail</a>
+            </li>
           </ol>
         </nav>
 
@@ -2559,6 +2562,112 @@
                   Desktop 1440 × 900: the same frozen chart — seed-1337 waveform, UTC x-axis ticks,
                   IN/OUT readouts.
                 </span>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <hr class="sep" />
+
+        <details id="spec-15" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">15</span>Transaction detail</h2>
+                <div class="file">e2e/15-tx-detail.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>4 tests · 3 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/15-tx-detail.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/15-tx-detail.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            The <code>/tx/[id]</code> transaction-detail page: every history row is clickable and
+            opens a dedicated page rendering the node's full
+            <code>GET /api/history/{id}</code> detail — direction, status, the decoded
+            account-state snapshot (balance before/after, send counter, commitment key), the
+            verifier circuit digest, and the on-chain reference. Per-run values (id, timestamp,
+            amounts, hashes) carry <code>tx-detail-v-*</code> testids and are masked + width-pinned,
+            so the goldens assert the layout, labels, and status chrome.
+          </p>
+
+          <div class="tests">
+            <div class="test">
+              <div class="head">
+                <span class="name">tx-detail</span>
+                <div class="vp-toggle" data-vp-toggle>
+                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
+                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
+                </div>
+                <span class="src">
+                  <a
+                    data-vp-target="mobile"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/15-tx-detail.spec.ts#L76"
+                    >L76</a
+                  >
+                  <a
+                    data-vp-target="desktop"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/15-tx-detail.spec.ts#L48"
+                    hidden
+                    >L48</a
+                  >
+                </span>
+              </div>
+              <div class="img">
+                <img
+                  data-vp-target="mobile"
+                  src="/handbook/screenshots/15-tx-detail-mobile.png"
+                  alt="transaction detail mobile"
+                />
+                <img
+                  data-vp-target="desktop"
+                  src="/handbook/screenshots/15-tx-detail-desktop.png"
+                  alt="transaction detail desktop"
+                  hidden
+                />
+              </div>
+              <div class="desc">
+                <span data-vp-target="mobile">
+                  Mobile (full page): Alice's faucet-mint detail opened from the history row — hero
+                  with direction icon + signed amount + status chip, then the Overview, Amounts,
+                  Proof &amp; verification, On-chain, and Privacy sections. Volatile values masked.
+                </span>
+                <span data-vp-target="desktop" hidden>
+                  Desktop 1440 × 900: the same mint detail — labels and section chrome visible,
+                  per-run values (reference id, date, amounts, circuit digest) masked to uniform
+                  boxes.
+                </span>
+              </div>
+            </div>
+
+            <div class="test">
+              <div class="head">
+                <span class="name">tx-detail-missing</span>
+                <span class="src">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/15-tx-detail.spec.ts#L94"
+                    >L94</a
+                  >
+                </span>
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/15-tx-detail-missing.png"
+                  alt="transaction detail not found"
+                />
+              </div>
+              <div class="desc">
+                The not-found surface: an unknown id (or a row scoped to a different wallet)
+                renders "Transaction not found" with a back-to-wallet action — the same surface a
+                hard navigation without an unlocked account resolves to.
               </div>
             </div>
           </div>

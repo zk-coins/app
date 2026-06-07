@@ -416,37 +416,43 @@ function TransactionsList({ items }: { items: HistoryItem[] }) {
         const Icon =
           tx.direction === 'send' ? ArrowUpRight : tx.direction === 'mint' ? Plus : ArrowDownLeft;
         return (
-          <li
-            key={tx.id}
-            className="flex items-center justify-between rounded-md border border-line bg-surface px-4 py-3"
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`flex h-9 w-9 items-center justify-center rounded-md ${
-                  positive ? 'bg-line text-ink2' : 'bg-bitcoin/10 text-bitcoin'
+          <li key={tx.id}>
+            {/* Each row links to its dedicated detail page (issue: tx-detail).
+                The whole row is the hit target; the id scopes the lookup
+                server-side together with the wallet's address. */}
+            <Link
+              href={`/tx/${tx.id}`}
+              data-testid="tx-row"
+              className="flex items-center justify-between rounded-md border border-line bg-surface px-4 py-3 transition-colors hover:border-line2"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex h-9 w-9 items-center justify-center rounded-md ${
+                    positive ? 'bg-line text-ink2' : 'bg-bitcoin/10 text-bitcoin'
+                  }`}
+                >
+                  <Icon size={15} strokeWidth={2.25} />
+                </div>
+                <div>
+                  <p className="text-[13px] font-medium text-ink">{label}</p>
+                  <p data-testid="tx-row-time" className="mono text-[11px] text-ink3 tabular-nums">
+                    {/* The wire `timestamp` is Unix seconds — convert to ms. */}
+                    {new Date(tx.timestamp * 1000).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+              </div>
+              <span
+                data-testid="tx-row-amount"
+                className={`mono text-[13px] font-medium tabular-nums ${
+                  positive ? 'text-ink' : 'text-bitcoin'
                 }`}
               >
-                <Icon size={15} strokeWidth={2.25} />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-ink">{label}</p>
-                <p data-testid="tx-row-time" className="mono text-[11px] text-ink3 tabular-nums">
-                  {/* The wire `timestamp` is Unix seconds — convert to ms. */}
-                  {new Date(tx.timestamp * 1000).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
-              </div>
-            </div>
-            <span
-              data-testid="tx-row-amount"
-              className={`mono text-[13px] font-medium tabular-nums ${
-                positive ? 'text-ink' : 'text-bitcoin'
-              }`}
-            >
-              {formatBtcCompact(positive ? tx.amount : -tx.amount)} BTC
-            </span>
+                {formatBtcCompact(positive ? tx.amount : -tx.amount)} BTC
+              </span>
+            </Link>
           </li>
         );
       })}
