@@ -151,7 +151,6 @@ beforeEach(() => {
   useWalletStore.setState({
     account: ALICE,
     balance: ONE_BTC_SATS,
-    transactions: [],
     isLoading: false,
     isLocked: false,
     hasStoredWallet: true,
@@ -176,7 +175,7 @@ async function clickThroughToConfirm(user: ReturnType<typeof userEvent.setup>, r
 }
 
 describe('SendPage — jobs-API send lifecycle happy path', () => {
-  it('hydrates, admits, commits, refreshes balance, prepends a transaction, shows success', async () => {
+  it('hydrates, admits, commits, refreshes balance, shows success', async () => {
     const user = userEvent.setup();
     enqueueSendLifecycle();
 
@@ -190,13 +189,8 @@ describe('SendPage — jobs-API send lifecycle happy path', () => {
     const state = useWalletStore.getState();
     expect(state.balance).toBe(ONE_BTC_SATS - SEND_AMOUNT_SATS);
     expect(state.account?.numPubkeys).toBe(ALICE.numPubkeys + 1);
-    expect(state.transactions).toHaveLength(1);
-    expect(state.transactions[0]).toMatchObject({
-      type: 'send',
-      amount: SEND_AMOUNT_SATS,
-      counterparty: RECIPIENT_HEX,
-      proofId: '1234',
-    });
+    // No local transaction bookkeeping: the sent tx surfaces from the
+    // server's /api/history on the wallet screen's next poll (issue #175).
 
     // The signed send admit hits /api/jobs/send with an Idempotency-Key.
     const sendCall = findCall('/api/jobs/send');

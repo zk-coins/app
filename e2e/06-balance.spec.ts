@@ -2,8 +2,8 @@
  * Spec 06 — View balance
  *
  * Covers § 8.6 of e2e/README.md. WalletScreen balance area + copy chip
- * + empty-state banner under Alice (funded) and Bob (empty). 4 tests,
- * 4 linux baselines (one mobile).
+ * + empty-state banner + transaction list under Alice (funded) and Bob
+ * (empty). 4 tests, 4 linux baselines (one mobile).
  *
  * The faucet-button-visible / faucet-minting tests are gone — mint is
  * MVP and the UI gates the button purely on `networkName !==
@@ -26,6 +26,13 @@ test.describe('View balance', () => {
     // Wait for the balance polling tick to land; until then the
     // empty-banner could briefly show.
     await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    // issue #175: a funded wallet renders its server-owned history
+    // (`GET /api/history`) — at least the faucet mint — NOT the empty
+    // state. Alice is seeded by globalSetup, so the mint row must appear
+    // without any local action. The amount/time are masked in the golden;
+    // the row's presence is the regression guard the previous baseline lacked.
+    await expect(page.getByTestId('tx-row-amount').first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('No transactions yet')).toHaveCount(0);
     await snap(page, '06-balance-funded-desktop');
   });
 
@@ -33,6 +40,9 @@ test.describe('View balance', () => {
     await setViewport(page, 'mobile');
     await aliceLogin(page);
     await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    // issue #175 — funded wallet shows server history, not the empty state.
+    await expect(page.getByTestId('tx-row-amount').first()).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('No transactions yet')).toHaveCount(0);
     await snap(page, '06-balance-funded-mobile');
   });
 

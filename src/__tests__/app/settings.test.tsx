@@ -64,7 +64,6 @@ beforeEach(() => {
   useWalletStore.setState({
     account: ALICE,
     balance: 1000,
-    transactions: [],
     isLoading: false,
     isLocked: false,
     hasStoredWallet: true,

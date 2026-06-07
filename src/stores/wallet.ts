@@ -15,22 +15,12 @@ export interface Account {
   username?: string;
 }
 
-export interface Transaction {
-  id: string;
-  type: 'mint' | 'send' | 'receive';
-  amount: number;
-  counterparty?: string;
-  timestamp: number;
-  proofId?: string;
-}
-
 interface WalletState {
   account: Account | null;
   // Server-state, never persisted. `null` = not fetched yet (post-unlock /
   // post-restore, before the first /api/balance tick). `0` = empty wallet.
   // Components must distinguish the two to avoid a "Wallet is empty" flash.
   balance: number | null;
-  transactions: Transaction[];
   isLoading: boolean;
   isLocked: boolean;
   hasStoredWallet: boolean;
@@ -55,7 +45,6 @@ interface WalletState {
    */
   syncNumPubkeys: (numSends: number) => void;
   incrementPubkeys: () => void;
-  addTransaction: (tx: Transaction) => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 
@@ -69,30 +58,14 @@ interface WalletState {
   deleteWallet: () => Promise<void>;
 }
 
-// Keep transactions in localStorage (not sensitive)
-const TX_STORAGE_KEY = 'zkcoins_transactions';
-
-function loadTransactions(): Transaction[] {
-  /* c8 ignore next — SSR guard, unreachable in the browser test env */
-  if (typeof window === 'undefined') return [];
-  try {
-    const stored = localStorage.getItem(TX_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : [];
-  } catch {
-    return [];
-  }
-}
-
-function saveTransactions(transactions: Transaction[]): void {
-  /* c8 ignore next — SSR guard, unreachable in the browser test env */
-  if (typeof window === 'undefined') return;
-  localStorage.setItem(TX_STORAGE_KEY, JSON.stringify(transactions));
-}
+// NOTE: transaction history is deliberately NOT stored here. It is
+// server-owned truth, fetched from `GET /api/history` via `useHistory`
+// (issue #175) — a local copy would drift on every fresh tab, cleared
+// storage, or second device. See CONTRIBUTING.md § Thin Client.
 
 export const useWalletStore = create<WalletState>((set, get) => ({
   account: null,
   balance: null,
-  transactions: loadTransactions(),
   isLoading: false,
   isLocked: false,
   hasStoredWallet: false,
@@ -125,20 +98,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  addTransaction: (tx) => {
-    const transactions = [tx, ...get().transactions];
-    set({ transactions });
-    saveTransactions(transactions);
-  },
-
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
 
   saveWithPassword: async (password: string) => {
-    const { account, transactions } = get();
+    const { account } = get();
     if (!account) return;
 
-    const walletData = JSON.stringify({ account, transactions });
+    const walletData = JSON.stringify({ account });
     const { key, salt } = await deriveKeyFromPassword(password);
     const encrypted = await encrypt(walletData, key, salt);
 
@@ -153,10 +120,10 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   saveWithPrf: async (prfOutput: Uint8Array) => {
-    const { account, transactions } = get();
+    const { account } = get();
     if (!account) return;
 
-    const walletData = JSON.stringify({ account, transactions });
+    const walletData = JSON.stringify({ account });
     const key = await deriveKeyFromPrf(prfOutput);
     const encrypted = await encrypt(walletData, key);
 
@@ -194,8 +161,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set({
       account: data.account,
       balance: null,
-      /* c8 ignore next — defensive fallback for malformed encrypted payloads */
-      transactions: data.transactions || [],
       isLocked: false,
     });
   },
@@ -211,8 +176,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     set({
       account: data.account,
       balance: null,
-      /* c8 ignore next — defensive fallback for malformed encrypted payloads */
-      transactions: data.transactions || [],
       isLocked: false,
     });
   },
@@ -276,7 +239,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
             set({
               account: data.account,
               balance: null,
-              transactions: data.transactions || [],
               isLocked: false,
               hasStoredWallet: false,
             });
@@ -291,11 +253,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   deleteWallet: async () => {
     await deleteEncryptedWallet();
     clearLegacyStorage();
-    localStorage.removeItem(TX_STORAGE_KEY);
     set({
       account: null,
       balance: null,
-      transactions: [],
       isLocked: false,
       hasStoredWallet: false,
       storedAddress: null,

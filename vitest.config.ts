@@ -19,6 +19,7 @@ export default defineConfig({
       include: [
         'src/lib/**',
         'src/stores/**',
+        'src/hooks/**',
         'src/components/**',
         'src/app/**',
         // E2E-only `/api/info` proxy. Not app code, but it is security-
@@ -35,13 +36,11 @@ export default defineConfig({
       exclude: [
         'src/__tests__/**',
         'src/lib/crypto/passkey.ts', // gated by NEXT_PUBLIC_ENABLE_PASSKEY
-        'src/lib/simulate.ts', // gated by NEXT_PUBLIC_ENABLE_DEV_ROUTES
         'src/lib/simulate-network.ts', // network activity chart (triage: keep)
         'src/lib/api/explorer.ts', // network activity chart (triage: keep)
         // App + component surface exclusions:
         'src/app/layout.tsx', // Next.js root layout, no logic
         'src/app/apps/page.tsx', // FEATURES.APPS_DIRECTORY → notFound() in PRD
-        'src/app/simulate/page.tsx', // FEATURES.DEV_ROUTES → notFound() in PRD
         'src/app/reset/page.tsx', // FEATURES.DEV_ROUTES → notFound() in PRD
         'src/app/network/page.tsx', // network activity chart (triage: keep)
         'src/components/NetworkActivity.tsx', // network activity chart (triage: keep)
@@ -90,6 +89,9 @@ export default defineConfig({
         // covered, matching the prior per-file invariant.
         'src/lib/**': { lines: 100, statements: 100, functions: 100, branches: 100 },
         'src/stores/**': { lines: 100, statements: 100, functions: 100, branches: 100 },
+        // Hooks are activated surface too (issue #175 — `useHistory` is the
+        // App's only transaction-history source of truth): same strict gate.
+        'src/hooks/**': { lines: 100, statements: 100, functions: 100, branches: 100 },
         // Security-sensitive E2E proxy (CodeQL: stack-trace-exposure +
         // clear-text-logging were fixed here) — keep every reachable
         // line/branch test-covered so the hardened behaviour cannot
