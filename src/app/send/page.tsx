@@ -14,8 +14,7 @@ import { FEATURES } from '@/lib/features';
 
 export default function SendPage() {
   const router = useRouter();
-  const { account, balance, setBalance, incrementPubkeys, syncNumPubkeys, addTransaction } =
-    useWalletStore();
+  const { account, balance, setBalance, incrementPubkeys, syncNumPubkeys } = useWalletStore();
   const usernameDomain = useNetworkStore((s) => s.usernameDomain);
 
   // Redirect to home (which handles unlock) if no account in memory.
@@ -111,15 +110,11 @@ export default function SendPage() {
 
       const proofId = result.result?.proof_id ?? undefined;
 
+      // Advance the local BIP-32 child index, then re-sync from the server
+      // below. The sent transaction itself is NOT recorded locally — it
+      // surfaces from `GET /api/history` (server truth) when the wallet
+      // screen next polls (issue #175).
       incrementPubkeys();
-      addTransaction({
-        id: proofId?.toString() ?? `send-${Date.now()}`,
-        type: 'send',
-        amount: sats,
-        counterparty: recipient.trim(),
-        timestamp: Date.now(),
-        proofId: proofId?.toString(),
-      });
 
       const postSend = await api.balance(account.address);
       setBalance(postSend.balance);
@@ -147,16 +142,7 @@ export default function SendPage() {
       setSending(false);
       setPhase(null);
     }
-  }, [
-    account,
-    recipient,
-    amount,
-    usernameDomain,
-    setBalance,
-    incrementPubkeys,
-    syncNumPubkeys,
-    addTransaction,
-  ]);
+  }, [account, recipient, amount, usernameDomain, setBalance, incrementPubkeys, syncNumPubkeys]);
 
   if (!account) {
     return (

@@ -58,6 +58,7 @@ const BOB = {
 
 let balanceSpy: ReturnType<typeof vi.spyOn>;
 let infoSpy: ReturnType<typeof vi.spyOn>;
+let historySpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   Object.assign(FEATURES_STATE, {
@@ -79,7 +80,6 @@ beforeEach(() => {
   useWalletStore.setState({
     account: ALICE,
     balance: null,
-    transactions: [],
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
@@ -94,12 +94,19 @@ beforeEach(() => {
     .spyOn(api, 'info')
     .mockResolvedValue({ network: 'signet', username_domain: 'zkcoins.app' });
   balanceSpy = vi.spyOn(api, 'balance');
+  // WalletScreen's useHistory hook polls api.getHistory on the same cadence;
+  // stub it to an empty page so these balance-focused tests don't hit the
+  // network. History rendering is covered in WalletScreen.history.test.tsx.
+  historySpy = vi
+    .spyOn(api, 'getHistory')
+    .mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
 });
 
 afterEach(() => {
   vi.useRealTimers();
   balanceSpy.mockRestore();
   infoSpy.mockRestore();
+  historySpy.mockRestore();
 });
 
 describe('WalletScreen — balance polling', () => {

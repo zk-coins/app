@@ -67,7 +67,6 @@ beforeEach(() => {
   useWalletStore.setState({
     account: null,
     balance: null,
-    transactions: [],
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
@@ -77,10 +76,12 @@ beforeEach(() => {
   });
   useAuthStore.setState({ authMethod: null, credentialId: null, isHydrated: false });
   localStorage.clear();
-  // WalletScreen + UnlockScreen both fire api.info / api.balance on mount.
+  // WalletScreen + UnlockScreen both fire api.info / api.balance on mount;
+  // WalletScreen's useHistory additionally fires api.getHistory.
   // Stub them so the routing assertions don't race the network layer.
   vi.spyOn(api, 'info').mockResolvedValue({ network: 'signet' });
   vi.spyOn(api, 'balance').mockResolvedValue({ balance: 0, num_sends: 0 });
+  vi.spyOn(api, 'getHistory').mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
 });
 
 describe('Home — onboarding branch (no stored wallet, no account)', () => {

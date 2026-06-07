@@ -145,12 +145,7 @@ export const SCREENS: readonly Screen[] = [
     gate: 'DEV_ROUTES',
     note: 'Gated by NEXT_PUBLIC_ENABLE_DEV_ROUTES (off in shipped bundles).',
   },
-  {
-    id: 'simulate',
-    title: 'Dev simulate route',
-    reach: { kind: 'route', path: '/simulate' },
-    baselines: [],
-    gate: 'DEV_ROUTES',
-    note: 'Gated by NEXT_PUBLIC_ENABLE_DEV_ROUTES (off in shipped bundles).',
-  },
+  // `/simulate` (dev demo-history route) was removed in issue #175: it
+  // injected fabricated rows into the retired local transaction store,
+  // which no longer exists — history is server-owned (`GET /api/history`).
 ];

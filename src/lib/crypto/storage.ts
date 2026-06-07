@@ -131,4 +131,7 @@ export function clearLegacyStorage(): void {
   if (typeof window === 'undefined') return;
   localStorage.removeItem('zkcoins_wallet');
   localStorage.removeItem('zkcoins_auth');
+  // Retired in issue #175 — transaction history is now server-owned
+  // (`GET /api/history`). Sweep any stale cache left by an older bundle.
+  localStorage.removeItem('zkcoins_transactions');
 }

@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { useWalletStore } from '@/stores/wallet';
-import type { Account, Transaction } from '@/stores/wallet';
+import type { Account } from '@/stores/wallet';
 
 const testAccount: Account = {
   address: 'a'.repeat(64),
@@ -8,19 +8,11 @@ const testAccount: Account = {
   xpriv: 'xprv9s21ZrQH143K3GJpoapnV8SFfuZcECe',
 };
 
-const testTx: Transaction = {
-  id: 'tx-1',
-  type: 'mint',
-  amount: 10000,
-  timestamp: 1700000000000,
-};
-
 beforeEach(() => {
   // Reset store
   useWalletStore.setState({
     account: null,
     balance: null,
-    transactions: [],
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
@@ -32,35 +24,11 @@ beforeEach(() => {
   localStorage.clear();
 });
 
-describe('wallet store — module load (loadTransactions)', () => {
-  it('hydrates an empty transaction list when localStorage is empty', async () => {
-    localStorage.removeItem('zkcoins_transactions');
-    vi.resetModules();
-    const mod = await import('@/stores/wallet');
-    expect(mod.useWalletStore.getState().transactions).toEqual([]);
-  });
-
-  it('hydrates transactions persisted by a previous session', async () => {
-    localStorage.setItem('zkcoins_transactions', JSON.stringify([testTx]));
-    vi.resetModules();
-    const mod = await import('@/stores/wallet');
-    expect(mod.useWalletStore.getState().transactions).toEqual([testTx]);
-  });
-
-  it('falls back to an empty list when persisted transactions are malformed', async () => {
-    localStorage.setItem('zkcoins_transactions', '{ not valid json');
-    vi.resetModules();
-    const mod = await import('@/stores/wallet');
-    expect(mod.useWalletStore.getState().transactions).toEqual([]);
-  });
-});
-
 describe('wallet store — basic state', () => {
   it('has correct initial state', () => {
     const state = useWalletStore.getState();
     expect(state.account).toBeNull();
     expect(state.balance).toBeNull();
-    expect(state.transactions).toEqual([]);
     expect(state.isLoading).toBe(false);
     expect(state.isLocked).toBe(false);
     expect(state.hasStoredWallet).toBe(false);
@@ -173,34 +141,6 @@ describe('wallet store — balance and pubkeys', () => {
   });
 });
 
-describe('wallet store — transactions', () => {
-  it('adds transaction at the beginning', () => {
-    useWalletStore.getState().addTransaction(testTx);
-    const txs = useWalletStore.getState().transactions;
-    expect(txs).toHaveLength(1);
-    expect(txs[0]).toEqual(testTx);
-  });
-
-  it('prepends new transactions', () => {
-    const tx1 = { ...testTx, id: 'tx-1' };
-    const tx2 = { ...testTx, id: 'tx-2', type: 'send' as const, amount: 500 };
-    useWalletStore.getState().addTransaction(tx1);
-    useWalletStore.getState().addTransaction(tx2);
-    const txs = useWalletStore.getState().transactions;
-    expect(txs[0].id).toBe('tx-2');
-    expect(txs[1].id).toBe('tx-1');
-  });
-
-  it('persists transactions to localStorage', () => {
-    useWalletStore.getState().addTransaction(testTx);
-    const stored = localStorage.getItem('zkcoins_transactions');
-    expect(stored).toBeTruthy();
-    const parsed = JSON.parse(stored!);
-    expect(parsed).toHaveLength(1);
-    expect(parsed[0].id).toBe('tx-1');
-  });
-});
-
 describe('wallet store — defensive returns when no account', () => {
   it('saveWithPassword silently returns when no account is set', async () => {
     // Should not throw, should not write anything.
@@ -231,35 +171,12 @@ describe('wallet store — unlock edge cases', () => {
       'No salt found in stored wallet',
     );
   });
-
-  it('unlockWithPassword tolerates encrypted blobs without a transactions array', async () => {
-    // Save a wallet, then mutate the encrypted blob to a payload that
-    // decrypts to JSON without `transactions`. Easiest path: save normally
-    // and rely on the existing roundtrip — then verify that the unlocked
-    // state defaults to []. We achieve the no-transactions branch by
-    // saving with an empty list.
-    useWalletStore.getState().setAccount(testAccount);
-    await useWalletStore.getState().saveWithPassword('pw87654321');
-    useWalletStore.setState({ account: null, transactions: [] });
-    await useWalletStore.getState().unlockWithPassword('pw87654321');
-    expect(useWalletStore.getState().transactions).toEqual([]);
-  });
-
-  it('unlockWithPrf tolerates encrypted blobs without a transactions array', async () => {
-    const prf = crypto.getRandomValues(new Uint8Array(32));
-    useWalletStore.getState().setAccount(testAccount);
-    await useWalletStore.getState().saveWithPrf(prf);
-    useWalletStore.setState({ account: null, transactions: [] });
-    await useWalletStore.getState().unlockWithPrf(prf);
-    expect(useWalletStore.getState().transactions).toEqual([]);
-  });
 });
 
 describe('wallet store — password encryption', () => {
   it('saves and unlocks with password', async () => {
     // Set up account
     useWalletStore.getState().setAccount(testAccount);
-    useWalletStore.getState().addTransaction(testTx);
 
     // Save encrypted
     await useWalletStore.getState().saveWithPassword('testpassword123');
@@ -272,13 +189,12 @@ describe('wallet store — password encryption', () => {
     expect(stored?.address).toBe(testAccount.address);
 
     // Clear state to simulate page reload
-    useWalletStore.setState({ account: null, transactions: [] });
+    useWalletStore.setState({ account: null });
 
     // Unlock
     await useWalletStore.getState().unlockWithPassword('testpassword123');
     const state = useWalletStore.getState();
     expect(state.account).toEqual(testAccount);
-    expect(state.transactions).toHaveLength(1);
     expect(state.isLocked).toBe(false);
   });
 
@@ -309,7 +225,7 @@ describe('wallet store — PRF encryption', () => {
     expect(stored?.authMethod).toBe('passkey');
 
     // Simulate reload
-    useWalletStore.setState({ account: null, transactions: [] });
+    useWalletStore.setState({ account: null });
 
     // Unlock with same PRF
     await useWalletStore.getState().unlockWithPrf(prfOutput);
@@ -373,16 +289,18 @@ describe('wallet store — checkForStoredWallet', () => {
   });
 
   it('loads legacy localStorage wallet directly', async () => {
+    // Older bundles persisted `{ account, transactions }` in plaintext.
+    // The store now ignores any `transactions` field and loads only the
+    // account — verify the account still hydrates from the legacy blob.
     const legacyData = {
       account: testAccount,
-      transactions: [testTx],
+      transactions: [{ id: 'tx-1', type: 'mint', amount: 10000, timestamp: 1700000000000 }],
     };
     localStorage.setItem('zkcoins_wallet', JSON.stringify(legacyData));
 
     await useWalletStore.getState().checkForStoredWallet();
     const state = useWalletStore.getState();
     expect(state.account).toEqual(testAccount);
-    expect(state.transactions).toHaveLength(1);
     expect(state.isLocked).toBe(false);
     expect(state.hasStoredWallet).toBe(false);
   });
@@ -444,14 +362,14 @@ describe('wallet store — checkForStoredWallet', () => {
 describe('wallet store — deleteWallet', () => {
   it('clears IndexedDB, localStorage, and state', async () => {
     useWalletStore.getState().setAccount(testAccount);
-    useWalletStore.getState().addTransaction(testTx);
     await useWalletStore.getState().saveWithPassword('pw12345678');
+    // A stale history cache from an older bundle must be swept on delete.
+    localStorage.setItem('zkcoins_transactions', JSON.stringify([{ id: 'x' }]));
 
     await useWalletStore.getState().deleteWallet();
 
     const state = useWalletStore.getState();
     expect(state.account).toBeNull();
-    expect(state.transactions).toEqual([]);
     expect(state.isLocked).toBe(false);
     expect(state.hasStoredWallet).toBe(false);
     expect(state.storedAddress).toBeNull();
@@ -462,7 +380,7 @@ describe('wallet store — deleteWallet', () => {
     const stored = await loadEncryptedWallet();
     expect(stored).toBeNull();
 
-    // localStorage transactions should be removed
+    // Legacy localStorage history cache should be removed
     expect(localStorage.getItem('zkcoins_transactions')).toBeNull();
   });
 });

@@ -41,7 +41,6 @@ beforeEach(() => {
   useWalletStore.setState({
     account: ALICE,
     balance: ONE_BTC_SATS,
-    transactions: [],
     isLoading: false,
     isLocked: false,
     hasStoredWallet: true,
