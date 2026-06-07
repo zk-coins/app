@@ -1,5 +1,5 @@
 /**
- * Spec 15 — Transaction detail page (`/tx/[id]`).
+ * Spec 17 — Transaction detail page (`/tx/[id]`).
  *
  * Covers the tx-detail feature: a funded wallet's history row is
  * clickable and opens a dedicated detail page that renders every field
@@ -68,7 +68,7 @@ test.describe('Transaction detail', () => {
     // The loading frame has resolved.
     await expect(page.getByTestId('tx-detail-loading')).toHaveCount(0);
 
-    await snap(page, '15-tx-detail-desktop', {
+    await snap(page, '17-tx-detail-desktop', {
       mask: VALUE_TESTIDS.map((t) => page.getByTestId(t)),
     });
   });
@@ -77,7 +77,7 @@ test.describe('Transaction detail', () => {
     await setViewport(page, 'mobile');
     await openFirstTxDetail(page);
     await expect(page.getByTestId('tx-detail-label')).toHaveText('Faucet');
-    await snap(page, '15-tx-detail-mobile', {
+    await snap(page, '17-tx-detail-mobile', {
       fullPage: true,
       mask: VALUE_TESTIDS.map((t) => page.getByTestId(t)),
     });
@@ -101,6 +101,6 @@ test.describe('Transaction detail', () => {
     await expect(page.getByTestId('tx-detail-missing')).toContainText('Transaction not found', {
       timeout: 15_000,
     });
-    await snap(page, '15-tx-detail-missing', { fullPage: true });
+    await snap(page, '17-tx-detail-missing', { fullPage: true });
   });
 });

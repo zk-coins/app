@@ -105,8 +105,8 @@ export const SCREENS: readonly Screen[] = [
     title: 'Transaction detail',
     reach: { kind: 'route', path: '/tx/[id]' },
     baselines: [
-      { spec: '15-tx-detail', name: '15-tx-detail-desktop' },
-      { spec: '15-tx-detail', name: '15-tx-detail-mobile' },
+      { spec: '17-tx-detail', name: '17-tx-detail-desktop' },
+      { spec: '17-tx-detail', name: '17-tx-detail-mobile' },
     ],
   },
   {
