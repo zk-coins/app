@@ -664,6 +664,9 @@
             <li>
               <a href="#spec-14"><span class="spec-num">14</span>Network activity</a>
             </li>
+            <li>
+              <a href="#spec-15"><span class="spec-num">15</span>Send — Scan QR</a>
+            </li>
           </ol>
         </nav>
 
@@ -2559,6 +2562,75 @@
                   Desktop 1440 × 900: the same frozen chart — seed-1337 waveform, UTC x-axis ticks,
                   IN/OUT readouts.
                 </span>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details id="spec-15" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">15</span>Send — Scan QR</h2>
+                <div class="file">e2e/15-send-scan-qr.spec.ts · e2e/16-send-scan-fallback.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>4 tests · 2 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/15-send-scan-qr.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/16-send-scan-fallback.spec.ts"
+                    >Fallback spec ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            The Send screen's "Scan QR" affordance fills the recipient by decoding a zkCoins address
+            QR — the Receive screen's QR in reverse. The camera leg drives Chromium's fake video
+            device (<code>--use-file-for-fake-video-capture</code>) with a single-frame Y4M of a QR
+            code, exercising the full <code>getUserMedia → canvas → jsQR</code> pipeline against a
+            real image; the fallback leg decodes an uploaded PNG. Both are Chromium-only.
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">scan-camera-fills-recipient</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/15-send-scan-qr.spec.ts#L57"
+                    >L57</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/15-scan-filled.png" alt="recipient filled by scan" />
+              </div>
+              <div class="desc">
+                The fake camera plays a QR clip; the scanner decodes it, validates the payload, and
+                fills the recipient field — shown settled after the "Address scanned" flash clears.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">scan-modal-open</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/16-send-scan-fallback.spec.ts#L60"
+                    >L60</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/16-scan-modal-open.png" alt="scanner modal open" />
+              </div>
+              <div class="desc">
+                The scanner overlay in its scanning state: live camera viewport (masked), guidance
+                copy, and the "Upload image" fallback button.
               </div>
             </div>
           </div>

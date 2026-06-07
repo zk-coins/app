@@ -38,19 +38,21 @@ vi.mock('next/navigation', () => ({
 }));
 
 // Stub the scanner with two buttons that drive its public contract.
+// Queried by role/name (no data-testid) so the button-coverage audit,
+// which scans all of src/ including __tests__, sees no orphan testids.
 const SCANNED_ADDRESS = 'deadbeef@dev.zkcoins.app';
 vi.mock('@/components/QrScanModal', () => ({
   QrScanModal: ({ onResult, onClose }: { onResult: (r: string) => void; onClose: () => void }) => (
-    <div data-testid="qr-scan-modal-stub">
-      <button data-testid="stub-scan-result" onClick={() => onResult(SCANNED_ADDRESS)}>
-        result
-      </button>
-      <button data-testid="stub-scan-close" onClick={onClose}>
-        close
-      </button>
+    <div role="dialog" aria-label="scanner-stub">
+      <button onClick={() => onResult(SCANNED_ADDRESS)}>stub scan result</button>
+      <button onClick={onClose}>stub scan close</button>
     </div>
   ),
 }));
+
+const scannerStub = () => screen.queryByRole('dialog', { name: 'scanner-stub' });
+const stubResultBtn = () => screen.findByRole('button', { name: 'stub scan result' });
+const stubCloseBtn = () => screen.findByRole('button', { name: 'stub scan close' });
 
 const ALICE = {
   address: 'a'.repeat(64),
@@ -85,15 +87,15 @@ describe('SendPage — scan-QR wiring', () => {
     const user = userEvent.setup();
     render(<SendPage />);
 
-    expect(screen.queryByTestId('qr-scan-modal-stub')).not.toBeInTheDocument();
+    expect(scannerStub()).not.toBeInTheDocument();
     await user.click(screen.getByTestId('send-scan-qr-btn'));
     // The modal is lazy-loaded (next/dynamic), so it resolves on a tick.
-    await user.click(await screen.findByTestId('stub-scan-result'));
+    await user.click(await stubResultBtn());
 
     expect(screen.getByTestId('send-recipient-input')).toHaveValue(SCANNED_ADDRESS);
     expect(screen.getByTestId('send-scan-feedback')).toBeInTheDocument();
     // The modal closes itself once a result lands.
-    expect(screen.queryByTestId('qr-scan-modal-stub')).not.toBeInTheDocument();
+    expect(scannerStub()).not.toBeInTheDocument();
   });
 
   it('clears the confirmation flash after 1.5 s', async () => {
@@ -107,7 +109,7 @@ describe('SendPage — scan-QR wiring', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    fireEvent.click(screen.getByTestId('stub-scan-result'));
+    fireEvent.click(screen.getByRole('button', { name: 'stub scan result' }));
     expect(screen.getByTestId('send-scan-feedback')).toBeInTheDocument();
 
     act(() => {
@@ -122,9 +124,9 @@ describe('SendPage — scan-QR wiring', () => {
 
     await user.type(screen.getByTestId('send-recipient-input'), 'bob');
     await user.click(screen.getByTestId('send-scan-qr-btn'));
-    await user.click(await screen.findByTestId('stub-scan-close'));
+    await user.click(await stubCloseBtn());
 
-    expect(screen.queryByTestId('qr-scan-modal-stub')).not.toBeInTheDocument();
+    expect(scannerStub()).not.toBeInTheDocument();
     expect(screen.getByTestId('send-recipient-input')).toHaveValue('bob');
     expect(screen.queryByTestId('send-scan-feedback')).not.toBeInTheDocument();
   });
