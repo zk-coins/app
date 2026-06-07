@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Check, Wallet } from 'lucide-react';
+import { ArrowLeft, Check, QrCode, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
@@ -11,6 +12,13 @@ import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client'
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { SATS_PER_BTC, formatBtc, formatBtcCompact } from '@/lib/format';
 import { FEATURES } from '@/lib/features';
+
+// Lazy-loaded so the jsQR decoder (~30 kB) ships in its own chunk and
+// only downloads when the user opens the scanner — the core send flow
+// stays lean. Client-only: the scanner touches camera + canvas APIs.
+const QrScanModal = dynamic(() => import('@/components/QrScanModal').then((m) => m.QrScanModal), {
+  ssr: false,
+});
 
 export default function SendPage() {
   const router = useRouter();
@@ -34,6 +42,22 @@ export default function SendPage() {
   const [phase, setPhase] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ amount: number; proofId?: string } | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanned, setScanned] = useState(false);
+
+  // Brief confirmation flash under the recipient field after a scan,
+  // mirroring the 1.5 s "Copied" flip on the Receive screen.
+  useEffect(() => {
+    if (!scanned) return;
+    const t = setTimeout(() => setScanned(false), 1500);
+    return () => clearTimeout(t);
+  }, [scanned]);
+
+  const handleScanResult = useCallback((address: string) => {
+    setRecipient(address);
+    setScanning(false);
+    setScanned(true);
+  }, []);
 
   const handleConfirm = useCallback(() => {
     if (!account || !recipient || !amount) return;
@@ -256,7 +280,18 @@ export default function SendPage() {
 
         {/* Recipient */}
         <div>
-          <label className="mb-1.5 block text-[12px] font-medium text-ink2">Recipient</label>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="text-[12px] font-medium text-ink2">Recipient</label>
+            <button
+              type="button"
+              data-testid="send-scan-qr-btn"
+              onClick={() => setScanning(true)}
+              className="inline-flex items-center gap-1.5 text-[12px] font-medium text-bitcoin transition-colors hover:text-bitcoin-hover"
+            >
+              <QrCode size={14} strokeWidth={2} />
+              Scan QR
+            </button>
+          </div>
           <input
             data-testid="send-recipient-input"
             type="text"
@@ -267,6 +302,15 @@ export default function SendPage() {
             placeholder={usernameDomain ? `alice@${usernameDomain}` : ''}
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
+          {scanned && (
+            <p
+              data-testid="send-scan-feedback"
+              className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium text-bitcoin"
+            >
+              <Check size={13} strokeWidth={2.5} />
+              Address scanned
+            </p>
+          )}
         </div>
 
         {/* Amount */}
@@ -358,6 +402,8 @@ export default function SendPage() {
           </p>
         )}
       </form>
+
+      {scanning && <QrScanModal onResult={handleScanResult} onClose={() => setScanning(false)} />}
     </AppShell>
   );
 }
