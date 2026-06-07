@@ -653,6 +653,9 @@
             <li>
               <a href="#spec-14"><span class="spec-num">14</span>Network Activity</a>
             </li>
+            <li>
+              <a href="#spec-15"><span class="spec-num">15</span>Senden — QR scannen</a>
+            </li>
           </ol>
         </nav>
 
@@ -2565,6 +2568,78 @@
                   Desktop 1440 × 900: derselbe eingefrorene Chart — Seed-1337-Wellenform, UTC-Ticks
                   auf der X-Achse, IN/OUT-Readouts.
                 </span>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details id="spec-15" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">15</span>Senden — QR scannen</h2>
+                <div class="file">e2e/15-send-scan-qr.spec.ts · e2e/16-send-scan-fallback.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>4 Tests · 2 Baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/15-send-scan-qr.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/16-send-scan-fallback.spec.ts"
+                    >Fallback-Spec ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            Die "Scan QR"-Aktion im Send-Screen füllt den Empfänger, indem sie einen
+            zkCoins-Adress-QR dekodiert — der QR des Receive-Screens rückwärts. Der Kamera-Pfad
+            steuert Chromiums Fake-Video-Device
+            (<code>--use-file-for-fake-video-capture</code>) mit einem Einzelbild-Y4M eines
+            QR-Codes und durchläuft so die volle <code>getUserMedia → canvas → jsQR</code>-Kette an
+            einem echten Bild; der Fallback-Pfad dekodiert ein hochgeladenes PNG. Beide nur in
+            Chromium.
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">scan-camera-fills-recipient</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/15-send-scan-qr.spec.ts#L57"
+                    >L57</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/15-scan-filled.png" alt="Empfänger per Scan gefüllt" />
+              </div>
+              <div class="desc">
+                Die Fake-Kamera spielt einen QR-Clip; der Scanner dekodiert ihn, validiert die
+                Nutzlast und füllt das Empfänger-Feld — gezeigt im Ruhezustand, nachdem der
+                "Address scanned"-Hinweis verschwunden ist.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">scan-modal-open</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/16-send-scan-fallback.spec.ts#L60"
+                    >L60</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/16-scan-modal-open.png" alt="Scanner-Modal offen" />
+              </div>
+              <div class="desc">
+                Das Scanner-Overlay im Scan-Zustand: Live-Kamera-Viewport (maskiert), Hinweistext
+                und der "Upload image"-Fallback-Button.
               </div>
             </div>
           </div>
