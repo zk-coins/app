@@ -2,3 +2,8 @@
 *.mjs   text
 *.ts    text
 *.tsx   text
+
+# Y4M fake-camera fixtures are raw binary; the long white-pixel runs
+# (0xFF, no NUL) in the first frame would otherwise pass git's text
+# sniffing and risk line-ending normalisation corrupting the stream.
+*.y4m   binary
