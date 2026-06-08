@@ -19,7 +19,13 @@
     "noTransactionsNoWallet": "Create a wallet to get started.",
     "txSent": "Sent",
     "txReceived": "Received",
-    "txMint": "Created"
+    "txMint": "Created",
+    "emptyWalletTitle": "Wallet is empty",
+    "emptyFaucetBody": "Claim test sats from the faucet, or share your address via <receive>Receive</receive>.",
+    "emptyDfxBody": "Buy private BTC through <dfx>DFX</dfx>, or share your address via <receive>Receive</receive>.",
+    "emptyReceiveBody": "Share your address via <receive>Receive</receive>.",
+    "faucet": "Faucet",
+    "minting": "Minting…"
   },
   "createCoin": {
     "back": "Back",
@@ -70,7 +76,9 @@
     "sendPrivately": "Send privately",
     "successHeading": "Sent privately",
     "proof": "proof #{id}",
-    "done": "Done"
+    "done": "Done",
+    "headingBtc": "Send Bitcoin",
+    "noFundsBody": " Get sats via <receive>Receive</receive><dfx> or DFX</dfx>."
   },
   "asset": {
     "back": "Back",

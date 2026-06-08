@@ -32,6 +32,9 @@ const FEATURES_STATE = vi.hoisted(() => ({
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
   USERNAME_CLAIM: false,
+  // Runtime multi-asset capability ON: WalletScreen then renders the
+  // per-asset portfolio + create-coin entry these tests assert on.
+  MULTI_ASSET: true,
 }));
 // Home renders WalletScreen on the unlocked branch; WalletScreen
 // reads runtime capabilities via `useFeatures()`. The mock must
@@ -63,6 +66,7 @@ beforeEach(() => {
     ADDRESS_ROTATION: false,
     TOR_ROUTING: false,
     USERNAME_CLAIM: false,
+    MULTI_ASSET: true,
   });
   mockPathname = '/';
   useWalletStore.setState({

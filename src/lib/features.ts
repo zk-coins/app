@@ -34,6 +34,19 @@ const buildTime = {
   AUTO_LOCK: on(process.env.NEXT_PUBLIC_ENABLE_AUTO_LOCK),
   ADDRESS_ROTATION: on(process.env.NEXT_PUBLIC_ENABLE_ADDRESS_ROTATION),
   TOR_ROUTING: on(process.env.NEXT_PUBLIC_ENABLE_TOR_ROUTING),
+  // Multi-asset *routes* (`/create`, `/asset/[id]`) only exist when the
+  // build opts into the neutral multi-asset model. This build-time flag
+  // dead-strips those dedicated routes from single-asset bundles (the
+  // PRD/DEV default) via `!FEATURES.MULTI_ASSET) notFound()` — the same
+  // DCE the golden-coverage audit relies on for `/apps` and `/reset`.
+  //
+  // It is intentionally distinct from the *runtime* `multi_asset`
+  // capability (read via `useCapabilities` / `useFeatures()`), which the
+  // shared screens (Wallet, Send) read to switch between the single-asset
+  // hero and the per-asset surface at runtime. A capability-adaptive
+  // bundle (flag ON) still renders the single-asset UI when the node it
+  // talks to reports `multi_asset:false`.
+  MULTI_ASSET: on(process.env.NEXT_PUBLIC_ENABLE_MULTI_ASSET),
 } as const;
 
 /**
@@ -64,7 +77,13 @@ export function useFeatures() {
       ({
         ...buildTime,
         USERNAME_CLAIM: caps.username_claim,
+        // Runtime capability (overrides the build-time `buildTime.MULTI_ASSET`
+        // spread above): the shared Wallet / Send screens read this to pick
+        // the single-asset hero vs the per-asset surface based on what the
+        // *connected node* reports, independent of the build flag that gates
+        // the dedicated multi-asset routes.
+        MULTI_ASSET: caps.multi_asset,
       }) as const,
-    [caps.username_claim],
+    [caps.username_claim, caps.multi_asset],
   );
 }

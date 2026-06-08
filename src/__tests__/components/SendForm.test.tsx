@@ -14,6 +14,7 @@ import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import SendPage from '@/app/send/page';
 import { useWalletStore } from '@/stores/wallet';
+import { useCapabilities } from '@/stores/capabilities';
 import { api, type OwnerBalanceResponse } from '@/lib/api/client';
 
 vi.mock('next/navigation', () => ({
@@ -37,6 +38,12 @@ const ONE_UNIT = 100_000_000;
 let ownerSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  // Runtime multi-asset capability ON so SendPage renders the per-asset
+  // selector surface this suite drives.
+  useCapabilities.setState({
+    capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: true },
+    loaded: true,
+  });
   useWalletStore.setState({
     account: ALICE,
     balance: ONE_UNIT,

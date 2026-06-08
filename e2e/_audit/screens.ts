@@ -136,26 +136,23 @@ export const SCREENS: readonly Screen[] = [
       { spec: '14-network-activity', name: '14-network-activity-mobile' },
     ],
   },
+  // ── Env-gated routes (dead-stripped from the bundle — no golden) ────
   {
     id: 'create',
     title: 'Create coin',
     reach: { kind: 'route', path: '/create' },
-    baselines: [
-      { spec: '18-create-coin', name: '18-create-empty-desktop' },
-      { spec: '18-create-coin', name: '18-create-empty-mobile' },
-    ],
+    baselines: [],
+    gate: 'MULTI_ASSET',
+    note: 'Gated by NEXT_PUBLIC_ENABLE_MULTI_ASSET (off in single-asset bundles). Covered by spec 18, which skips on a multi_asset:false node and runs against a true node.',
   },
   {
     id: 'asset-detail',
     title: 'Per-asset detail',
     reach: { kind: 'route', path: '/asset/[id]' },
-    baselines: [
-      { spec: '21-asset-detail', name: '21-asset-detail-desktop' },
-      { spec: '21-asset-detail', name: '21-asset-detail-mobile' },
-    ],
+    baselines: [],
+    gate: 'MULTI_ASSET',
+    note: 'Gated by NEXT_PUBLIC_ENABLE_MULTI_ASSET (off in single-asset bundles). Covered by spec 21, which skips on a multi_asset:false node and runs against a true node.',
   },
-
-  // ── Env-gated routes (dead-stripped from the bundle — no golden) ────
   {
     id: 'apps',
     title: 'Apps directory',

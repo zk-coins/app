@@ -37,7 +37,12 @@
  */
 
 import { createHash } from 'node:crypto';
-import { ZkCoinsClient, newIdempotencyKey, type InfoResponse } from '@zkcoins/sdk';
+import {
+  ZkCoinsClient,
+  newIdempotencyKey,
+  type BalanceResponse,
+  type InfoResponse,
+} from '@zkcoins/sdk';
 import { loadWasm } from './wasm';
 
 const API_URL = (process.env.E2E_API_URL ?? 'https://dev-api.zkcoins.app').replace(/\/+$/, '');
@@ -70,6 +75,27 @@ export const api = {
   /** The owner's cross-asset portfolio — `GET /api/balance/:address`. */
   ownerBalances: (address: string): Promise<OwnerBalance> =>
     getJson<OwnerBalance>(`/api/balance/${encodeURIComponent(address)}`),
+
+  /**
+   * Single-asset (native) balance — `GET /api/balance?address=`. Used by
+   * the FALSE (single-asset) globalSetup leg to poll a faucet-funded
+   * wallet; the multi-asset leg uses `ownerBalances` instead.
+   */
+  walletBalance: (address: string): Promise<BalanceResponse> => sdkClient.balance(address),
+
+  /**
+   * Faucet mint via the SDK client: admit `POST /api/jobs/mint` (mandatory
+   * `Idempotency-Key`), then poll to `completed`. Server-mediated (no wallet
+   * signature), so it credits the `address` argument directly. Used by the
+   * FALSE globalSetup leg to seed Alice on a single-asset node.
+   */
+  mint: async (address: string, amount: number = MINT_AMOUNT): Promise<void> => {
+    const accepted = await sdkClient.mintJob(
+      { account_address: address, amount },
+      newIdempotencyKey(),
+    );
+    await pollToCompleted(accepted.job_id);
+  },
 
   /**
    * Derive the fixture account from `mnemonic` via the app's `@zkcoins/wasm`

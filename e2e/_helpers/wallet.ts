@@ -219,15 +219,40 @@ export async function waitForNetworkInfo(page: Page, timeout = 30_000): Promise<
 }
 
 /**
- * Block until WalletScreen's first `/api/balance/:address` portfolio tick
- * has resolved. Under the neutral multi-asset model the home screen renders
- * the owner's asset list once the portfolio loads: a funded wallet shows
- * `asset-list`, an empty one shows `wallet-empty-banner`. Either is the
- * settled "loaded" signal (mirrors the prior `data-loading` marker on the
- * single-balance hero, which the multi-asset redesign removed).
+ * Block until WalletScreen's first balance/portfolio tick has resolved.
+ * Capability-adaptive, matching the dual-mode home screen:
+ *
+ *   - Single-asset surface (`multi_asset:false`): the USD/BTC hero carries
+ *     `data-loading="true"` until the first `/api/balance` tick lands,
+ *     regardless of value (funded or zero). Absence of that marker is the
+ *     settled signal — `asset-list` / `wallet-empty-banner` are NOT rendered
+ *     for a funded single-asset wallet, so they can't gate this leg.
+ *   - Multi-asset surface (`multi_asset:true`): the home screen renders the
+ *     `asset-list` (funded) or `wallet-empty-banner` (empty) once the
+ *     portfolio loads.
+ *
+ * Polls for whichever surface is present so the same helper works on both
+ * the FALSE and TRUE E2E legs.
  */
 export async function waitForBalanceLoaded(page: Page, timeout = 60_000): Promise<void> {
-  await expect(
-    page.getByTestId('asset-list').or(page.getByTestId('wallet-empty-banner')),
-  ).toBeVisible({ timeout });
+  await expect
+    .poll(
+      async () => {
+        // Single-asset hero settled (data-loading attribute gone)?
+        const heroCount = await page.getByTestId('balance-amount-usd').count();
+        if (heroCount > 0) {
+          const loading = await page.getByTestId('balance-amount-usd').getAttribute('data-loading');
+          if (loading !== 'true') return true;
+        }
+        // Multi-asset portfolio settled (list or empty banner visible)?
+        const portfolioVisible = await page
+          .getByTestId('asset-list')
+          .or(page.getByTestId('wallet-empty-banner'))
+          .isVisible()
+          .catch(() => false);
+        return portfolioVisible;
+      },
+      { timeout },
+    )
+    .toBe(true);
 }

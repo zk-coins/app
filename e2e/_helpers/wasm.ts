@@ -65,7 +65,10 @@ export async function loadWasm(): Promise<E2eWasm> {
     },
     publicKeys: (xpriv: string, index: number) => {
       const data = JSON.parse(wasm.derive_public_keys(xpriv, index));
-      return { publicKey: data.public_key as string, nextPublicKey: data.next_public_key as string };
+      return {
+        publicKey: data.public_key as string,
+        nextPublicKey: data.next_public_key as string,
+      };
     },
     signingKey: (xpriv: string, index: number) => wasm.derive_signing_key(xpriv, index) as string,
     sign: (privateKeyHex: string, hashHex: string) =>

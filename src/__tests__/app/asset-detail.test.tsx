@@ -18,6 +18,27 @@ let mockParamId = ASSET_ID;
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: mockParamId }),
+  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  // The page guards with `!FEATURES.MULTI_ASSET) notFound()`; the features
+  // mock below forces the flag ON, so this is never invoked.
+  notFound: vi.fn(),
+}));
+
+// MULTI_ASSET ON so the per-asset detail route renders instead of
+// 404-ing / redirecting home.
+const FEATURES_STATE = vi.hoisted(() => ({
+  APPS_DIRECTORY: false,
+  PASSKEY: false,
+  DEV_ROUTES: false,
+  AUTO_LOCK: false,
+  ADDRESS_ROTATION: false,
+  TOR_ROUTING: false,
+  USERNAME_CLAIM: false,
+  MULTI_ASSET: true,
+}));
+vi.mock('@/lib/features', () => ({
+  FEATURES: FEATURES_STATE,
+  useFeatures: () => FEATURES_STATE,
 }));
 
 const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };

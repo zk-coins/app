@@ -1,5 +1,5 @@
 /**
- * Spec 13 — Send Bitcoin: server `ApiError` → localized toast (issue #99).
+ * Spec 13 — Send Bitcoin: server `ApiError` → localised toast (issue #99).
  *
  * The Jobs API (node PR #161) admits a send at `POST /api/jobs/send` and
  * verifies the signed request synchronously before enqueueing: a bad
@@ -18,13 +18,10 @@
  * the UI settles cleanly on the error state before we capture the shot.
  *
  * Locator strategy: testid-based on `send-error`. Each known server
- * string asserts both the *text* and a screenshot baseline. The e2e build
- * bakes `NEXT_PUBLIC_E2E_LOCALE=en` (see `scripts/e2e-local.sh`), so the
- * text assertions check the English `errors.*` catalog strings from
- * `messages/en.json` — the same mapping (`userMessageFor`), rendered in the
- * locale the goldens are produced against. The fallback path (unmapped 418)
- * is text-only — a regression guard for the `Server error <status>: <raw>`
- * shape (`errors.serverErrorFallback`).
+ * string asserts both the *text* (the active-locale translation; the E2E
+ * build pins `NEXT_PUBLIC_E2E_LOCALE=en`) and a screenshot baseline. The
+ * fallback path (unmapped 418) is text-only — a regression guard for the
+ * `Server error <status>: <raw>` shape.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -33,14 +30,8 @@ import { snap, setViewport } from './_helpers/screenshot';
 
 async function aliceGoToSend(page: Page): Promise<void> {
   await aliceLogin(page);
-  // The wallet screen is now a per-asset portfolio; wait for it to render
-  // before navigating so Alice's send button is the enabled client-side Link.
-  await expect(page.getByTestId('asset-list')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('wallet-send-btn').click();
   await expect(page.getByTestId('send-heading')).toBeVisible({ timeout: 10_000 });
-  // Send is per-asset now: wait for the picker to hydrate from the portfolio
-  // so the first asset is auto-selected before we fill the form.
-  await expect(page.getByTestId('send-asset-select')).toBeVisible({ timeout: 30_000 });
 }
 
 /**
@@ -66,10 +57,7 @@ async function aliceSubmitSend(page: Page): Promise<void> {
   const { bob } = readAccounts();
   await aliceGoToSend(page);
   await page.getByTestId('send-recipient-input').fill(bob.address);
-  // Amount is denominated in the selected asset's units. Alice's fixture
-  // asset has 0 decimals and ample balance, so `1` is a valid send that
-  // passes the client-side checks and reaches the mocked `/api/jobs/send`.
-  await page.getByTestId('send-amount-input').fill('1');
+  await page.getByTestId('send-amount-input').fill('0.00001');
   await page.getByTestId('send-submit-btn').click();
   await expect(page.getByTestId('send-confirm-card')).toBeVisible({ timeout: 5_000 });
   await page.getByTestId('send-confirm-btn').click();
@@ -123,7 +111,7 @@ test.describe('Send Bitcoin — server error toasts (issue #99)', () => {
   });
 
   test('unmapped-server-error-falls-back (no shot)', async ({ page }) => {
-    // Unmapped strings produce the `Server error <status>: <raw>`
+    // Unmapped strings produce the `Serverfehler <status>: <raw>`
     // fallback so the user is never left with a stringly-typed
     // `Error.message` blob like the pre-#99 toast. Text-only —
     // visual identical to the mapped cases.

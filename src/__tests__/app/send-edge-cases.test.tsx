@@ -16,11 +16,12 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import SendPage from '@/app/send/page';
 import { useWalletStore } from '@/stores/wallet';
+import { useCapabilities } from '@/stores/capabilities';
 import { api, type OwnerBalanceResponse } from '@/lib/api/client';
 
 vi.mock('next/navigation', () => ({
@@ -42,6 +43,12 @@ function portfolio(balance: number): OwnerBalanceResponse {
 let ownerSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
+  // Runtime multi-asset capability ON so SendPage renders the per-asset
+  // selector surface this suite drives.
+  useCapabilities.setState({
+    capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: true },
+    loaded: true,
+  });
   useWalletStore.setState({
     account: ALICE,
     balance: ONE_UNIT,
@@ -84,7 +91,11 @@ describe('SendPage — balance display states', () => {
     render(<SendPage />);
     await screen.findByTestId('send-asset-select');
 
-    expect(screen.getByTestId('send-available')).toHaveTextContent('1 BigCoin');
+    // The "Available" readout resolves once the picker effect selects the
+    // first asset (one tick after the select renders), so wait for it.
+    await waitFor(() => {
+      expect(screen.getByTestId('send-available')).toHaveTextContent('1 BigCoin');
+    });
     expect(screen.queryByTestId('send-no-funds-banner')).not.toBeInTheDocument();
     expect(screen.getByTestId('send-setmax-btn')).toBeEnabled();
   });

@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { notFound, useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ArrowLeft, Check, CircleDollarSign, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
@@ -10,14 +10,31 @@ import { useWalletStore } from '@/stores/wallet';
 import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { formatAssetAmount } from '@/lib/format';
+import { FEATURES, useFeatures } from '@/lib/features';
 
 const MAX_DECIMALS = 18;
 
 export default function CreateCoinPage() {
+  // Build-time gate: in a single-asset bundle (`NEXT_PUBLIC_ENABLE_MULTI_ASSET`
+  // unset) this short-circuits before any wallet code runs, so the whole route
+  // body is dead-stripped — the same DCE the golden-coverage audit recognises
+  // for `/apps` and `/reset`.
+  if (!FEATURES.MULTI_ASSET) notFound();
+
   const router = useRouter();
   const t = useTranslations('createCoin');
   const tErrors = useTranslations('errors');
   const account = useWalletStore((s) => s.account);
+  const { MULTI_ASSET: multiAssetRuntime } = useFeatures();
+
+  // Runtime gate: a capability-adaptive bundle (build flag ON) talking to a
+  // single-asset node has no create-coin flow — redirect home, mirroring the
+  // `!account` redirect below.
+  useEffect(() => {
+    if (!multiAssetRuntime && typeof window !== 'undefined') {
+      router.replace('/');
+    }
+  }, [multiAssetRuntime, router]);
 
   // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {

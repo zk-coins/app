@@ -28,6 +28,9 @@ const FEATURES_STATE = vi.hoisted(() => ({
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
   USERNAME_CLAIM: false,
+  // Runtime multi-asset capability ON: this suite asserts the per-asset
+  // portfolio + create-coin entry, which only render on the true surface.
+  MULTI_ASSET: true,
 }));
 
 vi.mock('@/lib/features', () => ({
@@ -53,7 +56,7 @@ let infoSpy: ReturnType<typeof vi.spyOn>;
 let historySpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  Object.assign(FEATURES_STATE, { USERNAME_CLAIM: false });
+  Object.assign(FEATURES_STATE, { USERNAME_CLAIM: false, MULTI_ASSET: true });
   useNetworkStore.setState({ apiUrl: 'https://test.api', networkName: '', bitcoinNetwork: '' });
   useWalletStore.setState({
     account: ALICE,

@@ -627,6 +627,97 @@ export const api = {
     return waitForJob(c, jobId, TERMINAL_STATUSES, opts);
   },
 
+  /**
+   * Single-asset (native) send — the `multi_asset:false` counterpart of
+   * `send` above. Identical two-phase lifecycle, but:
+   *   - the BIP-32 child index is hydrated from the single-asset
+   *     `balance(address).num_sends` (a single-asset node has no
+   *     `/api/balance/:address` portfolio endpoint to sum), and
+   *   - the request carries NO `asset_id` (the field is the SDK's optional
+   *     multi-asset selector; a pre-multi-asset node 422s an unknown one).
+   */
+  walletSend: async (
+    params: { account_address: string; recipient: string; amount: number; xpriv: string },
+    opts: { onPhase?: (status: JobStatus) => void } = {},
+  ): Promise<JobStatus> => {
+    const c = client();
+
+    // 1. Thin-client invariant — hydrate the derivation index from the
+    // server's authoritative single-asset send counter before signing.
+    const bal = await c.balance(params.account_address);
+    const numPubkeys = bal.num_sends;
+
+    // 2. Derive the pubkey pair (+ prev pubkey) for this send.
+    const wasm = await initWasm();
+    const keys = wasm.derivePublicKeys(params.xpriv, numPubkeys);
+    const prevPk =
+      numPubkeys > 0 ? wasm.derivePublicKeys(params.xpriv, numPubkeys - 1).publicKey : undefined;
+
+    // 3. Sign + admit (no asset_id — single-asset wire shape).
+    const timestamp = Math.floor(Date.now() / 1000);
+    const messageBytes = buildSendMessage({
+      accountAddress: params.account_address,
+      recipient: params.recipient,
+      amount: params.amount,
+      timestamp,
+    });
+    const hashHex = await sha256Hex(messageBytes);
+    const signingKey = wasm.deriveSigningKey(params.xpriv, numPubkeys);
+    const signature = wasm.signSchnorr(signingKey, hashHex);
+
+    const accepted = await c.sendJob(
+      {
+        account_address: params.account_address,
+        recipient: params.recipient,
+        amount: params.amount,
+        public_key: keys.publicKey,
+        next_public_key: keys.nextPublicKey,
+        ...(prevPk !== undefined ? { prev_commitment_pubkey: prevPk } : {}),
+        signature,
+        timestamp,
+      },
+      newIdempotencyKey(),
+    );
+    const jobId = accepted.job_id;
+
+    // 4. Poll to `awaiting_signature`.
+    const awaiting = await waitForJob(
+      c,
+      jobId,
+      new Set<JobStatus['status']>(['awaiting_signature', ...TERMINAL_STATUSES]),
+      opts,
+    );
+    if (awaiting.status !== 'awaiting_signature') {
+      throw new JobFailedError(
+        jobId,
+        'failed',
+        `send job ended in ${awaiting.status} before commit`,
+      );
+    }
+    const proofId = awaiting.proof_id;
+    if (proofId === null || proofId === undefined) {
+      throw new JobFailedError(jobId, 'failed', 'awaiting_signature job did not carry a proof_id');
+    }
+
+    // 5. Build + attach the commitment.
+    const { accountStateHash, outputCoinsRoot } = extractCommitInputs(awaiting, jobId);
+    const commitment = wasm.createCommitment(
+      params.xpriv,
+      numPubkeys,
+      accountStateHash,
+      outputCoinsRoot,
+    );
+    await c.commitJob(jobId, {
+      proof_id: proofId,
+      public_key: commitment.publicKey,
+      signature: commitment.signature,
+      message: commitment.message,
+    });
+
+    // 6. Poll to `completed`.
+    return waitForJob(c, jobId, TERMINAL_STATUSES, opts);
+  },
+
   /** Per-`(owner, asset)` balance — `GET /api/balance?address=&asset_id=`. */
   balance: (address: string, assetId: string): Promise<BalanceResponse> =>
     getJson(
@@ -637,6 +728,33 @@ export const api = {
   /** The owner's cross-asset portfolio — `GET /api/balance/:address`. */
   ownerBalances: (address: string): Promise<OwnerBalanceResponse> =>
     getJson(`/api/balance/${encodeURIComponent(address)}`, OwnerBalanceResponseSchema),
+
+  /**
+   * Single-asset (native) balance — `GET /api/balance?address=`. The
+   * capability-adaptive Wallet / Send screens use this on the
+   * `multi_asset:false` surface, where there is exactly one asset and the
+   * UI renders a BTC-denominated hero instead of a per-asset portfolio.
+   * Delegates to the SDK's single-arg `balance(address)`; the per-asset
+   * `balance(address, assetId)` above is the multi-asset counterpart.
+   */
+  walletBalance: (address: string): Promise<BalanceResponse> => client().balance(address),
+
+  /**
+   * Faucet / authorised mint — single-asset surface only. Server-mediated
+   * end-to-end (no wallet signature): admit the job (mandatory
+   * `Idempotency-Key`) and poll to `completed`. Throws `JobFailedError` on
+   * a terminal `failed` / `cancelled`, `ApiError` on a non-2xx admit (e.g.
+   * mainnet, where the faucet is not served).
+   */
+  mint: async (
+    address: string,
+    amount: number = 10_000,
+    opts: { onPhase?: (status: JobStatus) => void } = {},
+  ): Promise<JobStatus> => {
+    const c = client();
+    const accepted = await c.mintJob({ account_address: address, amount }, newIdempotencyKey());
+    return waitForJob(c, accepted.job_id, TERMINAL_STATUSES, opts);
+  },
 
   info: (): Promise<InfoResponse> => client().info(),
 

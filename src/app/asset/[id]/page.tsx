@@ -1,6 +1,7 @@
 'use client';
 
-import { useParams } from 'next/navigation';
+import { useEffect } from 'react';
+import { notFound, useParams, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations } from 'next-intl';
 import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Plus, Receipt, Info } from 'lucide-react';
@@ -10,12 +11,27 @@ import { usePortfolio } from '@/hooks/usePortfolio';
 import { useHistory } from '@/hooks/useHistory';
 import type { HistoryItem } from '@/lib/api/client';
 import { formatAssetAmount, shortAssetId } from '@/lib/format';
+import { FEATURES, useFeatures } from '@/lib/features';
 
 export default function AssetDetailPage() {
+  // Build-time gate: dead-strips the whole route from single-asset bundles
+  // (see `/create` for the rationale; mirrors `/apps` and `/reset`).
+  if (!FEATURES.MULTI_ASSET) notFound();
+
+  const router = useRouter();
   const params = useParams<{ id: string }>();
   const t = useTranslations('asset');
   const tWallet = useTranslations('wallet');
   const account = useWalletStore((s) => s.account);
+  const { MULTI_ASSET: multiAssetRuntime } = useFeatures();
+
+  // Runtime gate: a capability-adaptive bundle talking to a single-asset
+  // node has no per-asset detail — redirect home.
+  useEffect(() => {
+    if (!multiAssetRuntime && typeof window !== 'undefined') {
+      router.replace('/');
+    }
+  }, [multiAssetRuntime, router]);
 
   const assetId = params.id;
   const { assets, loaded } = usePortfolio(account?.address);

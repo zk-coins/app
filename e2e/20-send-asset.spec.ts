@@ -24,6 +24,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { readAccounts, aliceLogin } from './_helpers/fixtures';
 import { snap, setViewport } from './_helpers/screenshot';
+import { multiAssetEnabled } from './_helpers/capabilities';
 
 /** Log Alice in (funded) and open `/send`. */
 async function aliceGoToSend(page: Page): Promise<void> {
@@ -56,6 +57,14 @@ function confirmCardMasks(page: Page) {
 }
 
 test.describe('Send asset', () => {
+  // Gated on the runtime multi-asset capability: these screens only
+  // exist on a `multi_asset:true` node. On the single-asset CI leg
+  // (info-proxy forces it false) the whole describe skips; it runs
+  // against a true node (local Docker harness).
+  test.beforeEach(async () => {
+    test.skip(!(await multiAssetEnabled()), 'multi_asset disabled on this node');
+  });
+
   test('Visual Regression — send-asset-picker', async ({ page }) => {
     await setViewport(page, 'mobile');
     await aliceGoToSend(page);

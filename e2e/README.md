@@ -254,6 +254,8 @@ export function bobLogin(page: Page, password: string): Promise<void>;
 | Locator                              | What it hides                                  | Source file                                                                                   |
 | ------------------------------------ | ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | `text=/[0-9a-f]{8}@zkcoins\.app/`    | Wallet address chip                            | Already a content match — no attribute change needed                                          |
+| `[data-testid="balance-amount-usd"]` | The USD value text (`$X`) — single-asset hero  | `src/components/screens/WalletScreen.tsx` — the `<h1>` only, NOT the surrounding card         |
+| `[data-testid="balance-amount-btc"]` | The BTC value text (`X BTC`) — single-asset hero | same file — the `<p>` only                                                                  |
 | `[data-testid="asset-row-balance"]`  | The per-asset portfolio balance value          | `src/components/screens/WalletScreen.tsx` — the portfolio row's balance `<span>` only         |
 | `[data-testid="tx-row-amount"]`      | Transaction row amount                         | `src/components/screens/WalletScreen.tsx::TransactionsList`                                   |
 | `[data-testid="tx-row-time"]`        | Transaction row timestamp                      | same file                                                                                     |
@@ -261,7 +263,7 @@ export function bobLogin(page: Page, password: string): Promise<void>;
 | `[data-testid="qr-code"]`            | The receive QR (depends on address)            | `src/app/receive/page.tsx` — wrap the `QRCodeSVG` parent `<div>`                              |
 | `[data-testid="proof-id"]`           | The "proof #N" line on the send success screen | `src/app/send/page.tsx`                                                                       |
 
-The `asset-row-balance` mask is the multi-asset successor to the old single-balance-hero masks. The redesign replaced the USD/BTC balance card with a per-asset portfolio list, so the only globally volatile numeric value on the wallet home is each portfolio row's balance cell. Masking just that cell preserves the surrounding chrome (address chip, copy-feedback strip, create-coin CTA) as differentiators. The portfolio specs (06/19/21) also mask the volatile asset name + id per-spec, since those are spec-local rather than present on every shot.
+The wallet home is **capability-adaptive**: on a `multi_asset:false` node it renders the single-asset USD/BTC balance hero (masks `balance-amount-usd` / `balance-amount-btc`, the `<h1>` / `<p>` value text only — not the surrounding card, so the eye-toggle flip and copy-feedback strip stay in the diff); on a `multi_asset:true` node it renders the per-asset portfolio list (masks `asset-row-balance`). Both mask sets live in `_helpers/screenshot.ts`'s default list; Playwright ignores selectors with no matches, so only the rendered surface's elements actually mask. The portfolio specs (06/19/21) also mask the volatile asset name + id per-spec, since those are spec-local rather than present on every shot.
 
 The data-testid attributes are added **incrementally**, by the PR that first needs each one — not all at once in PR-2. The `snap` helper in `_helpers/screenshot.ts` references the full list from PR-1; Playwright's `mask` ignores selectors with no matches, so unused entries are inert until the matching component lands. No `data-testid` proliferation beyond this set — anything else has to be stable without one.
 
@@ -270,7 +272,8 @@ Per-PR ownership:
 | Attribute       | First needed by                    | Added in PR                                           |
 | --------------- | ---------------------------------- | ----------------------------------------------------- |
 | `seed-grid`        | `_helpers/wallet.ts` + §8.2 / §8.3 | PR-1 (helper reads the mnemonic during `globalSetup`) |
-| `asset-row-balance` | §8.6 (portfolio balance shot)     | multi-asset redesign (replaced the balance-hero mask) |
+| `balance-value`     | §8.6 (single-asset balance shot)  | PR-7 (single-asset hero on the `multi_asset:false` surface) |
+| `asset-row-balance` | §8.6 (portfolio balance shot)     | multi-asset surface (`multi_asset:true`)              |
 | `tx-row-amount` | §8.7 (post-send list shot)         | PR-8                                                  |
 | `tx-row-time`   | §8.7                               | PR-8                                                  |
 | `proof-id`      | §8.7 `send-success`                | PR-8                                                  |
@@ -682,7 +685,7 @@ The implementation order **matters** because later specs depend on earlier helpe
 4. **PR-4** ✅: §8.3 `03-restore-seed.spec.ts`. Wires up `fixtures.aliceLogin`.
 5. **PR-5** ✅: §8.4 `04-unlock-password.spec.ts` _(closes MVP triage gap)_.
 6. **PR-6** ✅: §8.5 `05-disconnect.spec.ts`.
-7. **PR-7** ✅: §8.6 `06-balance.spec.ts`. The multi-asset redesign later replaced the single balance hero with the per-asset portfolio; the masked balance testid is now `asset-row-balance` on `WalletScreen.tsx`.
+7. **PR-7** ✅: §8.6 `06-balance.spec.ts`. Adds `data-testid="balance-value"` to `WalletScreen.tsx` (the single-asset balance hero, rendered on the `multi_asset:false` surface). The multi-asset surface instead masks `asset-row-balance` on the per-asset portfolio.
 8. **PR-8** ✅: §8.7 `07-send.spec.ts` (this is the big one — Alice → Bob real on-chain send). Adds `data-testid="tx-row-amount"` + `"tx-row-time"` to `WalletScreen.tsx::TransactionsList` and `"proof-id"` to `send/page.tsx`.
 9. **PR-9** ✅: §8.8 `08-receive.spec.ts`. Adds `data-testid="qr-code"` to `receive/page.tsx`.
 10. **PR-10** ✅: §8.9 `09-network-and-shell.spec.ts`.

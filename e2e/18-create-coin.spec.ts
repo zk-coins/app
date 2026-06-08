@@ -27,6 +27,7 @@ import { expect, test, type Page } from '@playwright/test';
 import { aliceLogin } from './_helpers/fixtures';
 import { clearWalletState, createSeedWallet } from './_helpers/wallet';
 import { snap, setViewport } from './_helpers/screenshot';
+import { multiAssetEnabled } from './_helpers/capabilities';
 
 // The zkCoins PWA service worker can pass `/api/jobs/*` traffic before
 // `page.route()` sees it — block it so the route mocks are the only
@@ -49,6 +50,14 @@ async function fillForm(page: Page): Promise<void> {
 }
 
 test.describe('Create coin', () => {
+  // Gated on the runtime multi-asset capability: these screens only
+  // exist on a `multi_asset:true` node. On the single-asset CI leg
+  // (info-proxy forces it false) the whole describe skips; it runs
+  // against a true node (local Docker harness).
+  test.beforeEach(async () => {
+    test.skip(!(await multiAssetEnabled()), 'multi_asset disabled on this node');
+  });
+
   test('Visual Regression — create-empty-desktop', async ({ page }) => {
     await setViewport(page, 'desktop');
     await aliceGoToCreate(page);

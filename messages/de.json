@@ -19,7 +19,13 @@
     "noTransactionsNoWallet": "Erstelle ein Wallet, um zu starten.",
     "txSent": "Gesendet",
     "txReceived": "Empfangen",
-    "txMint": "Erstellt"
+    "txMint": "Erstellt",
+    "emptyWalletTitle": "Wallet ist leer",
+    "emptyFaucetBody": "Hol dir Test-Sats vom Faucet oder teile deine Adresse über <receive>Empfangen</receive>.",
+    "emptyDfxBody": "Kaufe privates BTC über <dfx>DFX</dfx> oder teile deine Adresse über <receive>Empfangen</receive>.",
+    "emptyReceiveBody": "Teile deine Adresse über <receive>Empfangen</receive>.",
+    "faucet": "Faucet",
+    "minting": "Wird gemintet…"
   },
   "createCoin": {
     "back": "Zurück",
@@ -70,7 +76,9 @@
     "sendPrivately": "Privat senden",
     "successHeading": "Privat gesendet",
     "proof": "Beweis #{id}",
-    "done": "Fertig"
+    "done": "Fertig",
+    "headingBtc": "Bitcoin senden",
+    "noFundsBody": " Hol dir Sats über <receive>Empfangen</receive><dfx> oder DFX</dfx>."
   },
   "asset": {
     "back": "Zurück",

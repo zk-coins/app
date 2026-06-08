@@ -448,6 +448,173 @@ describe('api.send (lifecycle)', () => {
   });
 });
 
+describe('api.walletBalance (single-asset, native)', () => {
+  it('GETs /api/balance?address= via the SDK single-arg balance', async () => {
+    mockJsonResponse({ balance: 100_000, num_sends: 3 });
+    const res = await api.walletBalance('aa'.repeat(32));
+    const [url] = mockFetch.mock.calls[0];
+    expect(url).toBe(`https://test-api.zkcoins.app/api/balance?address=${'aa'.repeat(32)}`);
+    expect(res.balance).toBe(100_000);
+    expect(res.num_sends).toBe(3);
+  });
+});
+
+describe('api.mint (faucet)', () => {
+  it('admits POST /api/jobs/mint and polls to completed', async () => {
+    mockJsonResponse<JobAccepted>({ job_id: 'mint-fc', status: 'queued' }, 202);
+    mockJsonResponse<JobStatus>({
+      job_id: 'mint-fc',
+      kind: 'mint',
+      status: 'completed',
+      phase: 'completed',
+      result: { success: true },
+    });
+    const job = await api.mint('aa'.repeat(32), 10_000);
+    expect(job.status).toBe('completed');
+    const admit = mockFetch.mock.calls.find(([u]) => String(u).endsWith('/api/jobs/mint'));
+    expect(admit).toBeDefined();
+    const body = JSON.parse(admit![1].body);
+    expect(body.account_address).toBe('aa'.repeat(32));
+    expect(body.amount).toBe(10_000);
+    // Faucet mint carries no creator signature (server-mediated).
+    expect(body.signature).toBeUndefined();
+    expect((admit![1].headers as Record<string, string>)['Idempotency-Key']).toBeTruthy();
+  });
+
+  it('throws JobFailedError when the faucet mint fails', async () => {
+    mockJsonResponse<JobAccepted>({ job_id: 'mint-bad', status: 'queued' }, 202);
+    mockJsonResponse<JobStatus>({
+      job_id: 'mint-bad',
+      kind: 'mint',
+      status: 'failed',
+      phase: 'failed',
+      error: 'faucet drained',
+    });
+    await expect(api.mint('aa'.repeat(32))).rejects.toThrow(/faucet drained/);
+  });
+});
+
+describe('api.walletSend (single-asset lifecycle)', () => {
+  const SEND_PARAMS = {
+    account_address: 'aa'.repeat(32),
+    recipient: 'bb'.repeat(32),
+    amount: 1000,
+    xpriv: 'xprv_test',
+  };
+
+  it('hydrates the index from single-asset num_sends, signs (no asset_id), commits, polls', async () => {
+    mockJsonResponse({ balance: 50_000, num_sends: 2 }); // client().balance(address)
+    mockJsonResponse<JobAccepted>({ job_id: 'wsend-1', status: 'queued' }, 202);
+    mockJsonResponse<JobStatus>({
+      job_id: 'wsend-1',
+      kind: 'send',
+      status: 'awaiting_signature',
+      phase: 'awaiting_signature',
+      proof_id: 7,
+      result: { account_state_hash: 'abc', output_coins_root: 'def' },
+    });
+    mockJsonResponse({ status: 'broadcasting' });
+    mockJsonResponse<JobStatus>({
+      job_id: 'wsend-1',
+      kind: 'send',
+      status: 'completed',
+      phase: 'completed',
+      result: { success: true, proof_id: 7 },
+    });
+
+    const result = await api.walletSend(SEND_PARAMS);
+    expect(result.status).toBe('completed');
+
+    const sendCall = mockFetch.mock.calls.find(([u]) => String(u).endsWith('/api/jobs/send'));
+    const sendBody = JSON.parse(sendCall![1].body);
+    // Single-asset wire shape carries NO asset_id.
+    expect(sendBody.asset_id).toBeUndefined();
+    expect(sendBody.amount).toBe(1000);
+    expect(sendBody.prev_commitment_pubkey).toBeDefined(); // num_sends=2 → prev set
+    expect(typeof sendBody.signature).toBe('string');
+  });
+
+  it('omits prev_commitment_pubkey when the wallet has never sent', async () => {
+    mockJsonResponse({ balance: 50_000, num_sends: 0 });
+    mockJsonResponse<JobAccepted>({ job_id: 'wsend-2', status: 'queued' }, 202);
+    mockJsonResponse<JobStatus>({
+      job_id: 'wsend-2',
+      kind: 'send',
+      status: 'awaiting_signature',
+      phase: 'awaiting_signature',
+      proof_id: 1,
+      result: { account_state_hash: 'a', output_coins_root: 'b' },
+    });
+    mockJsonResponse({ status: 'broadcasting' });
+    mockJsonResponse<JobStatus>({
+      job_id: 'wsend-2',
+      kind: 'send',
+      status: 'completed',
+      phase: 'completed',
+      result: { success: true, proof_id: 1 },
+    });
+    await api.walletSend(SEND_PARAMS);
+    const sendBody = JSON.parse(
+      mockFetch.mock.calls.find(([u]) => String(u).endsWith('/api/jobs/send'))![1].body,
+    );
+    expect(sendBody.prev_commitment_pubkey).toBeUndefined();
+  });
+
+  it('hard-fails when ash/ocr are missing', async () => {
+    mockJsonResponse({ balance: 50_000, num_sends: 0 });
+    mockJsonResponse<JobAccepted>({ job_id: 'wsend-3', status: 'queued' }, 202);
+    mockJsonResponse<JobStatus>({
+      job_id: 'wsend-3',
+      kind: 'send',
+      status: 'awaiting_signature',
+      phase: 'awaiting_signature',
+      proof_id: 5,
+    });
+    const err = await api.walletSend(SEND_PARAMS).catch((e: unknown) => e);
+    expect(err).toBeInstanceOf(JobFailedError);
+    expect((err as JobFailedError).serverError).toContain('account_state_hash');
+  });
+
+  it('throws when awaiting_signature carries no proof_id', async () => {
+    mockJsonResponse({ balance: 50_000, num_sends: 0 });
+    mockJsonResponse<JobAccepted>({ job_id: 'wsend-4', status: 'queued' }, 202);
+    mockJsonResponse<JobStatus>({
+      job_id: 'wsend-4',
+      kind: 'send',
+      status: 'awaiting_signature',
+      phase: 'awaiting_signature',
+      result: { account_state_hash: 'a', output_coins_root: 'b' },
+    });
+    await expect(api.walletSend(SEND_PARAMS)).rejects.toThrow(/did not carry a proof_id/);
+  });
+
+  it('throws JobFailedError when the send completes before commit', async () => {
+    mockJsonResponse({ balance: 50_000, num_sends: 0 });
+    mockJsonResponse<JobAccepted>({ job_id: 'wsend-5', status: 'queued' }, 202);
+    mockJsonResponse<JobStatus>({
+      job_id: 'wsend-5',
+      kind: 'send',
+      status: 'completed',
+      phase: 'completed',
+      result: { success: true, proof_id: 1 },
+    });
+    await expect(api.walletSend(SEND_PARAMS)).rejects.toThrow(/before commit/);
+  });
+
+  it('throws JobFailedError when the send job fails during proving', async () => {
+    mockJsonResponse({ balance: 50_000, num_sends: 0 });
+    mockJsonResponse<JobAccepted>({ job_id: 'wsend-6', status: 'queued' }, 202);
+    mockJsonResponse<JobStatus>({
+      job_id: 'wsend-6',
+      kind: 'send',
+      status: 'failed',
+      phase: 'failed',
+      error: 'prove failed',
+    });
+    await expect(api.walletSend(SEND_PARAMS)).rejects.toThrow(/prove failed/);
+  });
+});
+
 describe('api.waitForJob retry backoff', () => {
   it('honours the Retry-After header floor before re-polling', async () => {
     vi.useFakeTimers();

@@ -28,6 +28,8 @@ const FEATURES_STATE = vi.hoisted(() => ({
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
   USERNAME_CLAIM: false,
+  // Runtime multi-asset capability ON for the multi-asset surface this suite covers.
+  MULTI_ASSET: true,
 }));
 
 vi.mock('@/lib/features', () => ({

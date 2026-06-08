@@ -23,6 +23,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { aliceLogin } from './_helpers/fixtures';
 import { snap, setViewport } from './_helpers/screenshot';
+import { multiAssetEnabled } from './_helpers/capabilities';
 
 /** Masked volatile cells on the detail body. The asset NAME is volatile
  *  (globalSetup mints `E2E-<ts>-<rand>` fixtures), so both the hero name and
@@ -51,6 +52,14 @@ async function aliceOpenFirstAsset(page: Page): Promise<void> {
 }
 
 test.describe('Asset detail', () => {
+  // Gated on the runtime multi-asset capability: these screens only
+  // exist on a `multi_asset:true` node. On the single-asset CI leg
+  // (info-proxy forces it false) the whole describe skips; it runs
+  // against a true node (local Docker harness).
+  test.beforeEach(async () => {
+    test.skip(!(await multiAssetEnabled()), 'multi_asset disabled on this node');
+  });
+
   test('Visual Regression — asset-detail-desktop', async ({ page }) => {
     await setViewport(page, 'desktop');
     await aliceOpenFirstAsset(page);
