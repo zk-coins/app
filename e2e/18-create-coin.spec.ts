@@ -139,6 +139,12 @@ test.describe('Create coin', () => {
     await page.getByTestId('create-decimals-input').fill('0');
     await page.getByTestId('create-amount-input').fill('1000');
     await page.getByTestId('create-submit-btn').click();
+    // While the two-phase mint runs, the submit button parks in its disabled
+    // "creating" state and the lifecycle surfaces a phase label
+    // (`onPhase` → `create-phase`) that tracks the job through proving →
+    // awaiting_signature → broadcasting. Assert it renders during the flow;
+    // it is cleared once the success surface lands.
+    await expect(page.getByTestId('create-phase')).toBeVisible({ timeout: 60_000 });
     await expect(page.getByTestId('create-success-heading')).toBeVisible({ timeout: 170_000 });
     await expect(page.getByTestId('create-done-btn')).toBeVisible();
     await snap(page, '18-create-success', { fullPage: true });

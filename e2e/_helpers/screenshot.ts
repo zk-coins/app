@@ -31,13 +31,14 @@ async function defaultMasks(page: Page): Promise<Locator[]> {
   return [
     // Wallet-address chip — content match, no attribute needed.
     page.locator(`text=${zkAddressRegex(domain)}`),
-    // Numeric balance — mask only the volatile USD + BTC value texts,
-    // NOT the whole balance card. The previous `[data-testid="balance-value"]`
-    // mask covered the toggle-button icon and the surrounding chrome,
-    // which collapsed `balance-hidden` and `balance-copied-feedback` onto
-    // `balance-funded-mobile` on the smaller mobile viewport.
-    page.locator('[data-testid="balance-amount-usd"]'),
-    page.locator('[data-testid="balance-amount-btc"]'),
+    // Per-asset portfolio balance — the multi-asset redesign replaced the
+    // single USD/BTC balance hero with a portfolio list, so the volatile
+    // numeric value now lives on each `asset-row-balance` cell. Masking it
+    // by default keeps any portfolio-rendering shot stable even if a spec
+    // forgets to add the per-row masks (06/19/21 also mask it explicitly,
+    // which is harmless overlap). The asset name + id are spec-volatile too
+    // but are masked per-spec where they're snapshotted, not globally.
+    page.locator('[data-testid="asset-row-balance"]'),
     // Transaction-row amount + timestamp (varies per send).
     page.locator('[data-testid="tx-row-amount"]'),
     page.locator('[data-testid="tx-row-time"]'),
@@ -52,13 +53,13 @@ async function defaultMasks(page: Page): Promise<Locator[]> {
 
 // Pin variable-content elements to a stable rendered width before snapshot.
 // Playwright's mask box is exactly the element's rendered width; without
-// this, a value like "$6.20" vs "$620.00" yields different mask widths and
+// this, a value like "1000" vs "12345" yields different mask widths and
 // the visual diff exceeds the tolerance. The pinned widths are conservative
-// upper bounds for realistic test states (faucet outputs, transaction
-// amounts, proof ids) and only affect snapshot rendering.
+// upper bounds for realistic test states (transaction amounts, proof ids)
+// and only affect snapshot rendering. The per-asset portfolio balance
+// (`asset-row-balance`) needs no width pin: its `tabular-nums` cell is
+// right-aligned in a fixed-width row, so the mask box is stable across runs.
 const STABILIZE_CSS = `
-  [data-testid="balance-amount-usd"] { min-width: 280px; }
-  [data-testid="balance-amount-btc"] { display: inline-block; min-width: 220px; }
   [data-testid="tx-row-amount"] { display: inline-block; min-width: 96px; text-align: right; }
   [data-testid="proof-id"] { display: inline-block; min-width: 80px; }
   /* Transaction-detail value cells: pin every masked value to a uniform

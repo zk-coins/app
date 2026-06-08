@@ -136,6 +136,24 @@ export const SCREENS: readonly Screen[] = [
       { spec: '14-network-activity', name: '14-network-activity-mobile' },
     ],
   },
+  {
+    id: 'create',
+    title: 'Create coin',
+    reach: { kind: 'route', path: '/create' },
+    baselines: [
+      { spec: '18-create-coin', name: '18-create-empty-desktop' },
+      { spec: '18-create-coin', name: '18-create-empty-mobile' },
+    ],
+  },
+  {
+    id: 'asset-detail',
+    title: 'Per-asset detail',
+    reach: { kind: 'route', path: '/asset/[id]' },
+    baselines: [
+      { spec: '21-asset-detail', name: '21-asset-detail-desktop' },
+      { spec: '21-asset-detail', name: '21-asset-detail-mobile' },
+    ],
+  },
 
   // ── Env-gated routes (dead-stripped from the bundle — no golden) ────
   {

@@ -57,6 +57,10 @@ test.describe('Asset detail', () => {
     // The Details card and the send deep-link are present.
     await expect(page.getByTestId('asset-send-btn')).toBeVisible();
     await expect(page.getByTestId('asset-history-note')).toBeVisible();
+    // The Details card lists the asset's decimals row (deterministic label,
+    // value masked indirectly via the row balance — the decimals integer is
+    // stable, so it needs no mask).
+    await expect(page.getByTestId('asset-row-decimals')).toBeVisible();
     await snap(page, '21-asset-detail-desktop', { mask: detailMasks(page) });
   });
 

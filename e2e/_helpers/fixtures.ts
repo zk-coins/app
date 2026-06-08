@@ -68,8 +68,9 @@ export async function aliceLogin(
   // Block on the two WalletScreen mount-time roundtrips so any subsequent
   // navigation or assertion is race-free:
   //   - api.info() populates the network store (settings badge gating)
-  //   - api.balance() resolves the data-loading marker on balance-amount-usd
-  //     (wallet-empty-banner gating, send-page balance gating)
+  //   - api.balance() resolves the portfolio's first tick, surfacing either
+  //     `asset-list` or `wallet-empty-banner` (see waitForBalanceLoaded) —
+  //     the gate for portfolio + send-page balance assertions
   await waitForNetworkInfo(page);
   await waitForBalanceLoaded(page);
   return alice;
