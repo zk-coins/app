@@ -74,7 +74,7 @@ export default function AssetDetailPage() {
             </p>
             <p
               data-testid="asset-detail-id-short"
-              className="mt-2 mono text-[11px] text-ink4"
+              className="mt-2 mono text-[11px] text-ink3"
               title={asset.asset_id}
             >
               {shortAssetId(asset.asset_id)}

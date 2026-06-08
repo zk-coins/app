@@ -12,9 +12,18 @@
  * There is no faucet under the neutral multi-asset model — funding a
  * fixture wallet means that wallet creating its own asset. So the harness
  * runs the same two-phase, creator-signed mint the app's `createCoin`
- * runs, using the SDK's crypto primitives (BIP-32 derivation, Schnorr
- * signing, commitment build) plus a local `buildMintMessage` (the installed
- * SDK predates the multi-asset message layout):
+ * runs, using the app's own `@zkcoins/wasm` crypto primitives (BIP-32
+ * derivation, Schnorr signing, commitment build) plus a local
+ * `buildMintMessage` (the installed SDK predates the multi-asset message
+ * layout):
+ *
+ * Crypto MUST go through the wasm, not `@zkcoins/sdk`: the node credits the
+ * mint to `owner = Poseidon(creator_pubkey)` and serves the portfolio under
+ * that Poseidon address — which is exactly the wallet address the wasm
+ * derives (`H(pubkey_0)`). Deriving the fixture account through the wasm is
+ * what makes `ownerBalances(account.address)` observe the mint; the SDK's
+ * `sha256(pubkey_0)` address is a different, unobserved value (see
+ * `_helpers/wasm.ts`).
  *
  *   1. Derive the creator identity key (index 0) from the mnemonic; sign
  *      `SHA256(creator_pubkey ‖ name ‖ [decimals] ‖ amount_le ‖ ts_le)`.
@@ -28,16 +37,8 @@
  */
 
 import { createHash } from 'node:crypto';
-import {
-  ZkCoinsClient,
-  newIdempotencyKey,
-  generateAccountKeysFromMnemonic,
-  derivePublicKeys,
-  deriveSigningKey,
-  signSchnorr,
-  createCommitment,
-  type InfoResponse,
-} from '@zkcoins/sdk';
+import { ZkCoinsClient, newIdempotencyKey, type InfoResponse } from '@zkcoins/sdk';
+import { loadWasm } from './wasm';
 
 const API_URL = (process.env.E2E_API_URL ?? 'https://dev-api.zkcoins.app').replace(/\/+$/, '');
 
@@ -71,19 +72,34 @@ export const api = {
     getJson<OwnerBalance>(`/api/balance/${encodeURIComponent(address)}`),
 
   /**
+   * Derive the fixture account from `mnemonic` via the app's `@zkcoins/wasm`
+   * module — the SAME path the app's onboarding uses. The returned `address`
+   * is `H(pubkey_0)` (Poseidon), which is the owner the node credits and the
+   * address the live wallet polls. Use THIS for `ownerBalances`, never the
+   * SDK's `sha256(pubkey_0)` address.
+   */
+  account: async (mnemonic: string): Promise<{ address: string; xpriv: string }> => {
+    const wasm = await loadWasm();
+    const acct = wasm.account(mnemonic);
+    return { address: acct.address, xpriv: acct.xpriv };
+  },
+
+  /**
    * Create / mint an asset into the wallet derived from `mnemonic`. Returns
-   * the minted `amount` so the caller can poll the portfolio for it.
+   * the minted `amount` plus the wallet `address` (Poseidon owner) so the
+   * caller can poll the portfolio for it.
    */
   createCoin: async (
     mnemonic: string,
     opts: { name?: string; decimals?: number; amount?: number } = {},
-  ): Promise<{ name: string; decimals: number; amount: number }> => {
+  ): Promise<{ name: string; decimals: number; amount: number; address: string }> => {
     const name = opts.name ?? `E2E-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const decimals = opts.decimals ?? FIXTURE_DECIMALS;
     const amount = opts.amount ?? MINT_AMOUNT;
 
-    const keys = await generateAccountKeysFromMnemonic(mnemonic);
-    const { publicKey, nextPublicKey } = await derivePublicKeys(keys.xpriv, 0);
+    const wasm = await loadWasm();
+    const { address, xpriv } = wasm.account(mnemonic);
+    const { publicKey, nextPublicKey } = wasm.publicKeys(xpriv, 0);
     const timestamp = Math.floor(Date.now() / 1000);
 
     const messageBytes = buildMintMessage({
@@ -94,8 +110,8 @@ export const api = {
       timestamp,
     });
     const digestHex = sha256Hex(messageBytes);
-    const signingKey = await deriveSigningKey(keys.xpriv, 0);
-    const signature = await signSchnorr(signingKey, digestHex);
+    const signingKey = wasm.signingKey(xpriv, 0);
+    const signature = wasm.sign(signingKey, digestHex);
 
     const accepted = await postJson<{ job_id: string }>(
       '/api/jobs/mint',
@@ -118,7 +134,7 @@ export const api = {
     if (typeof ash !== 'string' || typeof ocr !== 'string') {
       throw new Error(`createCoin: awaiting_signature job ${jobId} did not carry ash/ocr`);
     }
-    const commitment = await createCommitment(keys.xpriv, 0, ash, ocr);
+    const commitment = wasm.commitment(xpriv, 0, ash, ocr);
     await sdkClient.commitJob(jobId, {
       proof_id: awaiting.proof_id as number,
       public_key: commitment.publicKey,
@@ -127,11 +143,16 @@ export const api = {
     });
     await pollToCompleted(jobId);
 
-    return { name, decimals, amount };
+    return { name, decimals, amount, address };
   },
 };
 
-const POLL_TIMEOUT_MS = 120_000;
+// 4 minutes: the local multi-asset node's prover can sit a mint in `queued`
+// for a while under back-to-back fixture mints before it reaches
+// `awaiting_signature` (Mutinynet proof gen + scanner). 120 s occasionally
+// timed out the globalSetup seed under that congestion; 240 s absorbs it
+// without masking a genuinely wedged job.
+const POLL_TIMEOUT_MS = 240_000;
 const POLL_FLOOR_MS = 2_000;
 
 interface PolledJob {

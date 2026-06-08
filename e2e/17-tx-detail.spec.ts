@@ -87,8 +87,9 @@ test.describe('Transaction detail', () => {
     await setViewport(page, 'mobile');
     await openFirstTxDetail(page);
     await page.getByTestId('tx-detail-back').click();
-    // Back on the wallet screen — the balance area is the stable anchor.
-    await expect(page.getByTestId('balance-amount-usd')).toBeVisible({ timeout: 15_000 });
+    // Back on the wallet screen — the funded portfolio list is the stable
+    // anchor (the single-balance hero was removed in the multi-asset redesign).
+    await expect(page.getByTestId('asset-list')).toBeVisible({ timeout: 15_000 });
   });
 
   test('tx-detail-missing', async ({ page }) => {

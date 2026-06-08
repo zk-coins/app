@@ -56,11 +56,14 @@ async function pollPortfolioFunded(address: string): Promise<number> {
 
 /** Run the creator-signed create-coin flow for `mnemonic`'s wallet, with a
  *  small retry on transient admit/proof failures. Each call mints a fresh,
- *  uniquely-named asset (the helper auto-generates the name). */
-async function createCoinWithRetry(mnemonic: string, attempt = 1): Promise<void> {
+ *  uniquely-named asset (the helper auto-generates the name). Returns the
+ *  wallet's Poseidon owner address — the one the node credits and the one
+ *  the portfolio poll must query. */
+async function createCoinWithRetry(mnemonic: string, attempt = 1): Promise<string> {
   const maxAttempts = 3;
   try {
-    await api.createCoin(mnemonic);
+    const { address } = await api.createCoin(mnemonic);
+    return address;
   } catch (err) {
     if (attempt >= maxAttempts) throw err;
     const wait = 1_000 * 2 ** (attempt - 1);
@@ -178,11 +181,25 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     });
     await aliceCtx.close();
 
-    // Seed Alice by minting her own asset(s) via the create-coin flow.
+    // Seed Alice by minting her own asset(s) via the create-coin flow. The
+    // mint credits `owner = Poseidon(creator_pubkey)`; the create-coin helper
+    // derives that owner via the SAME `@zkcoins/wasm` path the app uses, so
+    // `mintedAddress` is the address the node credits AND the address the live
+    // wallet polls. It must equal `alice.address` (read off the wallet UI
+    // chip) — assert that so a future address-derivation drift fails loud here
+    // rather than silently regenerating empty portfolio baselines.
+    let mintedAddress = '';
     for (let i = 0; i < FAUCET_CALLS; i++) {
-      await createCoinWithRetry(alice.mnemonic.join(' '));
+      mintedAddress = await createCoinWithRetry(alice.mnemonic.join(' '));
     }
-    const seededBalance = await pollPortfolioFunded(alice.address);
+    if (mintedAddress && alice.address && mintedAddress !== alice.address) {
+      throw new Error(
+        `globalSetup: wasm-derived mint owner (${mintedAddress}) != wallet UI address ` +
+          `(${alice.address}). The app and the e2e helper derive the wallet address ` +
+          `differently — the portfolio screen would never show the minted asset.`,
+      );
+    }
+    const seededBalance = await pollPortfolioFunded(mintedAddress || alice.address);
 
     // Bob: fresh wallet, NO seeding.
     const bobCtx = await browser.newContext({ baseURL });

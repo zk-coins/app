@@ -272,7 +272,7 @@ function AssetList({ assets, unknownName }: { assets: AssetBalance[]; unknownNam
                 </p>
                 <p
                   data-testid="asset-row-id"
-                  className="mono text-[11px] text-ink4"
+                  className="mono text-[11px] text-ink3"
                   title={asset.asset_id}
                 >
                   {shortAssetId(asset.asset_id)}
