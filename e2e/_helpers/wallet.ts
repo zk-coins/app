@@ -219,18 +219,15 @@ export async function waitForNetworkInfo(page: Page, timeout = 30_000): Promise<
 }
 
 /**
- * Block until WalletScreen's first `/api/balance` tick has resolved.
- * Polls the `data-loading` marker on `balance-amount-usd`, which is
- * `true` while `balance === null` (post-mount loading) and absent once
- * the first tick lands — regardless of the value (zero or funded).
- *
- * Use this in test setup instead of `wallet-empty-banner` visibility:
- * the banner only renders for `balance === 0` and is genuinely absent
- * when the wallet is funded, so banner-absence is not a reliable
- * "loaded" signal. The `data-loading` attribute is.
+ * Block until WalletScreen's first `/api/balance/:address` portfolio tick
+ * has resolved. Under the neutral multi-asset model the home screen renders
+ * the owner's asset list once the portfolio loads: a funded wallet shows
+ * `asset-list`, an empty one shows `wallet-empty-banner`. Either is the
+ * settled "loaded" signal (mirrors the prior `data-loading` marker on the
+ * single-balance hero, which the multi-asset redesign removed).
  */
 export async function waitForBalanceLoaded(page: Page, timeout = 60_000): Promise<void> {
-  await expect(page.getByTestId('balance-amount-usd')).not.toHaveAttribute('data-loading', 'true', {
-    timeout,
-  });
+  await expect(
+    page.getByTestId('asset-list').or(page.getByTestId('wallet-empty-banner')),
+  ).toBeVisible({ timeout });
 }

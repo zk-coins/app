@@ -70,6 +70,30 @@ export function formatRelative(ts: number): string {
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
+/**
+ * Format a raw integer asset amount (atomic units) using the asset's
+ * `decimals`. Neutral multi-asset: there is no BTC/sats assumption — an
+ * asset minted with `decimals: 0` renders as a plain integer, one with
+ * `decimals: 8` like BTC. A missing `decimals` (received-only asset whose
+ * genesis metadata the node never saw) falls back to `0` so the raw
+ * integer is shown rather than a guessed scaling.
+ */
+export function formatAssetAmount(amount: number, decimals: number | undefined): string {
+  const d = decimals ?? 0;
+  if (d <= 0) return amount.toLocaleString('en-US');
+  return (amount / 10 ** d).toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: d,
+  });
+}
+
+/** Short form of a 32-byte hex asset id — the trust anchor shown next to
+ *  the (spoofable) human name. e.g. `ab12cd34…ef56`. */
+export function shortAssetId(assetId: string): string {
+  if (assetId.length <= 12) return assetId;
+  return `${assetId.slice(0, 8)}…${assetId.slice(-4)}`;
+}
+
 export function formatTimeOnly(ts: number): string {
   const d = new Date(ts);
   const hh = String(d.getHours()).padStart(2, '0');

@@ -1,31 +1,24 @@
 /**
- * Balance-polling effect in `src/components/screens/WalletScreen.tsx`.
+ * Portfolio-polling + create-coin entry in
+ * `src/components/screens/WalletScreen.tsx`.
  *
- * The component fires `api.balance(address)` on mount and every 5 s
- * thereafter; the result lands in the wallet store. The polling effect
- * is the only background work in the wallet UI, and it never had a
- * unit test before — the existing e2e screenshots only assert the
- * post-poll balance shape, not the timing semantics, the cleanup
- * behaviour, or the account-swap path.
- *
- * Tests in this file:
- *   - mount → balance set
- *   - 5 s interval → next balance set
- *   - account swap → new interval keyed to the new address
- *   - unmount → no further ticks
- *   - silent error → balance unchanged, no rethrow
- *   - username assignment (first-only — server is the source of truth)
- *
- * The component also calls `api.info` on mount; that is mocked to
- * resolve once so it doesn't intercept the balance assertions.
+ * Under the neutral multi-asset model the home screen renders the owner's
+ * asset list from `GET /api/balance/:address` (via `usePortfolio`) rather
+ * than a single BTC balance. These tests cover:
+ *   - mount → portfolio fetched + asset list rendered
+ *   - empty portfolio → empty banner
+ *   - account swap → re-fetch keyed to the new address
+ *   - /api/info network + username_domain pinned on mount
+ *   - the create-coin entry replaces the old faucet
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, waitFor } from '@testing-library/react';
+import { act, waitFor } from '@testing-library/react';
+import { render } from '@/__tests__/_helpers/intl';
 import { WalletScreen } from '@/components/screens/WalletScreen';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { api } from '@/lib/api/client';
+import { api, type OwnerBalanceResponse } from '@/lib/api/client';
 
 const FEATURES_STATE = vi.hoisted(() => ({
   APPS_DIRECTORY: false,
@@ -37,46 +30,31 @@ const FEATURES_STATE = vi.hoisted(() => ({
   USERNAME_CLAIM: false,
 }));
 
-// `FEATURES` exposes build-time client flags only; runtime opt-in
-// capabilities (`USERNAME_CLAIM`, …) are served by `useFeatures()`.
-// The holder backs both so tests can keep flipping a single object.
 vi.mock('@/lib/features', () => ({
   FEATURES: FEATURES_STATE,
   useFeatures: () => FEATURES_STATE,
 }));
 
-const ALICE = {
-  address: 'a'.repeat(64),
-  numPubkeys: 0,
-  xpriv: 'xprv-alice',
-};
-const BOB = {
-  address: 'b'.repeat(64),
-  numPubkeys: 0,
-  xpriv: 'xprv-bob',
-};
+const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const BOB = { address: 'b'.repeat(64), numPubkeys: 0, xpriv: 'xprv-bob' };
 
-let balanceSpy: ReturnType<typeof vi.spyOn>;
+const ASSET_ID = 'c'.repeat(64);
+
+function portfolio(overrides: Partial<OwnerBalanceResponse> = {}): OwnerBalanceResponse {
+  return {
+    address: ALICE.address,
+    assets: [{ asset_id: ASSET_ID, name: 'MyCoin', decimals: 2, balance: 12_345, num_sends: 0 }],
+    ...overrides,
+  };
+}
+
+let ownerSpy: ReturnType<typeof vi.spyOn>;
 let infoSpy: ReturnType<typeof vi.spyOn>;
 let historySpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  Object.assign(FEATURES_STATE, {
-    APPS_DIRECTORY: false,
-    PASSKEY: false,
-    DEV_ROUTES: false,
-    AUTO_LOCK: false,
-    ADDRESS_ROTATION: false,
-    TOR_ROUTING: false,
-    USERNAME_CLAIM: false,
-  });
-  useNetworkStore.setState({
-    apiUrl: 'https://test.api',
-    networkName: '',
-    bitcoinNetwork: '',
-    setNetworkName: useNetworkStore.getState().setNetworkName,
-    setBitcoinNetwork: useNetworkStore.getState().setBitcoinNetwork,
-  });
+  Object.assign(FEATURES_STATE, { USERNAME_CLAIM: false });
+  useNetworkStore.setState({ apiUrl: 'https://test.api', networkName: '', bitcoinNetwork: '' });
   useWalletStore.setState({
     account: ALICE,
     balance: null,
@@ -87,16 +65,10 @@ beforeEach(() => {
     storedAuthMethod: null,
     error: null,
   });
-  // `api.info` is called on mount — return a benign value so it doesn't
-  // race the balance assertions. `mockResolvedValue` (not Once) covers any
-  // number of mounts/unmounts in a single test.
   infoSpy = vi
     .spyOn(api, 'info')
-    .mockResolvedValue({ network: 'signet', username_domain: 'zkcoins.app' });
-  balanceSpy = vi.spyOn(api, 'balance');
-  // WalletScreen's useHistory hook polls api.getHistory on the same cadence;
-  // stub it to an empty page so these balance-focused tests don't hit the
-  // network. History rendering is covered in WalletScreen.history.test.tsx.
+    .mockResolvedValue({ network: 'Mutinynet', username_domain: 'local.zkcoins.test' });
+  ownerSpy = vi.spyOn(api, 'ownerBalances');
   historySpy = vi
     .spyOn(api, 'getHistory')
     .mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
@@ -104,232 +76,94 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers();
-  balanceSpy.mockRestore();
+  ownerSpy.mockRestore();
   infoSpy.mockRestore();
   historySpy.mockRestore();
 });
 
-describe('WalletScreen — balance polling', () => {
-  it('fetches the balance on mount and writes it to the store', async () => {
-    balanceSpy.mockResolvedValue({ balance: 12_345, num_sends: 0 });
+describe('WalletScreen — portfolio', () => {
+  it('fetches the portfolio on mount and renders the asset list', async () => {
+    ownerSpy.mockResolvedValue(portfolio());
 
-    render(<WalletScreen />);
+    const { findByTestId, getAllByTestId } = render(<WalletScreen />);
 
-    await waitFor(() => {
-      expect(useWalletStore.getState().balance).toBe(12_345);
-    });
-    expect(balanceSpy).toHaveBeenCalledWith(ALICE.address);
+    expect(await findByTestId('asset-list')).toBeTruthy();
+    expect(getAllByTestId('asset-row').length).toBe(1);
+    expect(ownerSpy).toHaveBeenCalledWith(ALICE.address);
   });
 
-  it('fires the next tick exactly 5 s after the previous one', async () => {
-    balanceSpy
-      .mockResolvedValueOnce({ balance: 100, num_sends: 0 })
-      .mockResolvedValueOnce({ balance: 200, num_sends: 0 })
-      .mockResolvedValueOnce({ balance: 300, num_sends: 0 });
+  it('renders the empty banner when the owner holds no assets', async () => {
+    ownerSpy.mockResolvedValue(portfolio({ assets: [] }));
+
+    const { findByTestId, queryByTestId } = render(<WalletScreen />);
+    expect(await findByTestId('wallet-empty-banner')).toBeTruthy();
+    expect(queryByTestId('asset-list')).toBeNull();
+  });
+
+  it('re-fetches against the new address when the account changes', async () => {
+    ownerSpy.mockResolvedValue(portfolio({ assets: [] }));
 
     vi.useFakeTimers();
     render(<WalletScreen />);
-
-    // First tick — fires immediately on mount.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(useWalletStore.getState().balance).toBe(100);
+    expect(ownerSpy).toHaveBeenLastCalledWith(ALICE.address);
 
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
+    act(() => {
+      useWalletStore.setState({ account: BOB });
     });
-    expect(useWalletStore.getState().balance).toBe(200);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
-    });
-    expect(useWalletStore.getState().balance).toBe(300);
-    expect(balanceSpy).toHaveBeenCalledTimes(3);
-  });
-
-  it('does not fire any tick after the component unmounts', async () => {
-    balanceSpy.mockResolvedValue({ balance: 100, num_sends: 0 });
-
-    vi.useFakeTimers();
-    const { unmount } = render(<WalletScreen />);
-
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
-    expect(balanceSpy).toHaveBeenCalledTimes(1);
-
-    unmount();
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000);
-    });
-    // No further calls even after a full minute of idle wall time.
-    expect(balanceSpy).toHaveBeenCalledTimes(1);
+    expect(ownerSpy).toHaveBeenLastCalledWith(BOB.address);
   });
 
-  it('does not poll when the store has no account', async () => {
+  it('does not fetch when there is no account', async () => {
     useWalletStore.setState({ account: null });
-    balanceSpy.mockResolvedValue({ balance: 0, num_sends: 0 });
+    ownerSpy.mockResolvedValue(portfolio({ assets: [] }));
 
     vi.useFakeTimers();
     render(<WalletScreen />);
     await act(async () => {
       await vi.advanceTimersByTimeAsync(15_000);
     });
-    expect(balanceSpy).not.toHaveBeenCalled();
+    expect(ownerSpy).not.toHaveBeenCalled();
   });
 
-  it('restarts polling against the new address when the account changes', async () => {
-    balanceSpy.mockResolvedValue({ balance: 0, num_sends: 0 });
-
-    vi.useFakeTimers();
-    render(<WalletScreen />);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    expect(balanceSpy).toHaveBeenLastCalledWith(ALICE.address);
-
-    act(() => {
-      useWalletStore.setState({ account: BOB });
-    });
-    // Account-swap effect re-runs synchronously; the mount tick of the
-    // new effect fires before any interval advance.
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    expect(balanceSpy).toHaveBeenLastCalledWith(BOB.address);
+  it('renders the asset row from the first successful poll', async () => {
+    // Per-poll error resilience (last-good-list retention) is covered in
+    // usePortfolio.test.tsx; here we just assert the screen renders the
+    // first successful portfolio.
+    ownerSpy.mockResolvedValue(portfolio());
+    const { findByTestId, getAllByTestId } = render(<WalletScreen />);
+    await findByTestId('asset-list');
+    expect(getAllByTestId('asset-row').length).toBe(1);
   });
 
-  it('swallows a thrown balance error and leaves the store balance untouched', async () => {
-    useWalletStore.setState({ balance: 999 });
-    balanceSpy.mockRejectedValue(new Error('boom'));
-
-    render(<WalletScreen />);
-    await waitFor(() => {
-      expect(balanceSpy).toHaveBeenCalled();
-    });
-    // Balance was not flipped to null by the failed fetch.
-    expect(useWalletStore.getState().balance).toBe(999);
-  });
-
-  it('sets username on first response when account has no username yet', async () => {
-    balanceSpy.mockResolvedValue({ balance: 1, username: 'alice', num_sends: 0 });
-
-    render(<WalletScreen />);
-    await waitFor(() => {
-      expect(useWalletStore.getState().account?.username).toBe('alice');
-    });
-  });
-
-  it('leaves the local username unset when the server response omits one', async () => {
-    balanceSpy.mockResolvedValue({ balance: 1, num_sends: 0 });
-
-    render(<WalletScreen />);
-    await waitFor(() => {
-      expect(useWalletStore.getState().balance).toBe(1);
-    });
-    expect(useWalletStore.getState().account?.username).toBeUndefined();
-  });
-
-  it('does not overwrite an existing username on later ticks', async () => {
-    useWalletStore.setState({ account: { ...ALICE, username: 'pinned' } });
-    balanceSpy.mockResolvedValue({ balance: 1, username: 'different', num_sends: 0 });
-
-    vi.useFakeTimers();
-    render(<WalletScreen />);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    expect(useWalletStore.getState().account?.username).toBe('pinned');
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
-    });
-    expect(useWalletStore.getState().account?.username).toBe('pinned');
-  });
-
-  it('writes networkName, bitcoin_network and username_domain from /api/info on mount', async () => {
+  it('writes network + username_domain from /api/info on mount', async () => {
+    ownerSpy.mockResolvedValue(portfolio({ assets: [] }));
     infoSpy.mockResolvedValue({
-      network: 'Mainnet',
-      bitcoin_network: 'mainnet',
-      username_domain: 'zkcoins.app',
+      network: 'Mutinynet',
+      bitcoin_network: 'mutinynet',
+      username_domain: 'local.zkcoins.test',
     });
-    balanceSpy.mockResolvedValue({ balance: 0, num_sends: 0 });
-
-    render(<WalletScreen />);
-    await waitFor(() => {
-      expect(useNetworkStore.getState().networkName).toBe('Mainnet');
-      expect(useNetworkStore.getState().bitcoinNetwork).toBe('mainnet');
-      expect(useNetworkStore.getState().usernameDomain).toBe('zkcoins.app');
-    });
-    expect(infoSpy).toHaveBeenCalledTimes(1);
-  });
-
-  it('leaves bitcoinNetwork empty when a pre-#193 node omits the field', async () => {
-    infoSpy.mockResolvedValue({ network: 'Mutinynet', username_domain: 'dev.zkcoins.app' });
-    balanceSpy.mockResolvedValue({ balance: 0, num_sends: 0 });
 
     render(<WalletScreen />);
     await waitFor(() => {
       expect(useNetworkStore.getState().networkName).toBe('Mutinynet');
+      expect(useNetworkStore.getState().bitcoinNetwork).toBe('mutinynet');
+      expect(useNetworkStore.getState().usernameDomain).toBe('local.zkcoins.test');
     });
-    expect(useNetworkStore.getState().bitcoinNetwork).toBe('');
   });
 });
 
-describe('WalletScreen — faucet button gating', () => {
-  it('hides the faucet button when the node reports bitcoin_network "mainnet"', async () => {
-    // Branch on the normalised enum (zk-coins/node#193): a lower-case
-    // closed set with no casing ambiguity, so the faucet is reliably
-    // suppressed on mainnet.
-    infoSpy.mockResolvedValue({ network: 'Mainnet', bitcoin_network: 'mainnet' });
-    balanceSpy.mockResolvedValue({ balance: 0 });
-
-    const { queryByTestId } = render(<WalletScreen />);
-    await waitFor(() => {
-      expect(useNetworkStore.getState().bitcoinNetwork).toBe('mainnet');
-    });
-    await waitFor(() => {
-      expect(useWalletStore.getState().balance).toBe(0);
-    });
+describe('WalletScreen — create-coin entry', () => {
+  it('renders the create-coin button (replacing the faucet)', async () => {
+    ownerSpy.mockResolvedValue(portfolio({ assets: [] }));
+    const { findByTestId, queryByTestId } = render(<WalletScreen />);
+    expect(await findByTestId('create-coin-btn')).toBeTruthy();
+    // The old faucet button is gone.
     expect(queryByTestId('faucet-btn')).toBeNull();
-  });
-
-  it('hides the faucet on a pre-#193 mainnet node via the free-text fallback (CamelCase)', async () => {
-    // Pre-#193 nodes ship only the display string `"Mainnet"` (capital
-    // M). The previous `network !== 'mainnet'` guard collapsed on this
-    // casing and rendered the faucet on PRD; the lower-cased fallback
-    // keeps it hidden until the typed field is everywhere.
-    infoSpy.mockResolvedValue({ network: 'Mainnet' });
-    balanceSpy.mockResolvedValue({ balance: 0 });
-
-    const { queryByTestId } = render(<WalletScreen />);
-    await waitFor(() => {
-      expect(useNetworkStore.getState().networkName).toBe('Mainnet');
-    });
-    await waitFor(() => {
-      expect(useWalletStore.getState().balance).toBe(0);
-    });
-    expect(queryByTestId('faucet-btn')).toBeNull();
-  });
-
-  it('renders the faucet button when the node reports bitcoin_network "mutinynet"', async () => {
-    infoSpy.mockResolvedValue({ network: 'Mutinynet', bitcoin_network: 'mutinynet' });
-    balanceSpy.mockResolvedValue({ balance: 0 });
-
-    const { findByTestId } = render(<WalletScreen />);
-    expect(await findByTestId('faucet-btn')).toBeTruthy();
-  });
-
-  it('renders the faucet button on a pre-#193 testnet node (only free-text network)', async () => {
-    // DEV runs this path today: `/api/info` ships `network: "Mutinynet"`
-    // without the typed enum. The faucet must still appear so the
-    // empty-wallet CTA (e2e 06-balance) keeps working.
-    infoSpy.mockResolvedValue({ network: 'Mutinynet' });
-    balanceSpy.mockResolvedValue({ balance: 0 });
-
-    const { findByTestId } = render(<WalletScreen />);
-    expect(await findByTestId('faucet-btn')).toBeTruthy();
   });
 });

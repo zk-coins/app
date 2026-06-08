@@ -1,40 +1,49 @@
 /**
- * App-side API adapter over `@zkcoins/sdk`.
+ * App-side API adapter — neutral multi-asset model.
  *
- * The app no longer speaks HTTP directly: every `/api/*` round-trip goes
- * through the SDK's `ZkCoinsClient`. This module is a thin adapter that
+ * The installed `@zkcoins/sdk` (0.4.0, pinned in `package.json`) predates
+ * the node's neutral multi-asset migration: its `ZkCoinsClient.balance`
+ * is single-arg, it has no `ownerBalances`, no `buildMintMessage`, and its
+ * `MintRequest` is the old faucet shape. Until a multi-asset SDK ships we
+ * implement the multi-asset wire bits HERE, in the app's own api layer,
+ * mirroring the canonical SDK source layout exactly:
  *
- *   1. instantiates a `ZkCoinsClient` pointed at the app-configured
- *      `apiUrl` (from `useNetworkStore`), and
- *   2. composes the SDK's REST primitives with the app's WASM crypto for
- *      the two local-signing steps (send + username claim).
+ *   - `buildMintMessage` — byte-for-byte copy of the SDK's
+ *     `messages.ts::buildMintMessage` (verified against the node's
+ *     `verify_mint_signature_pub`): raw 33-byte creator pubkey ‖ name
+ *     UTF-8 ‖ decimals[1] ‖ amount_le8 ‖ timestamp_le8.
+ *   - per-asset `balance(address, asset_id)` and the portfolio
+ *     `ownerBalances(address)` — mirror `client.ts::{balance,ownerBalances}`.
+ *   - two-phase creator-signed `createCoin` (mint) — mirror
+ *     `account.ts::mint`.
+ *   - `send` carries the (required) `asset_id` — mirror `account.ts::pay`.
  *
- * ## Crypto choice — WASM stays, REST moves to the SDK
+ * The wire-compatible endpoints (info, history, getTransaction,
+ * claim/resolve username, the Jobs-API send/commit/poll primitives) still
+ * route through the SDK's `ZkCoinsClient`, and the SDK error classes
+ * (`ApiError`, `JobFailedError`) + `newIdempotencyKey` are re-exported so
+ * `userMessageFor` and the `instanceof` checks at the call sites are
+ * unchanged.
  *
- * The SDK ships pure-TS (@noble) crypto that is byte-equivalent to the
- * Rust WASM module (asserted by the SDK's `test/cross-rust` suite). The
- * app keeps using its existing `@zkcoins/wasm` for the local signing
- * steps — account creation, Schnorr signing, BIP-32 derivation, and the
- * commitment build — because that is the code path the browser bundle
- * and the Playwright E2E suite already exercise end-to-end against a
- * real node. Moving only the REST layer onto the SDK is the
- * minimal-invasive change that satisfies "no direct API calls" while
- * keeping the send/commit correctness guarantees (Schnorr determinism,
- * message-byte layout, the index the send was signed at) untouched.
+ * ## Crypto path — reuse the existing WASM signer
  *
- * The message-byte layout for the signed requests comes from the SDK's
- * `buildSendMessage` / `buildClaimMessage` — the canonical mirror of the
- * node's construction — so even the pre-hash bytes are sourced from the
- * SDK rather than re-implemented here.
+ * Every local-signing step (BIP-32 derivation, SHA-256, Schnorr signing,
+ * the commitment build) uses the app's existing `@zkcoins/wasm` module —
+ * the same code path the browser bundle and the Playwright E2E suite
+ * already exercise end-to-end against a real node. No second crypto stack
+ * is introduced. Only the message-byte layout is sourced from the SDK
+ * mirror (`buildSendMessage` / `buildClaimMessage` / the local
+ * `buildMintMessage`), so the pre-hash bytes match the node.
  *
  * ## No-fallback contract
  *
  * `extractCommitInputs` hard-fails if the `awaiting_signature` job does
- * not surface `account_state_hash` / `output_coins_root` as JSON (node
- * #195) — the wallet never fabricates a commitment and never decodes the
- * binary CoinProof. `waitForJob` (in the SDK) throws on a terminal
+ * not surface `account_state_hash` / `output_coins_root` as JSON — the
+ * wallet never fabricates a commitment. `waitForJob` throws on a terminal
  * `failed` / `cancelled` rather than returning a non-completed status.
  */
+
+import { z } from 'zod';
 
 import {
   ZkCoinsClient,
@@ -43,21 +52,17 @@ import {
   buildClaimMessage,
   ApiError,
   JobFailedError,
-  // History wire schemas (issue #145). Imported here so the app can
-  // re-export them under the issue's names — the SDK is the single source
-  // of truth for the `/api/history` contract (see the re-export note
-  // below); the app does not re-declare it.
   TxItemSchema,
   HistoryResponseSchema,
   JobErrorResponseSchema,
+  JobAcceptedSchema,
+  JobStatusSchema,
   type JobStatus,
   type JobAccepted,
-  type BalanceResponse,
   type InfoResponse,
   type UsernameResponse,
   type ResolveUsernameResponse,
   type ClaimUsernameResponse,
-  type SignedSendRequest,
   type CommitRequest,
   type HistoryResponse,
   type TxItem,
@@ -69,18 +74,8 @@ import { useNetworkStore } from '@/stores/network';
 import { initWasm } from '@zkcoins/wasm';
 
 // Re-export the SDK error classes + the wire types under the names the
-// app's call-sites and tests already import. `ApiError` / `JobFailedError`
-// keep flowing through `userMessageFor` (see `./errorMessages.ts`) and the
-// `instanceof` checks in the send page / wallet screen unchanged.
+// app's call-sites and tests already import.
 export { ApiError, JobFailedError, newIdempotencyKey };
-// Issue #145 history schemas, re-exported under the names the issue
-// specifies. The `@zkcoins/sdk` migration moved wire-schema ownership into
-// the SDK and deleted the app's old `src/lib/api/schemas.ts` (see the
-// coverage note in `vitest.config.ts`), so re-creating that module would
-// reverse a deliberate architectural decision. Instead the app surfaces the
-// SDK's canonical, cross-rust-verified schemas — `TxItem` is the SDK's name
-// for one `HistoryItem` row, `JobErrorResponse` is the shared flat
-// `{ error: string }` envelope used by the 422/500 branches.
 export {
   TxItemSchema as HistoryItemSchema,
   HistoryResponseSchema,
@@ -89,7 +84,6 @@ export {
 export type {
   JobStatus,
   JobAccepted,
-  BalanceResponse,
   InfoResponse,
   UsernameResponse,
   ResolveUsernameResponse,
@@ -100,16 +94,55 @@ export type {
   JobErrorResponse as HistoryErrorResponse,
 };
 
+// ---------------------------------------------------------------------------
+// Multi-asset wire schemas (mirrored from the SDK's `schemas.ts`).
+//
+// The installed SDK still ships the single-asset `BalanceResponseSchema`,
+// so the per-asset shapes live here until a multi-asset SDK lands. Strip
+// mode (the Zod default) keeps forward-compat with new server fields.
+// ---------------------------------------------------------------------------
+
+/** `GET /api/balance?address=&asset_id=` — per-`(owner, asset)` balance. */
+export const BalanceResponseSchema = z.object({
+  balance: z.number(),
+  username: z.string().optional(),
+  num_sends: z.number(),
+});
+export type BalanceResponse = z.infer<typeof BalanceResponseSchema>;
+
+/** One asset entry of the portfolio. `asset_id` is the trust anchor and
+ *  is always present; `name` / `decimals` are display metadata that are
+ *  elided for received-only assets. */
+export const AssetBalanceSchema = z.object({
+  asset_id: z.string(),
+  name: z.string().optional(),
+  decimals: z.number().optional(),
+  balance: z.number(),
+  num_sends: z.number(),
+});
+export type AssetBalance = z.infer<typeof AssetBalanceSchema>;
+
+/** `GET /api/balance/:address` — the cross-asset portfolio. An
+ *  unobserved address returns `assets: []` (canonical, not a 404). */
+export const OwnerBalanceResponseSchema = z.object({
+  address: z.string(),
+  username: z.string().optional(),
+  assets: z.array(AssetBalanceSchema),
+});
+export type OwnerBalanceResponse = z.infer<typeof OwnerBalanceResponseSchema>;
+
 /**
  * Build a `ZkCoinsClient` pointed at the currently-configured node URL.
- *
- * The app lets the user switch nodes at runtime (the thin-client escape
- * hatch — see `CONTRIBUTING.md`), so the URL is read from the store on
- * every call rather than captured once. Constructing a client is cheap
- * (no network, no state) so this is not a hot-path concern.
+ * The URL is read from the store on every call so a runtime node switch
+ * is honoured.
  */
 function client(): ZkCoinsClient {
   return new ZkCoinsClient({ apiUrl: useNetworkStore.getState().apiUrl });
+}
+
+/** The base URL the app currently talks to. */
+function apiUrl(): string {
+  return useNetworkStore.getState().apiUrl.replace(/\/+$/, '');
 }
 
 const TERMINAL_STATUSES: ReadonlySet<JobStatus['status']> = new Set([
@@ -118,20 +151,128 @@ const TERMINAL_STATUSES: ReadonlySet<JobStatus['status']> = new Set([
   'cancelled',
 ]);
 
-/** Inputs to a mint job. */
-export interface MintRequest {
-  account_address: string;
+// ---------------------------------------------------------------------------
+// Mint-message byte layout (byte-for-byte copy of the SDK `buildMintMessage`).
+// ---------------------------------------------------------------------------
+
+/** Inputs to a creator-signed mint signature. */
+export interface MintMessageParams {
+  /** Compressed secp256k1 creator pubkey — 33 bytes hex (66 chars). */
+  creatorPubkey: string;
+  /** Raw asset name (UTF-8); folded into the asset_id by the node. */
+  name: string;
+  /** Asset decimals — a single byte (`u8`). */
+  decimals: number;
+  /** Amount to mint into the creator's own balance, atomic units. */
   amount: number;
+  /** Unix timestamp in seconds. */
+  timestamp: number;
 }
 
-/** Inputs to a send job, before signing. */
-export interface SendRequest {
+/** Hex string → bytes (mirror of `@noble/hashes` `hexToBytes`, kept local
+ *  so the message layout has no run-time dependency surprise). */
+function hexToBytes(hex: string): Uint8Array {
+  if (hex.length % 2 !== 0) {
+    throw new Error(`hexToBytes: odd-length hex string (${hex.length})`);
+  }
+  const out = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < out.length; i++) {
+    const byte = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+    if (Number.isNaN(byte)) {
+      throw new Error(`hexToBytes: invalid hex at byte ${i}`);
+    }
+    out[i] = byte;
+  }
+  return out;
+}
+
+/** Encode a non-negative integer as 8 bytes little-endian. */
+function uint64LE(value: number): Uint8Array {
+  const big = BigInt(value);
+  if (big < 0n || big > 0xffff_ffff_ffff_ffffn) {
+    throw new RangeError(`uint64LE: value ${big} is out of u64 range`);
+  }
+  const out = new Uint8Array(8);
+  new DataView(out.buffer).setBigUint64(0, big, true);
+  return out;
+}
+
+/**
+ * Concatenate the creator-signed mint-message bytes:
+ *
+ * ```text
+ * SHA256( creator_pubkey[33] ‖ name_utf8 ‖ decimals[1] ‖ amount_le[8] ‖ timestamp_le[8] )
+ * ```
+ *
+ * Byte-for-byte mirror of the SDK's `messages.ts::buildMintMessage` and
+ * the node's `verify_mint_signature_pub`. Note the asymmetry with the
+ * send layout (which UTF-8-encodes the hex *string* of each address): the
+ * mint layout commits to the **raw** pubkey/name bytes. Does NOT hash —
+ * the caller hashes + Schnorr-signs the digest with the creator key.
+ */
+export function buildMintMessage(params: MintMessageParams): Uint8Array {
+  const creatorBytes = hexToBytes(params.creatorPubkey);
+  if (creatorBytes.length !== 33) {
+    throw new Error(
+      `buildMintMessage: creatorPubkey must be a 33-byte compressed pubkey (66 hex chars), got ${creatorBytes.length} bytes`,
+    );
+  }
+  if (!Number.isInteger(params.decimals) || params.decimals < 0 || params.decimals > 255) {
+    throw new RangeError(
+      `buildMintMessage: decimals must be a single byte (integer 0–255), got ${params.decimals}`,
+    );
+  }
+  const nameBytes = new TextEncoder().encode(params.name);
+  const decimalsBytes = Uint8Array.of(params.decimals);
+  const amountBytes = uint64LE(params.amount);
+  const timestampBytes = uint64LE(params.timestamp);
+
+  const out = new Uint8Array(
+    creatorBytes.length +
+      nameBytes.length +
+      decimalsBytes.length +
+      amountBytes.length +
+      timestampBytes.length,
+  );
+  let offset = 0;
+  out.set(creatorBytes, offset);
+  offset += creatorBytes.length;
+  out.set(nameBytes, offset);
+  offset += nameBytes.length;
+  out.set(decimalsBytes, offset);
+  offset += decimalsBytes.length;
+  out.set(amountBytes, offset);
+  offset += amountBytes.length;
+  out.set(timestampBytes, offset);
+  return out;
+}
+
+// ---------------------------------------------------------------------------
+// Wire requests.
+// ---------------------------------------------------------------------------
+
+/** Inputs to a creator-signed mint job (`POST /api/jobs/mint`). */
+export interface MintRequest {
+  creator_pubkey: string;
+  name: string;
+  decimals: number;
+  amount: number;
+  next_public_key: string;
+  signature: string;
+  timestamp: number;
+}
+
+/** Inputs to a signed send request (`POST /api/jobs/send`). */
+export interface SignedSendRequest {
   account_address: string;
   recipient: string;
   amount: number;
+  asset_id: string;
   public_key: string;
   next_public_key: string;
   prev_commitment_pubkey?: string;
+  signature: string;
+  timestamp: number;
 }
 
 /** Inputs to a username claim (xpriv signs locally; never leaves the device). */
@@ -141,45 +282,34 @@ export interface ClaimUsernameParams {
   xpriv: string;
 }
 
+/** Parameters for the high-level create-coin / mint helper. */
+export interface CreateCoinParams {
+  account_address: string;
+  name: string;
+  decimals: number;
+  amount: number;
+  xpriv: string;
+}
+
+/** Parameters for the high-level send helper. */
+export interface SendParams {
+  account_address: string;
+  recipient: string;
+  amount: number;
+  asset_id: string;
+  xpriv: string;
+}
+
 /**
  * SHA-256 a message and return the hex digest, using the same WebCrypto
  * path the WASM signer expects as input.
  */
 async function sha256Hex(message: Uint8Array): Promise<string> {
-  // Copy into a fresh, ArrayBuffer-backed view so the WebCrypto
-  // `BufferSource` typing is satisfied (the SDK's message builders
-  // return a generic `Uint8Array<ArrayBufferLike>`).
   const bytes = new Uint8Array(message);
   const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
   return Array.from(new Uint8Array(hashBuffer))
     .map((b) => b.toString(16).padStart(2, '0'))
     .join('');
-}
-
-/**
- * Sign a send request with Schnorr (WASM) over the SDK-built message.
- * Message layout = `buildSendMessage` (SDK), hashed with SHA-256, signed
- * at the BIP-32 child index `numPubkeys`.
- */
-async function signSendRequest(
-  data: SendRequest,
-  xpriv: string,
-  numPubkeys: number,
-): Promise<SignedSendRequest> {
-  const timestamp = Math.floor(Date.now() / 1000);
-  const message = buildSendMessage({
-    accountAddress: data.account_address,
-    recipient: data.recipient,
-    amount: data.amount,
-    timestamp,
-  });
-  const hashHex = await sha256Hex(message);
-
-  const wasm = await initWasm();
-  const signingKey = wasm.deriveSigningKey(xpriv, numPubkeys);
-  const signature = wasm.signSchnorr(signingKey, hashHex);
-
-  return { ...data, signature, timestamp };
 }
 
 /**
@@ -208,13 +338,8 @@ async function signClaimRequest(
 
 /**
  * Pull `account_state_hash` + `output_coins_root` off an
- * `awaiting_signature` send job so the wallet can sign the commitment.
- *
- * The node surfaces these on the job's `result` once it carries them
- * (node #195). If they are absent the commit cannot be built, and we
- * fail hard (no fabricated commitment): the only correct recovery is the
- * node populating them. The wallet deliberately does NOT decode the
- * binary CoinProof at `GET /api/proof/:id` — that is not a pure-TS path.
+ * `awaiting_signature` job so the wallet can sign the commitment. Hard-
+ * fails (no fabricated commitment) when absent.
  */
 function extractCommitInputs(
   job: JobStatus,
@@ -233,29 +358,74 @@ function extractCommitInputs(
   );
 }
 
+/**
+ * POST a JSON body to the node and parse the 2xx response against
+ * `schema`, mapping a non-2xx onto `ApiError`. Used for the multi-asset
+ * endpoints the installed SDK does not yet speak. Mirrors the SDK's
+ * `request` error contract (`ApiError(status, serverError, rawBody)`).
+ */
+async function postJson<T>(
+  path: string,
+  body: unknown,
+  schema: z.ZodType<T>,
+  headers: Record<string, string> = {},
+): Promise<T> {
+  const res = await fetch(`${apiUrl()}${path}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', ...headers },
+    body: JSON.stringify(body),
+  });
+  const rawText = await res.text();
+  if (!res.ok) {
+    throw new ApiError(res.status, extractServerError(rawText), rawText);
+  }
+  return schema.parse(JSON.parse(rawText));
+}
+
+/** GET a JSON resource and parse it against `schema`. */
+async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
+  const res = await fetch(`${apiUrl()}${path}`, {
+    method: 'GET',
+    headers: { 'Content-Type': 'application/json' },
+  });
+  const rawText = await res.text();
+  if (!res.ok) {
+    throw new ApiError(res.status, extractServerError(rawText), rawText);
+  }
+  return schema.parse(JSON.parse(rawText));
+}
+
+/** Pull the human-facing error string out of a failure body. */
+function extractServerError(rawBody: string): string {
+  try {
+    const parsed: unknown = JSON.parse(rawBody);
+    if (
+      typeof parsed === 'object' &&
+      parsed !== null &&
+      'error' in parsed &&
+      typeof (parsed as { error: unknown }).error === 'string'
+    ) {
+      return (parsed as { error: string }).error;
+    }
+  } catch {
+    // Body wasn't JSON — keep the raw text as the error message.
+  }
+  return rawBody;
+}
+
 export const api = {
-  // Low-level Jobs-API primitives — exposed for the E2E harness and
-  // advanced callers. The high-level `mint` / `send` below compose them.
   newIdempotencyKey,
 
-  mintJob: (req: MintRequest, idempotencyKey: string): Promise<JobAccepted> =>
-    client().mintJob(req, idempotencyKey),
-
   sendJob: (req: SignedSendRequest, idempotencyKey: string): Promise<JobAccepted> =>
-    client().sendJob(req, idempotencyKey),
+    postJson('/api/jobs/send', req, JobAcceptedSchema, { 'Idempotency-Key': idempotencyKey }),
+
+  mintJob: (req: MintRequest, idempotencyKey: string): Promise<JobAccepted> =>
+    postJson('/api/jobs/mint', req, JobAcceptedSchema, { 'Idempotency-Key': idempotencyKey }),
 
   getJob: (id: string): Promise<JobStatus> => client().getJob(id),
 
   commitJob: (id: string, req: CommitRequest): Promise<void> => client().commitJob(id, req),
 
-  /**
-   * Poll a job until it reaches one of `stopAt` (always including the
-   * terminal set). Delegates to the SDK's `waitForJob`, which respects
-   * the node's `Retry-After` backoff and throws `JobFailedError` on
-   * `failed` / `cancelled`. A standalone `ZkCoinsAccount` is not needed
-   * for the poll loop, so this reuses the client-level wait via a
-   * throwaway account-less helper on the SDK client.
-   */
   waitForJob: (
     jobId: string,
     stopAt: ReadonlySet<JobStatus['status']>,
@@ -263,49 +433,129 @@ export const api = {
   ): Promise<JobStatus> => waitForJob(client(), jobId, stopAt, opts),
 
   /**
-   * Faucet / authorised mint. Server-mediated end-to-end: admit the job
-   * (mandatory `Idempotency-Key`) and poll to `completed`. Throws
-   * `JobFailedError` on a terminal `failed` / `cancelled`, `ApiError`
-   * on a non-2xx admit (e.g. mainnet, where the faucet is not served).
+   * Create / mint a coin. Neutral, permissionless, two-phase and
+   * creator-signed — mirrors the SDK `account.ts::mint`:
+   *
+   *   1. Derive the creator identity pubkey (index 0) + the next rotation
+   *      key (index 1); sign the mint message with the creator key.
+   *   2. Admit `POST /api/jobs/mint` (mandatory `Idempotency-Key`); poll
+   *      to `awaiting_signature`.
+   *   3. Build the commitment over `account_state_hash ‖ output_coins_root`
+   *      with the SAME creator key (index 0 — the soundness gate binds
+   *      the commitment key to the creator); attach it.
+   *   4. Poll to `completed`.
+   *
+   * The owner (`H(creator_pubkey)`) and asset_id are derived node-side.
    */
-  mint: async (
-    address: string,
-    amount: number = 10_000,
+  createCoin: async (
+    params: CreateCoinParams,
     opts: { onPhase?: (status: JobStatus) => void } = {},
   ): Promise<JobStatus> => {
     const c = client();
-    const accepted = await c.mintJob({ account_address: address, amount }, newIdempotencyKey());
-    // `waitForJob` throws on failed/cancelled, so reaching here is `completed`.
-    return waitForJob(c, accepted.job_id, TERMINAL_STATUSES, opts);
+    const timestamp = Math.floor(Date.now() / 1000);
+
+    const wasm = await initWasm();
+    // The creator key is the identity key at index 0; `next_public_key`
+    // is the index-1 rotation key (like a send).
+    const keys = wasm.derivePublicKeys(params.xpriv, 0);
+    const messageBytes = buildMintMessage({
+      creatorPubkey: keys.publicKey,
+      name: params.name,
+      decimals: params.decimals,
+      amount: params.amount,
+      timestamp,
+    });
+    const hashHex = await sha256Hex(messageBytes);
+    const signingKey = wasm.deriveSigningKey(params.xpriv, 0);
+    const signature = wasm.signSchnorr(signingKey, hashHex);
+
+    const accepted = await api.mintJob(
+      {
+        creator_pubkey: keys.publicKey,
+        name: params.name,
+        decimals: params.decimals,
+        amount: params.amount,
+        next_public_key: keys.nextPublicKey,
+        signature,
+        timestamp,
+      },
+      newIdempotencyKey(),
+    );
+    const jobId = accepted.job_id;
+
+    const awaiting = await waitForJob(
+      c,
+      jobId,
+      new Set<JobStatus['status']>(['awaiting_signature', ...TERMINAL_STATUSES]),
+      opts,
+    );
+    if (awaiting.status !== 'awaiting_signature') {
+      throw new JobFailedError(
+        jobId,
+        'failed',
+        `mint job ended in ${awaiting.status} before commit`,
+      );
+    }
+    const proofId = awaiting.proof_id;
+    if (proofId === null || proofId === undefined) {
+      throw new JobFailedError(
+        jobId,
+        'failed',
+        'awaiting_signature mint job did not carry a proof_id',
+      );
+    }
+
+    const { accountStateHash, outputCoinsRoot } = extractCommitInputs(awaiting, jobId);
+    // The commitment is signed with the creator key (index 0) — the gate
+    // requires commitment.public_key == account.public_key == creator_pubkey.
+    const commitment = wasm.createCommitment(params.xpriv, 0, accountStateHash, outputCoinsRoot);
+    await c.commitJob(jobId, {
+      proof_id: proofId,
+      public_key: commitment.publicKey,
+      signature: commitment.signature,
+      message: commitment.message,
+    });
+
+    return waitForJob(c, jobId, TERMINAL_STATUSES, opts);
   },
 
   /**
-   * Two-phase send. All steps server-mediated except the local signing:
+   * Two-phase send of `amount` of `asset_id` to `recipient`. Mirrors the
+   * SDK `account.ts::pay`:
    *
-   *   1. Re-fetch balance — thin-client invariant — and hydrate the
-   *      BIP-32 child index forward from the authoritative `num_sends`.
+   *   1. Re-fetch the portfolio (thin-client invariant); confirm the
+   *      asset balance covers the amount; hydrate the global send index
+   *      from the SUM of every asset's `num_sends` (the commitment SMT is
+   *      keyed by pubkey across all assets, so the index is wallet-global,
+   *      not per-asset).
    *   2. Derive `public_key` at the index, `next_public_key` at index+1,
-   *      and `prev_commitment_pubkey` at index-1 when the account has sent.
+   *      `prev_commitment_pubkey` at index-1 when the wallet has sent.
    *   3. Sign + admit the send job (`Idempotency-Key`).
-   *   4. Poll to `awaiting_signature`.
-   *   5. Read `account_state_hash` / `output_coins_root` from the job's
-   *      `result` (JSON; no binary decode — hard-fail if absent).
-   *   6. Build the commitment with the existing WASM and attach it.
-   *   7. Poll to `completed`.
-   *
-   * Returns the completed send `JobStatus`. The caller advances its
-   * local counter and re-syncs from `/api/balance` afterwards.
+   *   4. Poll to `awaiting_signature`; read ash/ocr from the JSON result.
+   *   5. Build + attach the commitment (WASM, same index).
+   *   6. Poll to `completed`.
    */
   send: async (
-    params: { account_address: string; recipient: string; amount: number; xpriv: string },
+    params: SendParams,
     opts: { onPhase?: (status: JobStatus) => void } = {},
   ): Promise<JobStatus> => {
     const c = client();
 
-    // 1. Thin-client invariant — hydrate the derivation index from the
-    // server's authoritative send counter before signing anything.
-    const balance = await c.balance(params.account_address);
-    const numPubkeys = balance.num_sends;
+    // 1. Thin-client invariant: hydrate the global send index from the
+    // server. The commitment pubkey must be unique across the WHOLE wallet
+    // (SMT keyed by pubkey, shared across assets), so the index is the sum
+    // of every asset's num_sends, not the per-asset counter.
+    const owned = await api.ownerBalances(params.account_address);
+    const asset = owned.assets.find((a) => a.asset_id === params.asset_id);
+    const assetBalance = asset?.balance ?? 0;
+    if (assetBalance < params.amount) {
+      throw new ApiError(
+        422,
+        'Insufficient funds',
+        JSON.stringify({ error: 'Insufficient funds' }),
+      );
+    }
+    const numPubkeys = owned.assets.reduce((sum, a) => sum + a.num_sends, 0);
 
     // 2. Derive the pubkey pair (+ prev pubkey) for this send.
     const wasm = await initWasm();
@@ -314,23 +564,32 @@ export const api = {
       numPubkeys > 0 ? wasm.derivePublicKeys(params.xpriv, numPubkeys - 1).publicKey : undefined;
 
     // 3. Sign + admit.
-    const signed = await signSendRequest(
-      {
-        account_address: params.account_address,
-        recipient: params.recipient,
-        amount: params.amount,
-        public_key: keys.publicKey,
-        next_public_key: keys.nextPublicKey,
-        ...(prevPk !== undefined ? { prev_commitment_pubkey: prevPk } : {}),
-      },
-      params.xpriv,
-      numPubkeys,
-    );
-    const accepted = await c.sendJob(signed, newIdempotencyKey());
+    const timestamp = Math.floor(Date.now() / 1000);
+    const messageBytes = buildSendMessage({
+      accountAddress: params.account_address,
+      recipient: params.recipient,
+      amount: params.amount,
+      timestamp,
+    });
+    const hashHex = await sha256Hex(messageBytes);
+    const signingKey = wasm.deriveSigningKey(params.xpriv, numPubkeys);
+    const signature = wasm.signSchnorr(signingKey, hashHex);
+
+    const signed: SignedSendRequest = {
+      account_address: params.account_address,
+      recipient: params.recipient,
+      amount: params.amount,
+      asset_id: params.asset_id,
+      public_key: keys.publicKey,
+      next_public_key: keys.nextPublicKey,
+      ...(prevPk !== undefined ? { prev_commitment_pubkey: prevPk } : {}),
+      signature,
+      timestamp,
+    };
+    const accepted = await api.sendJob(signed, newIdempotencyKey());
     const jobId = accepted.job_id;
 
-    // 4. Poll to `awaiting_signature` (or a terminal state — waitForJob
-    // throws on failed/cancelled).
+    // 4. Poll to `awaiting_signature`.
     const awaiting = await waitForJob(
       c,
       jobId,
@@ -349,12 +608,8 @@ export const api = {
       throw new JobFailedError(jobId, 'failed', 'awaiting_signature job did not carry a proof_id');
     }
 
-    // 5. Read ash/ocr from the JSON result (hard-fail if absent).
+    // 5. Build + attach the commitment.
     const { accountStateHash, outputCoinsRoot } = extractCommitInputs(awaiting, jobId);
-
-    // 6. Build + attach the commitment. The WASM signs at the same index
-    // the send was signed with; a mismatched index would surface as a
-    // 401 "Commitment signature invalid" from the node.
     const commitment = wasm.createCommitment(
       params.xpriv,
       numPubkeys,
@@ -368,51 +623,28 @@ export const api = {
       message: commitment.message,
     });
 
-    // 7. Poll to `completed`.
+    // 6. Poll to `completed`.
     return waitForJob(c, jobId, TERMINAL_STATUSES, opts);
   },
 
-  balance: (address: string): Promise<BalanceResponse> => client().balance(address),
+  /** Per-`(owner, asset)` balance — `GET /api/balance?address=&asset_id=`. */
+  balance: (address: string, assetId: string): Promise<BalanceResponse> =>
+    getJson(
+      `/api/balance?address=${encodeURIComponent(address)}&asset_id=${encodeURIComponent(assetId)}`,
+      BalanceResponseSchema,
+    ),
+
+  /** The owner's cross-asset portfolio — `GET /api/balance/:address`. */
+  ownerBalances: (address: string): Promise<OwnerBalanceResponse> =>
+    getJson(`/api/balance/${encodeURIComponent(address)}`, OwnerBalanceResponseSchema),
 
   info: (): Promise<InfoResponse> => client().info(),
 
-  /**
-   * Per-address transaction history — `GET /api/history` (issue #145).
-   *
-   * Delegates to the SDK's `ZkCoinsClient.history`, which performs the
-   * fetch and validates the body against the canonical
-   * `HistoryResponseSchema` (the cross-rust-verified mirror of the node's
-   * `router::HistoryResponse` serde). Routing through the SDK keeps the
-   * adapter's no-direct-HTTP invariant intact — the same reason `balance`
-   * and `info` delegate rather than `fetch` here.
-   *
-   * Pagination is caller-driven: pass `limit` (node default 50, hard cap
-   * 200) and `offset` (>= 0). The response carries the node-*filtered*
-   * `total` — only `mint` / `send` / `receive` rows are counted — so the
-   * caller can page without a second query. Malformed input 422s and a DB
-   * failure 500s; both surface as `ApiError` carrying the node's
-   * `{ error }` string on `.serverError`, exactly like `balance`.
-   *
-   * `status` may be `"pending"` as a steady **state**, not only a
-   * transient one: the node defaults to it when the on-chain side is not
-   * yet known (node #153 round-2 fix), so callers must treat `pending` as
-   * a valid resting value.
-   */
   getHistory: (
     address: string,
     opts: { limit?: number; offset?: number } = {},
   ): Promise<HistoryResponse> => client().history(address, opts),
 
-  /**
-   * Full detail for one transaction — `GET /api/history/{id}` (the
-   * transaction-detail page's data source). Delegates to the SDK's
-   * `ZkCoinsClient.getTransaction`, which validates against the
-   * canonical `TxDetailSchema` (the mirror of the node's
-   * `router::TxDetail` serde) — same no-direct-HTTP rationale as
-   * `getHistory`. `id` is a `HistoryItem.id` from the list; `address`
-   * scopes the lookup (wrong-address / internal rows 404 as `ApiError`,
-   * malformed input 422s node-side).
-   */
   getTransaction: (id: number, address: string): Promise<TxDetail> =>
     client().getTransaction(id, address),
 
@@ -433,11 +665,8 @@ export const api = {
 
 /**
  * Poll a job to a target status set via the SDK client's
- * `getJobWithRetry`. Mirrors `ZkCoinsAccount.waitForJob` but operates on
- * a bare `ZkCoinsClient` (the app composes the lifecycle itself so its
- * WASM signs the commitment — it does not derive a full
- * `ZkCoinsAccount`). Respects the node's `Retry-After` backoff and
- * throws `JobFailedError` on `failed` / `cancelled` (no silent fallback).
+ * `getJobWithRetry`. Respects the node's `Retry-After` backoff and throws
+ * `JobFailedError` on `failed` / `cancelled` (no silent fallback).
  */
 async function waitForJob(
   c: ZkCoinsClient,
@@ -476,10 +705,6 @@ async function waitForJob(
   }
 }
 
-// Poll loop defaults for `waitForJob`. The node attaches
-// `Retry-After: 2` on every non-terminal poll; `POLL_FLOOR_MS` is the
-// fallback when the header is absent (or unparseable), `WAIT_TIMEOUT_MS`
-// the hard ceiling for the whole wait (proof gen + broadcast).
 const POLL_FLOOR_MS = 1_500;
 const WAIT_TIMEOUT_MS = 180_000; // 3 minutes
 

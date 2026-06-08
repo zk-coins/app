@@ -12,11 +12,13 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, fireEvent, render, screen } from '@testing-library/react';
+import { act, fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { render } from '@/__tests__/_helpers/intl';
 import SendPage from '@/app/send/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
+import { api } from '@/lib/api/client';
 
 const FEATURES_STATE = vi.hoisted(() => ({
   APPS_DIRECTORY: false,
@@ -35,6 +37,7 @@ vi.mock('@/lib/features', () => ({
 
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 // Stub the scanner with two buttons that drive its public contract.
@@ -75,10 +78,23 @@ beforeEach(() => {
     storedAuthMethod: 'seed',
     error: null,
   });
+  vi.spyOn(api, 'ownerBalances').mockResolvedValue({
+    address: ALICE.address,
+    assets: [
+      {
+        asset_id: 'c'.repeat(64),
+        name: 'BigCoin',
+        decimals: 8,
+        balance: 100_000_000,
+        num_sends: 0,
+      },
+    ],
+  });
   localStorage.clear();
 });
 
 afterEach(() => {
+  vi.restoreAllMocks();
   vi.useRealTimers();
 });
 

@@ -2,11 +2,13 @@
  * Runs once before any Playwright worker starts.
  *
  * Mints two fresh wallets (Alice + Bob) by driving the same Create flow
- * the user would. Alice is then seeded via N Jobs-API mint cycles
- * (admit POST /api/jobs/mint + poll to completed, configurable via
- * E2E_FAUCET_CALLS, default 1). Bob stays empty so the
- * suite has a zero-balance fixture for the empty-state and No-funds
- * screens.
+ * the user would. Alice is then seeded by creating her OWN asset via the
+ * neutral multi-asset create-coin flow (creator-signed mint: admit
+ * POST /api/jobs/mint → commit → poll to completed, configurable via
+ * E2E_FAUCET_CALLS, default 1). There is no faucet under the neutral
+ * multi-asset model — a wallet funds itself by minting an asset it owns.
+ * Bob stays empty so the suite has a zero-portfolio fixture for the
+ * empty-state and No-funds screens.
  *
  * Persists the result to `e2e/.fixtures/accounts.json`, which
  * `_helpers/fixtures.ts` reads in each spec.
@@ -33,34 +35,40 @@ const FAUCET_CALLS = Number.parseInt(process.env.E2E_FAUCET_CALLS ?? '1', 10);
 const BALANCE_POLL_TIMEOUT_MS = 90_000;
 const BALANCE_POLL_INTERVAL_MS = 1_500;
 
-async function pollBalance(address: string): Promise<number> {
+/** Poll the owner's portfolio until its total balance across all assets
+ *  rises above 0 (the create-coin mint has settled). */
+async function pollPortfolioFunded(address: string): Promise<number> {
   const deadline = Date.now() + BALANCE_POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
     try {
-      const { balance } = await api.balance(address);
-      if (balance > 0) return balance;
+      const { assets } = await api.ownerBalances(address);
+      const total = assets.reduce((sum, a) => sum + a.balance, 0);
+      if (total > 0) return total;
     } catch {
       /* transient — keep polling */
     }
     await new Promise((r) => setTimeout(r, BALANCE_POLL_INTERVAL_MS));
   }
   throw new Error(
-    `globalSetup: balance never rose above 0 for ${address} within ${BALANCE_POLL_TIMEOUT_MS}ms`,
+    `globalSetup: portfolio never funded for ${address} within ${BALANCE_POLL_TIMEOUT_MS}ms`,
   );
 }
 
-async function mintWithRetry(address: string, attempt = 1): Promise<void> {
+/** Run the creator-signed create-coin flow for `mnemonic`'s wallet, with a
+ *  small retry on transient admit/proof failures. Each call mints a fresh,
+ *  uniquely-named asset (the helper auto-generates the name). */
+async function createCoinWithRetry(mnemonic: string, attempt = 1): Promise<void> {
   const maxAttempts = 3;
   try {
-    await api.mint(address);
+    await api.createCoin(mnemonic);
   } catch (err) {
     if (attempt >= maxAttempts) throw err;
     const wait = 1_000 * 2 ** (attempt - 1);
     console.warn(
-      `globalSetup: /api/jobs/mint failed (attempt ${attempt}/${maxAttempts}), retrying in ${wait}ms`,
+      `globalSetup: create-coin failed (attempt ${attempt}/${maxAttempts}), retrying in ${wait}ms`,
     );
     await new Promise((r) => setTimeout(r, wait));
-    return mintWithRetry(address, attempt + 1);
+    return createCoinWithRetry(mnemonic, attempt + 1);
   }
 }
 
@@ -170,10 +178,11 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     });
     await aliceCtx.close();
 
+    // Seed Alice by minting her own asset(s) via the create-coin flow.
     for (let i = 0; i < FAUCET_CALLS; i++) {
-      await mintWithRetry(alice.address);
+      await createCoinWithRetry(alice.mnemonic.join(' '));
     }
-    const seededBalance = await pollBalance(alice.address);
+    const seededBalance = await pollPortfolioFunded(alice.address);
 
     // Bob: fresh wallet, NO seeding.
     const bobCtx = await browser.newContext({ baseURL });
