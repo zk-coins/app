@@ -77,7 +77,7 @@ test.describe('Send Bitcoin — server error toasts (issue #99)', () => {
     await aliceSubmitSend(page);
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('send-error')).toHaveText(
-      /Not enough balance for this transfer\./,
+      /Nicht genug Guthaben für diese Überweisung\./,
     );
     await snap(page, '13-server-error-insufficient-funds', {
       mask: [page.getByTestId('send-recipient-input')],
@@ -90,7 +90,7 @@ test.describe('Send Bitcoin — server error toasts (issue #99)', () => {
     await aliceSubmitSend(page);
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('send-error')).toHaveText(
-      /This account is not known to the server\./,
+      /Dieser Account ist auf dem Server nicht bekannt\./,
     );
     await snap(page, '13-server-error-unknown-account', {
       mask: [page.getByTestId('send-recipient-input')],
@@ -103,7 +103,7 @@ test.describe('Send Bitcoin — server error toasts (issue #99)', () => {
     await aliceSubmitSend(page);
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('send-error')).toHaveText(
-      /Proof generation failed\. Please try again later\./,
+      /Beweisgenerierung fehlgeschlagen\. Bitte später erneut versuchen\./,
     );
     await snap(page, '13-server-error-prove-failed', {
       mask: [page.getByTestId('send-recipient-input')],
@@ -119,6 +119,6 @@ test.describe('Send Bitcoin — server error toasts (issue #99)', () => {
     await mockSendError(page, 418, "I'm a teapot");
     await aliceSubmitSend(page);
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId('send-error')).toHaveText(/Server error 418: I'm a teapot/);
+    await expect(page.getByTestId('send-error')).toHaveText(/Serverfehler 418: I'm a teapot/);
   });
 });

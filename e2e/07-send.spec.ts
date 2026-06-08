@@ -100,7 +100,7 @@ test.describe('Send Bitcoin', () => {
     await page.getByTestId('send-submit-btn').click();
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 5_000 });
     // i18n-todo: discriminate invalid vs insufficient via data-error-kind.
-    await expect(page.getByTestId('send-error')).toHaveText(/Invalid amount/);
+    await expect(page.getByTestId('send-error')).toHaveText(/Ungültiger Betrag/);
     await snap(page, '07-amount-invalid-text', {
       mask: [page.getByTestId('send-recipient-input')],
     });
@@ -115,7 +115,7 @@ test.describe('Send Bitcoin', () => {
     await page.getByTestId('send-submit-btn').click();
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 5_000 });
     // i18n-todo: discriminate invalid vs insufficient via data-error-kind.
-    await expect(page.getByTestId('send-error')).toHaveText(/Insufficient balance/);
+    await expect(page.getByTestId('send-error')).toHaveText(/Nicht genug Guthaben/);
     await snap(page, '07-amount-insufficient', {
       mask: [page.getByTestId('send-recipient-input')],
     });
