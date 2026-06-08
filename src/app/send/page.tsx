@@ -45,6 +45,33 @@ function SendPageInner() {
   return multiAsset ? <SendPageMultiAsset /> : <SendPageSingleAsset />;
 }
 
+/**
+ * Normalise a recipient input to a node address. Strips a leading `$`,
+ * drops a trailing `@<usernameDomain>` suffix, and resolves a bare username
+ * via `api.resolveUsername`; a `0x`-prefixed or 64-hex string passes through
+ * unchanged. Shared verbatim by both send surfaces.
+ */
+async function resolveRecipient(
+  raw: string,
+  usernameDomain: string | null | undefined,
+): Promise<string> {
+  let resolvedRecipient = raw.trim();
+  if (resolvedRecipient.startsWith('$')) {
+    resolvedRecipient = resolvedRecipient.slice(1);
+  }
+  if (usernameDomain) {
+    const suffix = `@${usernameDomain}`;
+    if (resolvedRecipient.endsWith(suffix)) {
+      resolvedRecipient = resolvedRecipient.slice(0, -suffix.length);
+    }
+  }
+  if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
+    const resolved = await api.resolveUsername(resolvedRecipient);
+    resolvedRecipient = resolved.address;
+  }
+  return resolvedRecipient;
+}
+
 /** Shared no-account redirect placeholder. */
 function useAccountRedirect(account: unknown, router: ReturnType<typeof useRouter>) {
   useEffect(() => {
@@ -124,20 +151,7 @@ function SendPageSingleAsset() {
     try {
       if (!account.xpriv) throw new Error(t('errNoPrivateKey'));
 
-      let resolvedRecipient = recipient.trim();
-      if (resolvedRecipient.startsWith('$')) {
-        resolvedRecipient = resolvedRecipient.slice(1);
-      }
-      if (usernameDomain) {
-        const suffix = `@${usernameDomain}`;
-        if (resolvedRecipient.endsWith(suffix)) {
-          resolvedRecipient = resolvedRecipient.slice(0, -suffix.length);
-        }
-      }
-      if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
-        const resolved = await api.resolveUsername(resolvedRecipient);
-        resolvedRecipient = resolved.address;
-      }
+      const resolvedRecipient = await resolveRecipient(recipient, usernameDomain);
 
       const result = await api.walletSend(
         {
@@ -518,20 +532,7 @@ function SendPageMultiAsset() {
     try {
       if (!account.xpriv) throw new Error(t('errNoPrivateKey'));
 
-      let resolvedRecipient = recipient.trim();
-      if (resolvedRecipient.startsWith('$')) {
-        resolvedRecipient = resolvedRecipient.slice(1);
-      }
-      if (usernameDomain) {
-        const suffix = `@${usernameDomain}`;
-        if (resolvedRecipient.endsWith(suffix)) {
-          resolvedRecipient = resolvedRecipient.slice(0, -suffix.length);
-        }
-      }
-      if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
-        const resolved = await api.resolveUsername(resolvedRecipient);
-        resolvedRecipient = resolved.address;
-      }
+      const resolvedRecipient = await resolveRecipient(recipient, usernameDomain);
 
       const result = await api.send(
         {

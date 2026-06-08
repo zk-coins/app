@@ -32,13 +32,18 @@ export function WalletScreen() {
   const tErrors = useTranslations('errors');
   const { account, balance, setBalance, setUsername, syncNumPubkeys } = useWalletStore();
   const { items: history, loaded: historyLoaded } = useHistory(account?.address);
-  const { assets, loaded: portfolioLoaded } = usePortfolio(account?.address);
   const features = useFeatures();
   // `MULTI_ASSET` here is the *runtime* node capability (see lib/features):
   // false → render the single-asset balance hero + faucet, true → the
   // per-asset portfolio + create-coin entry. The dedicated multi-asset
   // routes (/create, /asset/[id]) are additionally build-time gated.
   const multiAsset = features.MULTI_ASSET;
+  // Only the multi-asset surface renders the portfolio; gate the hook input
+  // so a single-asset node is not polled on `GET /api/balance/:address`
+  // (which 404s there) every 5 s. `usePortfolio` parks on `undefined`.
+  const { assets, loaded: portfolioLoaded } = usePortfolio(
+    multiAsset ? account?.address : undefined,
+  );
   const {
     networkName,
     bitcoinNetwork,
