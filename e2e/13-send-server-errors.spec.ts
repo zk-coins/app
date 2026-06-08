@@ -1,5 +1,5 @@
 /**
- * Spec 13 — Send Bitcoin: server `ApiError` → German toast (issue #99).
+ * Spec 13 — Send Bitcoin: server `ApiError` → localized toast (issue #99).
  *
  * The Jobs API (node PR #161) admits a send at `POST /api/jobs/send` and
  * verifies the signed request synchronously before enqueueing: a bad
@@ -18,9 +18,13 @@
  * the UI settles cleanly on the error state before we capture the shot.
  *
  * Locator strategy: testid-based on `send-error`. Each known server
- * string asserts both the *text* (German translation) and a screenshot
- * baseline. The fallback path (unmapped 418) is text-only — a regression
- * guard for the `Serverfehler <status>: <raw>` shape.
+ * string asserts both the *text* and a screenshot baseline. The e2e build
+ * bakes `NEXT_PUBLIC_E2E_LOCALE=en` (see `scripts/e2e-local.sh`), so the
+ * text assertions check the English `errors.*` catalog strings from
+ * `messages/en.json` — the same mapping (`userMessageFor`), rendered in the
+ * locale the goldens are produced against. The fallback path (unmapped 418)
+ * is text-only — a regression guard for the `Server error <status>: <raw>`
+ * shape (`errors.serverErrorFallback`).
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -29,8 +33,14 @@ import { snap, setViewport } from './_helpers/screenshot';
 
 async function aliceGoToSend(page: Page): Promise<void> {
   await aliceLogin(page);
+  // The wallet screen is now a per-asset portfolio; wait for it to render
+  // before navigating so Alice's send button is the enabled client-side Link.
+  await expect(page.getByTestId('asset-list')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('wallet-send-btn').click();
   await expect(page.getByTestId('send-heading')).toBeVisible({ timeout: 10_000 });
+  // Send is per-asset now: wait for the picker to hydrate from the portfolio
+  // so the first asset is auto-selected before we fill the form.
+  await expect(page.getByTestId('send-asset-select')).toBeVisible({ timeout: 30_000 });
 }
 
 /**
@@ -56,7 +66,10 @@ async function aliceSubmitSend(page: Page): Promise<void> {
   const { bob } = readAccounts();
   await aliceGoToSend(page);
   await page.getByTestId('send-recipient-input').fill(bob.address);
-  await page.getByTestId('send-amount-input').fill('0.00001');
+  // Amount is denominated in the selected asset's units. Alice's fixture
+  // asset has 0 decimals and ample balance, so `1` is a valid send that
+  // passes the client-side checks and reaches the mocked `/api/jobs/send`.
+  await page.getByTestId('send-amount-input').fill('1');
   await page.getByTestId('send-submit-btn').click();
   await expect(page.getByTestId('send-confirm-card')).toBeVisible({ timeout: 5_000 });
   await page.getByTestId('send-confirm-btn').click();
@@ -76,7 +89,7 @@ test.describe('Send Bitcoin — server error toasts (issue #99)', () => {
     await aliceSubmitSend(page);
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('send-error')).toHaveText(
-      /Nicht genug Guthaben für diese Überweisung\./,
+      /Not enough balance for this transfer\./,
     );
     await snap(page, '13-server-error-insufficient-funds', {
       mask: [page.getByTestId('send-recipient-input')],
@@ -89,7 +102,7 @@ test.describe('Send Bitcoin — server error toasts (issue #99)', () => {
     await aliceSubmitSend(page);
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('send-error')).toHaveText(
-      /Dieser Account ist auf dem Server nicht bekannt\./,
+      /This account is not known to the server\./,
     );
     await snap(page, '13-server-error-unknown-account', {
       mask: [page.getByTestId('send-recipient-input')],
@@ -102,7 +115,7 @@ test.describe('Send Bitcoin — server error toasts (issue #99)', () => {
     await aliceSubmitSend(page);
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 30_000 });
     await expect(page.getByTestId('send-error')).toHaveText(
-      /Beweisgenerierung fehlgeschlagen\. Bitte später erneut versuchen\./,
+      /Proof generation failed\. Please try again later\./,
     );
     await snap(page, '13-server-error-prove-failed', {
       mask: [page.getByTestId('send-recipient-input')],
@@ -110,7 +123,7 @@ test.describe('Send Bitcoin — server error toasts (issue #99)', () => {
   });
 
   test('unmapped-server-error-falls-back (no shot)', async ({ page }) => {
-    // Unmapped strings produce the `Serverfehler <status>: <raw>`
+    // Unmapped strings produce the `Server error <status>: <raw>`
     // fallback so the user is never left with a stringly-typed
     // `Error.message` blob like the pre-#99 toast. Text-only —
     // visual identical to the mapped cases.
@@ -118,6 +131,6 @@ test.describe('Send Bitcoin — server error toasts (issue #99)', () => {
     await mockSendError(page, 418, "I'm a teapot");
     await aliceSubmitSend(page);
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 30_000 });
-    await expect(page.getByTestId('send-error')).toHaveText(/Serverfehler 418: I'm a teapot/);
+    await expect(page.getByTestId('send-error')).toHaveText(/Server error 418: I'm a teapot/);
   });
 });

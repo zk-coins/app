@@ -204,7 +204,10 @@ function SendPageInner() {
           >
             {t('successHeading')}
           </h1>
-          <p className="mt-2 mono text-[14px] text-ink2 tabular-nums">
+          <p
+            data-testid="send-success-amount"
+            className="mt-2 mono text-[14px] text-ink2 tabular-nums"
+          >
             {formatAssetAmount(success.amount, decimals)} {assetName}
           </p>
           {success.proofId && (

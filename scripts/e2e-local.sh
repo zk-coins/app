@@ -183,6 +183,17 @@ fi
 # ──────────────────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# The documented usage is `scripts/e2e-local.sh [-- extra playwright args]`.
+# Strip a single leading `--` separator so the extra args are forwarded to
+# Playwright as flags, not as a literal `--` (a bare `--` makes Playwright
+# treat everything after it as test-file path filters → "No tests found").
+# `npm run test:e2e:local -- --update-snapshots` already strips the npm `--`,
+# but a direct `scripts/e2e-local.sh -- --update-snapshots` invocation does
+# not, so normalise it here.
+if [[ "${1:-}" == "--" ]]; then
+  shift
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "✗ docker is required for the visual leg (the baselines are *-chromium-linux.png)." >&2
   echo "  Native macOS Playwright runs functionally only — see e2e/README.md § 4.2." >&2

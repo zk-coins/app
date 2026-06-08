@@ -1603,7 +1603,7 @@
                 <div class="file">e2e/06-balance.spec.ts</div>
               </div>
               <div class="rhs">
-                <b>5 tests · 5 baselines</b>
+                <b>4 tests · 4 baselines</b>
                 <div class="links">
                   <a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts"
                     >Spec ↗</a
@@ -1617,9 +1617,10 @@
             </div>
           </summary>
           <p class="spec-intro">
-            The wallet home screen after login. Balance polled every 5 s from
-            <code>GET /api/balance</code>. The eye toggle hides the amount for screen-sharing. On an
-            empty wallet, the no-funds banner replaces the transactions list.
+            The wallet home screen after login. In the multi-asset redesign the single-balance hero
+            became a per-asset portfolio list polled every 5 s from
+            <code>GET /api/balance/:address</code>, with a "Create coin" entry (the testnet faucet is
+            gone). On an empty wallet, the no-assets banner replaces the portfolio.
             <span class="tag mvp">MVP · View balance</span>
             <span class="tag mvp">MVP · Tx history</span>
           </p>
@@ -1667,22 +1668,6 @@
                   Fully funded wallet at 1440×900: balance in BTC + USD, address chip, Send/Receive
                   CTAs, tx list, network chart, footer.
                 </span>
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">balance-hidden</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/06-balance.spec.ts#L37"
-                    >L37</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/06-balance-hidden.png" alt="balance hidden" />
-              </div>
-              <div class="desc">
-                Clicking the eye icon replaces amounts with "••••••" — ideal for screen sharing.
               </div>
             </div>
             <div class="test">
@@ -2740,6 +2725,482 @@
                 The not-found surface: an unknown id (or a row scoped to a different wallet)
                 renders "Transaction not found" with a back-to-wallet action — the same surface a
                 hard navigation without an unlocked account resolves to.
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <!-- SPEC 18 -->
+        <details id="spec-18" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">18</span>Create coin</h2>
+                <div class="file">e2e/18-create-coin.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>6 tests · 6 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/18-create-coin.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/18-create-coin.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            The neutral multi-asset model has no faucet — a wallet funds itself by minting its own
+            asset through <code>/create</code>: a creator-signed two-phase mint
+            (<code>POST /api/jobs/mint</code> → <code>awaiting_signature</code> → commit → poll
+            <code>completed</code>). Baselines cover every reachable form state.
+          </p>
+
+          <div class="tests">
+            <div class="test">
+              <div class="head">
+                <span class="name">create-empty-desktop</span>
+                <span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/18-create-coin.spec.ts#L52"
+                    >L52</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/18-create-empty-desktop.png"
+                  alt="create coin empty desktop"
+                />
+              </div>
+              <div class="desc">Desktop 1440 × 900: the empty form, submit disabled.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">create-empty-mobile</span>
+                <span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/18-create-coin.spec.ts#L60"
+                    >L60</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/18-create-empty-mobile.png"
+                  alt="create coin empty mobile"
+                />
+              </div>
+              <div class="desc">Mobile (full page): the empty form, submit disabled.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">create-filled</span>
+                <span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/18-create-coin.spec.ts#L67"
+                    >L67</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/18-create-filled.png" alt="create coin filled" />
+              </div>
+              <div class="desc">Name, decimals, and amount filled → submit enabled.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">create-in-progress</span>
+                <span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/18-create-coin.spec.ts#L76"
+                    >L76</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/18-create-in-progress.png"
+                  alt="create coin in progress"
+                />
+              </div>
+              <div class="desc">
+                The admit route is delayed so the button parks in its "Creating coin…" disabled
+                state while the mint is in flight.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">create-error</span>
+                <span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/18-create-coin.spec.ts#L99"
+                    >L99</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/18-create-error.png" alt="create coin error" />
+              </div>
+              <div class="desc">
+                The admit route returns a structured 4xx <code>{error}</code> → the inline error
+                state; the button settles back to enabled with the fields still filled.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">create-success</span>
+                <span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/18-create-coin.spec.ts#L121"
+                    >L121</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/18-create-success.png" alt="create coin success" />
+              </div>
+              <div class="desc">
+                A real mint through the live node into a fresh throwaway wallet — the "Coin created"
+                success screen with the Done action.
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <!-- SPEC 19 -->
+        <details id="spec-19" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">19</span>Per-asset portfolio</h2>
+                <div class="file">e2e/19-portfolio.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>4 tests · 4 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/19-portfolio.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            The multi-asset wallet home: one <code>asset-row</code> per held asset (name + short
+            <code>asset_id</code> trust anchor + balance formatted by decimals), each linking to
+            <code>/asset/:id</code>. Per-run name/balance/id are masked.
+          </p>
+
+          <div class="tests">
+            <div class="test">
+              <div class="head">
+                <span class="name">portfolio-empty</span>
+                <span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L42"
+                    >L42</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/19-portfolio-empty.png" alt="portfolio empty" />
+              </div>
+              <div class="desc">
+                Bob holds nothing → the "No assets yet" banner plus the create-coin CTA.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">portfolio-funded-desktop</span>
+                <span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L50"
+                    >L50</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/19-portfolio-funded-desktop.png"
+                  alt="portfolio funded desktop"
+                />
+              </div>
+              <div class="desc">Desktop 1440 × 900: Alice's portfolio list with masked values.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">portfolio-funded-mobile</span>
+                <span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L58"
+                    >L58</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/19-portfolio-funded-mobile.png"
+                  alt="portfolio funded mobile"
+                />
+              </div>
+              <div class="desc">Mobile (full page): the same portfolio list with masked values.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">portfolio-loading</span>
+                <span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L66"
+                    >L66</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/19-portfolio-loading.png" alt="portfolio loading" />
+              </div>
+              <div class="desc">
+                The first <code>/api/balance/:address</code> tick is held open: the portfolio body
+                renders neither the list nor the empty banner yet.
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <!-- SPEC 20 -->
+        <details id="spec-20" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">20</span>Send — multi-asset picker</h2>
+                <div class="file">e2e/20-send-asset.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>5 tests · 5 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/20-send-asset.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/20-send-asset.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            Send is now per-asset: the form leads with an asset <code>&lt;select&gt;</code> populated
+            from the portfolio, an "Available" readout for the chosen asset, and an amount field
+            denominated in that asset's units. The select + readout carry per-run values and are
+            masked.
+          </p>
+
+          <div class="tests">
+            <div class="test">
+              <div class="head">
+                <span class="name">send-asset-picker</span>
+                <span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/20-send-asset.spec.ts#L59"
+                    >L59</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/20-send-asset-picker.png"
+                  alt="send asset picker"
+                />
+              </div>
+              <div class="desc">
+                The first asset is auto-selected and its "Available" balance resolves.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">send-asset-amount</span>
+                <span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/20-send-asset.spec.ts#L68"
+                    >L68</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/20-send-asset-amount.png"
+                  alt="send asset amount"
+                />
+              </div>
+              <div class="desc">A valid amount typed → "Send privately" enabled.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">send-asset-confirm-desktop</span>
+                <span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/20-send-asset.spec.ts#L79"
+                    >L79</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/20-send-asset-confirm-desktop.png"
+                  alt="send asset confirm desktop"
+                />
+              </div>
+              <div class="desc">
+                Desktop 1440 × 900: the confirm card (amount + recipient + Cancel/Confirm).
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">send-asset-confirm-mobile</span>
+                <span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/20-send-asset.spec.ts#L94"
+                    >L94</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/20-send-asset-confirm-mobile.png"
+                  alt="send asset confirm mobile"
+                />
+              </div>
+              <div class="desc">Mobile (full page): the same confirm card.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">send-asset-empty</span>
+                <span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/20-send-asset.spec.ts#L108"
+                    >L108</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/20-send-asset-empty.png" alt="send asset empty" />
+              </div>
+              <div class="desc">
+                Zero-asset portfolio → "No assets to send. Create a coin first." with the submit
+                button disabled.
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <!-- SPEC 21 -->
+        <details id="spec-21" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">21</span>Asset detail</h2>
+                <div class="file">e2e/21-asset-detail.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>4 tests · 4 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/21-asset-detail.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/21-asset-detail.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            Tapping a portfolio row opens <code>/asset/[id]</code>: a balance hero, a Details card
+            (name / asset id / decimals / balance / send counter), a "Send this asset" deep-link
+            into <code>/send?asset=…</code>, and the per-wallet history note + list. Volatile values
+            are masked.
+          </p>
+
+          <div class="tests">
+            <div class="test">
+              <div class="head">
+                <span class="name">asset-detail-desktop</span>
+                <span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/21-asset-detail.spec.ts#L54"
+                    >L54</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/21-asset-detail-desktop.png"
+                  alt="asset detail desktop"
+                />
+              </div>
+              <div class="desc">
+                Desktop 1440 × 900: Alice's first held asset — Details card + send deep-link +
+                history note.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">asset-detail-mobile</span>
+                <span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/21-asset-detail.spec.ts#L63"
+                    >L63</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/21-asset-detail-mobile.png"
+                  alt="asset detail mobile"
+                />
+              </div>
+              <div class="desc">Mobile (full page): the same asset detail.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">asset-detail-missing</span>
+                <span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/21-asset-detail.spec.ts#L70"
+                    >L70</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/21-asset-detail-missing.png"
+                  alt="asset detail not found"
+                />
+              </div>
+              <div class="desc">
+                The requested asset absent from the portfolio → the asset-not-found surface.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">asset-detail-loading</span>
+                <span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/21-asset-detail.spec.ts#L96"
+                    >L96</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/21-asset-detail-loading.png"
+                  alt="asset detail loading"
+                />
+              </div>
+              <div class="desc">
+                The portfolio fetch is held open: the page renders only its header while neither the
+                body nor the missing state has resolved.
               </div>
             </div>
           </div>
