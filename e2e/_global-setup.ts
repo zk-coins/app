@@ -2,8 +2,9 @@
  * Runs once before any Playwright worker starts.
  *
  * Mints two fresh wallets (Alice + Bob) by driving the same Create flow
- * the user would. Alice is then seeded via N calls to /api/mint
- * (configurable via E2E_FAUCET_CALLS, default 1). Bob stays empty so the
+ * the user would. Alice is then seeded via N Jobs-API mint cycles
+ * (admit POST /api/jobs/mint + poll to completed, configurable via
+ * E2E_FAUCET_CALLS, default 1). Bob stays empty so the
  * suite has a zero-balance fixture for the empty-state and No-funds
  * screens.
  *
@@ -56,7 +57,7 @@ async function mintWithRetry(address: string, attempt = 1): Promise<void> {
     if (attempt >= maxAttempts) throw err;
     const wait = 1_000 * 2 ** (attempt - 1);
     console.warn(
-      `globalSetup: /api/mint failed (attempt ${attempt}/${maxAttempts}), retrying in ${wait}ms`,
+      `globalSetup: /api/jobs/mint failed (attempt ${attempt}/${maxAttempts}), retrying in ${wait}ms`,
     );
     await new Promise((r) => setTimeout(r, wait));
     return mintWithRetry(address, attempt + 1);
@@ -160,7 +161,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
 
   const browser = await chromium.launch();
   try {
-    // Alice: fresh wallet, then seed via /api/mint × FAUCET_CALLS.
+    // Alice: fresh wallet, then seed via /api/jobs/mint × FAUCET_CALLS.
     const aliceCtx = await browser.newContext({ baseURL });
     applyColdStartTimeouts(aliceCtx);
     const alice = await withPageRetry(aliceCtx, 'create Alice wallet', async (page) => {

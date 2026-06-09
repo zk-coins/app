@@ -5,7 +5,7 @@ import {
   BalanceResponseSchema,
   ClaimUsernameResponseSchema,
   ResolveUsernameResponseSchema,
-} from '@/lib/api/schemas';
+} from '@zkcoins/sdk';
 import { useNetworkStore } from '@/stores/network';
 
 const mockFetch = vi.fn();

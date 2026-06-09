@@ -4,6 +4,13 @@ FROM base AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 COPY packages/zkcoins-wasm/package.json ./packages/zkcoins-wasm/
+# `@zkcoins/sdk` is the one vendored tarball dependency
+# (`"@zkcoins/sdk": "file:vendor/zkcoins-sdk-<ver>.tgz"`), so the file
+# must be present before `npm ci` resolves it — otherwise the install
+# fails with `ENOENT … vendor/zkcoins-sdk-*.tgz`. (The wasm package
+# above is a tsconfig path-alias bundled from source in the builder
+# stage, not an npm dependency, so it needs no tarball here.)
+COPY vendor ./vendor
 RUN npm ci
 
 FROM base AS builder

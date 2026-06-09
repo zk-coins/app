@@ -15,27 +15,53 @@ import {
 } from 'lucide-react';
 import { Logo } from '../icons/Logo';
 import { PwaPrompt } from '../PwaPrompt';
-import { useWalletStore, type Transaction } from '@/stores/wallet';
+import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { ApiError, api } from '@/lib/api/client';
+import { ApiError, api, type HistoryItem } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { formatBtc, formatBtcCompact, formatUsd, toZkAddress } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
+import { useHistory } from '@/hooks/useHistory';
 
 const HIDDEN = '••••';
 
 export function WalletScreen() {
-  const { account, balance, transactions, setBalance, setUsername, syncNumPubkeys } =
-    useWalletStore();
-  const { networkName, usernameDomain, setNetworkName, setUsernameDomain } = useNetworkStore();
+  const { account, balance, setBalance, setUsername, syncNumPubkeys } = useWalletStore();
+  // Server-truth transaction history (issue #175): fetched on mount and
+  // re-polled on the balance cadence — never reconstructed from local
+  // actions, so a fresh tab / restored seed / second device all render
+  // the same list the node holds.
+  const { items: history, loaded: historyLoaded } = useHistory(account?.address);
+  const {
+    networkName,
+    bitcoinNetwork,
+    usernameDomain,
+    setNetworkName,
+    setBitcoinNetwork,
+    setUsernameDomain,
+  } = useNetworkStore();
   const features = useFeatures();
   // Faucet is MVP — every node ships `/api/mint`. The only gate is
-  // defence in depth against accidentally calling it against mainnet:
-  // the node reports `network` as a display string (`"Mainnet"`,
-  // `"Mutinynet"`, …) — see `node::router::info_handler`. Compare
-  // lowercased so a casing change on the server can't accidentally
-  // re-enable the faucet button on production.
-  const showFaucet = networkName !== '' && networkName.toLowerCase() !== 'mainnet';
+  // defence in depth against accidentally calling it against mainnet.
+  //
+  // The node now reports a normalised `bitcoin_network` enum
+  // (`'mainnet' | 'mutinynet'`, lower-case, derived from `is_mainnet`
+  // server-side — zk-coins/node#193). Branching on that typed field
+  // removes the latent casing bug: the free-text `network` ships as a
+  // display string (`"Mainnet"`, capital M), so the previous
+  // `network !== 'mainnet'` guard always evaluated true and rendered the
+  // faucet on PRD until it was patched to lower-case at the call site.
+  //
+  // `bitcoin_network` is optional (a pre-#193 node ships only
+  // `network`), so fall back to a lower-cased free-text compare when it
+  // is absent. Either signal saying "mainnet" hides the faucet; we only
+  // show it once the first /api/info tick has resolved (both fields
+  // empty == loading).
+  const isMainnet =
+    bitcoinNetwork === 'mainnet' ||
+    (bitcoinNetwork === '' && networkName.toLowerCase() === 'mainnet');
+  const networkResolved = bitcoinNetwork !== '' || networkName !== '';
+  const showFaucet = networkResolved && !isMainnet;
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [minting, setMinting] = useState(false);
@@ -51,13 +77,17 @@ export function WalletScreen() {
       .info()
       .then((info) => {
         setNetworkName(info.network);
+        // Pre-#193 nodes omit the normalised enum; the store stays at the
+        // empty-string default and `showFaucet` falls back to the
+        // free-text `network` compare above.
+        setBitcoinNetwork(info.bitcoin_network ?? '');
         // Pre-#32 servers omit this field; the store stays at the empty
         // string default so `toZkAddress` keeps returning `''` (loading
         // state) until a post-#32 server reports its hostname.
         setUsernameDomain(info.username_domain ?? '');
       })
       .catch(() => {});
-  }, [setNetworkName, setUsernameDomain]);
+  }, [setNetworkName, setBitcoinNetwork, setUsernameDomain]);
 
   // Balance polling. Username display is MVP, so the server always
   // returns a `username` field when one is bound; pin the local copy
@@ -161,11 +191,11 @@ export function WalletScreen() {
         {/* Username + address */}
         {account && (
           <div className="mt-2 space-y-1.5">
-            <p className="mono text-[12px] text-ink2">
-              {account.username && usernameDomain
-                ? `${account.username}@${usernameDomain}`
-                : zkAddress}
-            </p>
+            {account.username && usernameDomain && (
+              <p className="mono text-[12px] text-ink2">
+                {`${account.username}@${usernameDomain}`}
+              </p>
+            )}
             {features.USERNAME_CLAIM && !account.username && (
               <form
                 className="flex items-center gap-2"
@@ -312,13 +342,16 @@ export function WalletScreen() {
       {/* PWA install prompt */}
       <PwaPrompt />
 
-      {/* Transactions */}
+      {/* Transactions — rendered from the server's `/api/history` response.
+          While the first fetch for an account is in flight, render neither
+          state (mirrors the balance `data-loading` pattern) so a funded
+          wallet never flashes "No transactions yet". */}
       <div>
-        {transactions.length === 0 ? (
+        {history.length > 0 ? (
+          <TransactionsList items={history.slice(0, 10)} />
+        ) : !account || historyLoaded ? (
           <EmptyTransactions hasWallet={!!account} />
-        ) : (
-          <TransactionsList transactions={transactions.slice(0, 10)} />
-        )}
+        ) : null}
       </div>
     </section>
   );
@@ -371,44 +404,55 @@ function EmptyTransactions({ hasWallet }: { hasWallet: boolean }) {
   );
 }
 
-function TransactionsList({ transactions }: { transactions: Transaction[] }) {
+function TransactionsList({ items }: { items: HistoryItem[] }) {
   return (
     <ul className="space-y-2">
-      {transactions.map((tx) => {
-        const positive = tx.type !== 'send';
-        const label = tx.type === 'mint' ? 'Faucet' : tx.type === 'send' ? 'Sent' : 'Received';
-        const Icon = tx.type === 'send' ? ArrowUpRight : tx.type === 'mint' ? Plus : ArrowDownLeft;
+      {items.map((tx) => {
+        // The node returns an absolute `amount` and encodes the sign in
+        // `direction`: sends are debits, mints / receives are credits.
+        const positive = tx.direction !== 'send';
+        const label =
+          tx.direction === 'mint' ? 'Faucet' : tx.direction === 'send' ? 'Sent' : 'Received';
+        const Icon =
+          tx.direction === 'send' ? ArrowUpRight : tx.direction === 'mint' ? Plus : ArrowDownLeft;
         return (
-          <li
-            key={tx.id}
-            className="flex items-center justify-between rounded-md border border-line bg-surface px-4 py-3"
-          >
-            <div className="flex items-center gap-3">
-              <div
-                className={`flex h-9 w-9 items-center justify-center rounded-md ${
-                  positive ? 'bg-line text-ink2' : 'bg-bitcoin/10 text-bitcoin'
+          <li key={tx.id}>
+            {/* Each row links to its dedicated detail page (issue: tx-detail).
+                The whole row is the hit target; the id scopes the lookup
+                server-side together with the wallet's address. */}
+            <Link
+              href={`/tx/${tx.id}`}
+              data-testid="tx-row"
+              className="flex items-center justify-between rounded-md border border-line bg-surface px-4 py-3 transition-colors hover:border-line2"
+            >
+              <div className="flex items-center gap-3">
+                <div
+                  className={`flex h-9 w-9 items-center justify-center rounded-md ${
+                    positive ? 'bg-line text-ink2' : 'bg-bitcoin/10 text-bitcoin'
+                  }`}
+                >
+                  <Icon size={15} strokeWidth={2.25} />
+                </div>
+                <div>
+                  <p className="text-[13px] font-medium text-ink">{label}</p>
+                  <p data-testid="tx-row-time" className="mono text-[11px] text-ink3 tabular-nums">
+                    {/* The wire `timestamp` is Unix seconds — convert to ms. */}
+                    {new Date(tx.timestamp * 1000).toLocaleTimeString([], {
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+              </div>
+              <span
+                data-testid="tx-row-amount"
+                className={`mono text-[13px] font-medium tabular-nums ${
+                  positive ? 'text-ink' : 'text-bitcoin'
                 }`}
               >
-                <Icon size={15} strokeWidth={2.25} />
-              </div>
-              <div>
-                <p className="text-[13px] font-medium text-ink">{label}</p>
-                <p data-testid="tx-row-time" className="mono text-[11px] text-ink3 tabular-nums">
-                  {new Date(tx.timestamp).toLocaleTimeString([], {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                </p>
-              </div>
-            </div>
-            <span
-              data-testid="tx-row-amount"
-              className={`mono text-[13px] font-medium tabular-nums ${
-                positive ? 'text-ink' : 'text-bitcoin'
-              }`}
-            >
-              {formatBtcCompact(positive ? tx.amount : -tx.amount)} BTC
-            </span>
+                {formatBtcCompact(positive ? tx.amount : -tx.amount)} BTC
+              </span>
+            </Link>
           </li>
         );
       })}

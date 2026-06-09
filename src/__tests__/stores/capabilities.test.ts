@@ -6,12 +6,14 @@ const FAIL_CLOSED = {
   address_list: false,
   username_claim: false,
   lnurl: false,
+  multi_asset: false,
 } as const;
 
 const ALL_ON = {
   address_list: true,
   username_claim: true,
   lnurl: true,
+  multi_asset: true,
 } as const;
 
 beforeEach(() => {

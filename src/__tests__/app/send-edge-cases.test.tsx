@@ -2,9 +2,9 @@
  * SendPage UI edge cases (`src/app/send/page.tsx`).
  *
  * Complements the existing `SendForm.test.tsx` (amount-field validation)
- * and the `send-pipeline.test.tsx` (Phase-1 + Phase-2 round-trip).
- * Targets the conditional renders and state-preservation branches the
- * other two files do not exercise:
+ * and the `send-pipeline.test.tsx` (jobs-API send lifecycle). Targets
+ * the conditional renders and state-preservation branches the other two
+ * files do not exercise:
  *
  *   - `balance === null` pre-tick state: Available reads "— BTC",
  *     Set max disabled, no-funds banner hidden.
@@ -18,7 +18,6 @@
  *   - Floating-point safety: 0.1 + 0.2 amount paths round to the exact
  *     sats value the server expects (no 0.30000000000000004 surprises
  *     in the confirm card or in `sats` math).
- *   - Recovering banner stays hidden when there is no inflight payload.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -42,7 +41,6 @@ beforeEach(() => {
   useWalletStore.setState({
     account: ALICE,
     balance: ONE_BTC_SATS,
-    transactions: [],
     isLoading: false,
     isLocked: false,
     hasStoredWallet: true,
@@ -85,11 +83,6 @@ describe('SendPage — balance display states', () => {
     expect(screen.getByTestId('send-available')).toHaveTextContent('1.00000000 BTC');
     expect(screen.queryByTestId('send-no-funds-banner')).not.toBeInTheDocument();
     expect(screen.getByTestId('send-setmax-btn')).toBeEnabled();
-  });
-
-  it('does not show the recovering banner when no inflight payload is stored', () => {
-    render(<SendPage />);
-    expect(screen.queryByTestId('send-recovering-banner')).not.toBeInTheDocument();
   });
 });
 

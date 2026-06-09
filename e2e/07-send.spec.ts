@@ -239,21 +239,11 @@ test.describe('Send Bitcoin', () => {
   // error line. The render is flaky to capture and adds little
   // signal over `send-success`. § 8.13 totals updated.
 
-  test('recovering-banner (no shot)', async ({ page }) => {
-    await aliceLogin(page);
-    // Seed an unfinished inflight commit in localStorage.
-    await page.evaluate(() => {
-      localStorage.setItem(
-        'zkcoins_inflight_commit',
-        JSON.stringify({
-          proof_id: 42,
-          public_key: '02' + '00'.repeat(32),
-          signature: '00'.repeat(64),
-          message: '00'.repeat(32),
-        }),
-      );
-    });
-    await goToSend(page);
-    await expect(page.getByTestId('send-recovering-banner')).toBeVisible({ timeout: 10_000 });
-  });
+  // Dropped: `recovering-banner` — the localStorage in-flight-commit
+  // crash-recovery path was removed with the Jobs-API migration. The
+  // pre-migration recovery replayed a bare commit payload against the
+  // (now removed) synchronous `/api/commit`; under the async Jobs API a
+  // commit is keyed by a live `awaiting_signature` job id that cannot be
+  // reconstructed from a reload, so the feature and its banner were
+  // dropped rather than half-rebuilt. § 8.13 totals updated.
 });

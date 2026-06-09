@@ -3,6 +3,16 @@ import { create } from 'zustand';
 interface NetworkState {
   networkName: string;
   /**
+   * Normalised network enum (`'mainnet' | 'mutinynet'`) reported by the
+   * node in `/api/info.bitcoin_network` (zk-coins/node#193). Unlike the
+   * free-text `networkName` this has stable, lower-case casing, so it is
+   * the field protocol-level guards branch on. Empty until the first
+   * `/api/info` tick lands, and stays empty when the connected node is
+   * pre-#193 and omits the field — consumers must fall back to
+   * `networkName` for the mainnet check in that case.
+   */
+  bitcoinNetwork: string;
+  /**
    * External hostname the connected server reports for itself, used to
    * render `<hex|username>@<domain>`. Empty until the first `/api/info`
    * response lands. DEV and PRD live behind different external
@@ -13,6 +23,7 @@ interface NetworkState {
   usernameDomain: string;
   apiUrl: string;
   setNetworkName: (name: string) => void;
+  setBitcoinNetwork: (network: string) => void;
   setUsernameDomain: (domain: string) => void;
 }
 
@@ -20,10 +31,14 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || 'https://api.zkcoins.app';
 
 export const useNetworkStore = create<NetworkState>(() => ({
   networkName: '',
+  bitcoinNetwork: '',
   usernameDomain: '',
   apiUrl: API_URL,
   setNetworkName: (name) => {
     useNetworkStore.setState({ networkName: name });
+  },
+  setBitcoinNetwork: (network) => {
+    useNetworkStore.setState({ bitcoinNetwork: network });
   },
   setUsernameDomain: (domain) => {
     useNetworkStore.setState({ usernameDomain: domain });

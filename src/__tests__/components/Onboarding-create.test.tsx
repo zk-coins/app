@@ -56,7 +56,6 @@ beforeEach(() => {
   useWalletStore.setState({
     account: null,
     balance: null,
-    transactions: [],
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
@@ -73,7 +72,7 @@ describe('Onboarding — Welcome screen', () => {
     render(<Onboarding />);
     expect(screen.getByTestId('welcome-heading')).toHaveTextContent('Welcome to zkCoins');
     expect(screen.getByText('Truly private by default')).toBeInTheDocument();
-    expect(screen.getByText('Just Bitcoin. No altcoin.')).toBeInTheDocument();
+    expect(screen.getByText('Just Bitcoin, not a new blockchain')).toBeInTheDocument();
     expect(screen.getByText('You hold the keys')).toBeInTheDocument();
   });
 
@@ -149,7 +148,7 @@ describe('Onboarding — SeedFlow stage transitions', () => {
 
 describe('Onboarding — full create happy path', () => {
   it('writes account + authMethod=seed + balance through the entire create flow', async () => {
-    vi.spyOn(api, 'balance').mockResolvedValue({ balance: 555 });
+    vi.spyOn(api, 'balance').mockResolvedValue({ balance: 555, num_sends: 0 });
 
     const user = userEvent.setup();
     render(<Onboarding />);

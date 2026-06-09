@@ -1,42 +1,28 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
+import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Check, Wallet } from 'lucide-react';
+import { ArrowLeft, Check, QrCode, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { ApiError, api, type CommitRequest } from '@/lib/api/client';
+import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
-import { initWasm } from '@zkcoins/wasm';
 import { SATS_PER_BTC, formatBtc, formatBtcCompact } from '@/lib/format';
 import { FEATURES } from '@/lib/features';
 
-/* --- In-flight commit crash recovery --- */
-
-const INFLIGHT_KEY = 'zkcoins_inflight_commit';
-
-function saveInflightCommit(payload: CommitRequest): void {
-  localStorage.setItem(INFLIGHT_KEY, JSON.stringify(payload));
-}
-function clearInflightCommit(): void {
-  localStorage.removeItem(INFLIGHT_KEY);
-}
-function getInflightCommit(): CommitRequest | null {
-  const raw = localStorage.getItem(INFLIGHT_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw);
-  } catch {
-    return null;
-  }
-}
+// Lazy-loaded so the jsQR decoder (~30 kB) ships in its own chunk and
+// only downloads when the user opens the scanner — the core send flow
+// stays lean. Client-only: the scanner touches camera + canvas APIs.
+const QrScanModal = dynamic(() => import('@/components/QrScanModal').then((m) => m.QrScanModal), {
+  ssr: false,
+});
 
 export default function SendPage() {
   const router = useRouter();
-  const { account, balance, setBalance, incrementPubkeys, syncNumPubkeys, addTransaction } =
-    useWalletStore();
+  const { account, balance, setBalance, incrementPubkeys, syncNumPubkeys } = useWalletStore();
   const usernameDomain = useNetworkStore((s) => s.usernameDomain);
 
   // Redirect to home (which handles unlock) if no account in memory.
@@ -49,36 +35,29 @@ export default function SendPage() {
     }
   }, [account, router]);
 
-  // Recover incomplete commits from previous session.
-  const [recovering, setRecovering] = useState(false);
-  useEffect(() => {
-    const inflight = getInflightCommit();
-    if (!inflight) return;
-    setRecovering(true);
-    api
-      .commit(inflight)
-      .then(() => {
-        clearInflightCommit();
-        incrementPubkeys();
-        if (account) {
-          api.balance(account.address).then((res) => {
-            setBalance(res.balance);
-            syncNumPubkeys(res.num_sends);
-          });
-        }
-      })
-      .catch(() => {
-        // Keep in localStorage for next retry.
-      })
-      .finally(() => setRecovering(false));
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
   const [sending, setSending] = useState(false);
   const [confirming, setConfirming] = useState(false);
+  const [phase, setPhase] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ amount: number; proofId?: string } | null>(null);
+  const [scanning, setScanning] = useState(false);
+  const [scanned, setScanned] = useState(false);
+
+  // Brief confirmation flash under the recipient field after a scan,
+  // mirroring the 1.5 s "Copied" flip on the Receive screen.
+  useEffect(() => {
+    if (!scanned) return;
+    const t = setTimeout(() => setScanned(false), 1500);
+    return () => clearTimeout(t);
+  }, [scanned]);
+
+  const handleScanResult = useCallback((address: string) => {
+    setRecipient(address);
+    setScanning(false);
+    setScanned(true);
+  }, []);
 
   const handleConfirm = useCallback(() => {
     if (!account || !recipient || !amount) return;
@@ -108,8 +87,11 @@ export default function SendPage() {
     const sats = Math.round(btcNum * SATS_PER_BTC);
 
     setSending(true);
+    setPhase(null);
     setError(null);
     try {
+      if (!account.xpriv) throw new Error('No private key');
+
       // Resolve username to address if the recipient looks like one.
       // Username resolve is MVP and always available on every node —
       // raw hex addresses skip the round-trip via the regex fast-path.
@@ -133,119 +115,47 @@ export default function SendPage() {
         resolvedRecipient = resolved.address;
       }
 
-      const wasm = await initWasm();
-      if (!account.xpriv) throw new Error('No private key');
-
-      // Hydrate the BIP-32 child-index counter from the server BEFORE
-      // signing. A seed-restored wallet has no local memory of past
-      // sends (`numPubkeys` is reset to 0 by the restore flow). Without
-      // this pre-send sync the wallet would either omit
-      // `prev_commitment_pubkey` (server: 400 "prev_commitment_pubkey
-      // required for account update", mapped to "Vorheriger Public Key
-      // fehlt.") or sign the next send with pubkey[0] again and
-      // collide on the same SMT slot at commit time. The matching
-      // server change is zk-coins/node `Account.num_sends` +
-      // `BalanceResponse.num_sends` (PR #129).
-      //
-      // The WalletScreen 5 s poll usually keeps the counter in sync;
-      // re-fetching here closes the worst-case window where the user
-      // navigated directly to `/send` faster than one polling tick.
-      const preSend = await api.balance(account.address);
-      setBalance(preSend.balance);
-      syncNumPubkeys(preSend.num_sends);
-      const effectiveNumPubkeys = preSend.num_sends;
-
-      const keys = wasm.derivePublicKeys(account.xpriv, effectiveNumPubkeys);
-      const prevPk =
-        effectiveNumPubkeys > 0
-          ? wasm.derivePublicKeys(account.xpriv, effectiveNumPubkeys - 1).publicKey
-          : undefined;
-
-      const res = await api.sendSigned(
+      // Drive the async Jobs-API send lifecycle. `api.send` re-fetches
+      // the balance to hydrate the BIP-32 child index from the server's
+      // authoritative `num_sends` before signing (thin-client invariant),
+      // admits the send job, polls to `awaiting_signature`, builds the
+      // commitment from the JSON `result` (no binary decode, no fabricated
+      // commitment), attaches it, and polls to `completed`. The job's
+      // phase transitions drive the inline progress label.
+      const result = await api.send(
         {
           account_address: account.address,
           recipient: resolvedRecipient,
           amount: sats,
-          public_key: keys.publicKey,
-          next_public_key: keys.nextPublicKey,
-          prev_commitment_pubkey: prevPk,
+          xpriv: account.xpriv,
         },
-        account.xpriv,
-        effectiveNumPubkeys,
+        { onPhase: (job: JobStatus) => setPhase(job.phase) },
       );
 
-      // Pre-PR-#31 servers reply 200 + `{success: false}` (no error
-      // string). Normalise to ApiError so the catch path treats both
-      // contracts uniformly.
-      if (!res.success) {
-        throw new ApiError(200, res.error ?? 'legacy: success false with no error string');
-      }
+      const proofId = result.result?.proof_id ?? undefined;
 
-      // Phase 2: Create and submit commitment so the recipient receives the coins.
-      if (res.account_state_hash && res.output_coins_root && res.proof_id) {
-        // Sign the commitment at the same index the prior send-signing
-        // used — `effectiveNumPubkeys`, not the stale `account.numPubkeys`
-        // that may still be 0 from a fresh restore. The server's
-        // commit_handler verifies the Schnorr signature against the
-        // pubkey at this index; using a mismatched index would surface
-        // as "Commitment signature invalid" (401).
-        const commitment = wasm.createCommitment(
-          account.xpriv,
-          effectiveNumPubkeys,
-          res.account_state_hash,
-          res.output_coins_root,
-        );
-        const commitPayload: CommitRequest = {
-          proof_id: res.proof_id,
-          public_key: commitment.publicKey,
-          signature: commitment.signature,
-          message: commitment.message,
-        };
-
-        // Persist in-flight commit before attempting (crash recovery).
-        saveInflightCommit(commitPayload);
-
-        let committed = false;
-        for (let attempt = 0; attempt < 3; attempt++) {
-          try {
-            await api.commit(commitPayload);
-            committed = true;
-            clearInflightCommit();
-            break;
-          } catch {
-            if (attempt < 2) await new Promise((r) => setTimeout(r, 2000 * (attempt + 1)));
-          }
-        }
-
-        if (!committed) {
-          throw new Error(
-            'Transaction sent but delivery to recipient failed. ' +
-              'The app will retry automatically on next load.',
-          );
-        }
-      }
-
+      // Advance the local BIP-32 child index, then re-sync from the server
+      // below. The sent transaction itself is NOT recorded locally — it
+      // surfaces from `GET /api/history` (server truth) when the wallet
+      // screen next polls (issue #175).
       incrementPubkeys();
-      addTransaction({
-        id: res.proof_id?.toString() ?? `send-${Date.now()}`,
-        type: 'send',
-        amount: sats,
-        counterparty: recipient.trim(),
-        timestamp: Date.now(),
-        proofId: res.proof_id?.toString(),
-      });
 
       const postSend = await api.balance(account.address);
       setBalance(postSend.balance);
       // Re-sync from the server after the commit phase landed so the
       // store reflects the bumped counter (server's `num_sends` should
-      // now be `effectiveNumPubkeys + 1`). `incrementPubkeys()` above
-      // already advanced the local counter — this is the belt-and-
-      // braces tick against the server's source of truth.
+      // now be the next index). `incrementPubkeys()` above already
+      // advanced the local counter — this is the belt-and-braces tick
+      // against the server's source of truth.
       syncNumPubkeys(postSend.num_sends);
-      setSuccess({ amount: sats, proofId: res.proof_id?.toString() });
+      setSuccess({ amount: sats, proofId: proofId?.toString() });
     } catch (err) {
-      if (err instanceof ApiError) {
+      if (err instanceof ApiError || err instanceof JobFailedError) {
+        // Same translation for both legs of the node failure contract:
+        // admit-time rejections (ApiError) and async job failures
+        // (JobFailedError) carry the same server-error strings, so the
+        // toast shows the German `userMessageFor` mapping either way
+        // (issue #99 — async leg included).
         setError(userMessageFor(err));
       } else if (err instanceof Error) {
         setError(err.message);
@@ -254,17 +164,9 @@ export default function SendPage() {
       }
     } finally {
       setSending(false);
+      setPhase(null);
     }
-  }, [
-    account,
-    recipient,
-    amount,
-    usernameDomain,
-    setBalance,
-    incrementPubkeys,
-    syncNumPubkeys,
-    addTransaction,
-  ]);
+  }, [account, recipient, amount, usernameDomain, setBalance, incrementPubkeys, syncNumPubkeys]);
 
   if (!account) {
     return (
@@ -341,15 +243,6 @@ export default function SendPage() {
           </p>
         </div>
 
-        {recovering && (
-          <div
-            data-testid="send-recovering-banner"
-            className="rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3 text-[12px] text-ink2"
-          >
-            Recovering a previous in-flight transaction…
-          </div>
-        )}
-
         {/* Available */}
         <div className="rounded-md border border-line bg-surface p-3 text-[12px]">
           <span className="text-ink3">Available </span>
@@ -387,7 +280,18 @@ export default function SendPage() {
 
         {/* Recipient */}
         <div>
-          <label className="mb-1.5 block text-[12px] font-medium text-ink2">Recipient</label>
+          <div className="mb-1.5 flex items-center justify-between">
+            <label className="text-[12px] font-medium text-ink2">Recipient</label>
+            <button
+              type="button"
+              data-testid="send-scan-qr-btn"
+              onClick={() => setScanning(true)}
+              className="inline-flex items-center gap-1.5 text-[12px] font-medium text-bitcoin transition-colors hover:text-bitcoin-hover"
+            >
+              <QrCode size={14} strokeWidth={2} />
+              Scan QR
+            </button>
+          </div>
           <input
             data-testid="send-recipient-input"
             type="text"
@@ -398,6 +302,15 @@ export default function SendPage() {
             placeholder={usernameDomain ? `alice@${usernameDomain}` : ''}
             className="w-full rounded-md border border-line2 bg-surface px-4 py-3 mono text-[14px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
           />
+          {scanned && (
+            <p
+              data-testid="send-scan-feedback"
+              className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-medium text-bitcoin"
+            >
+              <Check size={13} strokeWidth={2.5} />
+              Address scanned
+            </p>
+          )}
         </div>
 
         {/* Amount */}
@@ -482,7 +395,15 @@ export default function SendPage() {
             Send privately
           </button>
         )}
+
+        {sending && phase && (
+          <p data-testid="send-phase" className="text-center text-[11px] text-ink3">
+            {phase}
+          </p>
+        )}
       </form>
+
+      {scanning && <QrScanModal onResult={handleScanResult} onClose={() => setScanning(false)} />}
     </AppShell>
   );
 }

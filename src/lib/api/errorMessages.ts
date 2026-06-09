@@ -33,7 +33,7 @@
  * silently swap the German copy for a different translation.
  */
 
-import { ApiError } from './client';
+import { ApiError, JobFailedError } from './client';
 
 /**
  * The exact set of `error` strings the server can emit. Used by the
@@ -135,19 +135,30 @@ const SERVER_ERROR_PATTERNS: Array<readonly [RegExp, string]> = [
 ];
 
 /**
- * Map an `ApiError` to a translated, user-facing message. Falls back to
- * `Serverfehler <status>: <raw>` when the server emits an unmapped
- * string (a lockstep gap that the unit test must catch — the fallback
- * exists so production users don't see a crash, not as a permitted
- * resting state).
+ * Map an `ApiError` or `JobFailedError` to a translated, user-facing
+ * message. Falls back to `Serverfehler <status>: <raw>` when the server
+ * emits an unmapped string (a lockstep gap that the unit test must
+ * catch — the fallback exists so production users don't see a crash,
+ * not as a permitted resting state).
+ *
+ * Both error classes carry the same node failure-contract string in
+ * `serverError`: an `ApiError` when the node rejects at admit time
+ * (synchronous 4xx/5xx), a `JobFailedError` when the same failure
+ * surfaces later on the async job (`status: failed | cancelled`,
+ * issue #99's async leg). A `JobFailedError` may carry no string at
+ * all (the node ended the job without an `error` field) — that case
+ * gets the generic fallback with a German placeholder.
  */
-export function userMessageFor(error: ApiError): string {
-  const exact = SERVER_ERROR_TO_USER_MESSAGE[error.serverError];
-  if (exact !== undefined) return exact;
+export function userMessageFor(error: ApiError | JobFailedError): string {
+  const serverError = error.serverError;
+  if (serverError !== undefined) {
+    const exact = SERVER_ERROR_TO_USER_MESSAGE[serverError];
+    if (exact !== undefined) return exact;
 
-  for (const [pattern, message] of SERVER_ERROR_PATTERNS) {
-    if (pattern.test(error.serverError)) return message;
+    for (const [pattern, message] of SERVER_ERROR_PATTERNS) {
+      if (pattern.test(serverError)) return message;
+    }
   }
 
-  return `Serverfehler ${error.status}: ${error.serverError}`;
+  return `Serverfehler ${error.status}: ${serverError ?? 'unbekannter Fehler'}`;
 }

@@ -622,7 +622,7 @@
           </ol>
         </nav>
 
-        <div class="toc-label">Specs (70 tests · 67 baselines)</div>
+        <div class="toc-label">Specs (76 tests · 72 baselines)</div>
         <nav class="toc">
           <ol>
             <li>
@@ -658,6 +658,18 @@
             <li>
               <a href="#spec-11"><span class="spec-num">11</span>Route guards</a>
             </li>
+            <li>
+              <a href="#spec-13"><span class="spec-num">13</span>Send — server error toasts</a>
+            </li>
+            <li>
+              <a href="#spec-14"><span class="spec-num">14</span>Network activity</a>
+            </li>
+            <li>
+              <a href="#spec-15"><span class="spec-num">15</span>Send — Scan QR</a>
+            </li>
+            <li>
+              <a href="#spec-17"><span class="spec-num">17</span>Transaction detail</a>
+            </li>
           </ol>
         </nav>
 
@@ -681,7 +693,7 @@
             <span>🟢 <b>PRD:</b> <a href="https://zkcoins.app">zkcoins.app</a></span>
             <span>🟡 <b>DEV:</b> <a href="https://dev.zkcoins.app">dev.zkcoins.app</a></span>
             <span>📂 <b>Code:</b> <a href="https://github.com/zk-coins/app">zk-coins/app</a></span>
-            <span>🧪 <b>Specs:</b> 11 · 70 tests · 67 baselines</span>
+            <span>🧪 <b>Specs:</b> 13 · 76 tests · 72 baselines</span>
           </div>
         </section>
 
@@ -2130,72 +2142,37 @@
             </div>
             <div class="test">
               <div class="head">
-                <span class="name">shell-footerlinks-row</span
+                <span class="name">network-info-node</span
                 ><span class="src"
                   ><a
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L40"
-                    >L40</a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L63"
+                    >L63</a
                   ></span
                 >
               </div>
               <div class="img">
-                <img src="/handbook/screenshots/09-shell-footerlinks-row.png" alt="footer row" />
+                <img src="/handbook/screenshots/09-network-info-node.png" alt="node info" />
               </div>
               <div class="desc">
-                Row variant of the footer under the wallet: Docs, API, Explorer, Blog, Status,
-                GitHub, Network.
+                Connected node host shown in the Settings About card.
               </div>
             </div>
             <div class="test">
               <div class="head">
-                <span class="name">shell-footerlinks-grid</span
+                <span class="name">network-loading</span
                 ><span class="src"
                   ><a
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L47"
-                    >L47</a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L72"
+                    >L72</a
                   ></span
                 >
               </div>
               <div class="img">
-                <img src="/handbook/screenshots/09-shell-footerlinks-grid.png" alt="footer grid" />
+                <img src="/handbook/screenshots/09-network-loading.png" alt="network loading" />
               </div>
               <div class="desc">
-                Grid variant as the "Resources" section in Settings. Full width, clearer hierarchy.
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">network-badge-signet</span
-                ><span class="src"
-                  ><a
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L55"
-                    >L55</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/09-network-badge-signet.png" alt="badge signet" />
-              </div>
-              <div class="desc">
-                DEV connected to Bitcoin Signet — "signet" label + colored dot.
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">network-badge-loading</span
-                ><span class="src"
-                  ><a
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/09-network-and-shell.spec.ts#L64"
-                    >L64</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/09-network-badge-loading.png" alt="badge loading" />
-              </div>
-              <div class="desc">
-                Spec intercepts <code>/api/info</code> with an 8 s delay → loading state of the
-                badge is visible.
+                Spec intercepts <code>/api/info</code> with an 8 s delay → network-not-loaded
+                state (Network row absent, node host still shown).
               </div>
             </div>
           </div>
@@ -2513,6 +2490,261 @@
           </div>
         </details>
 
+        <!-- SPEC 14 -->
+        <details id="spec-14" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">14</span>Network activity</h2>
+                <div class="file">e2e/14-network-activity.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>2 tests · 2 baselines</b>
+                <div class="links">
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/14-network-activity.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/14-network-activity.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            The <code>/network</code> "Network activity" add-on page — the last always-on, ungated
+            screen to gain a page-level golden (issue #166). The live, self-advancing chart is
+            frozen via <code>page.clock</code> (install + pause before navigation), pinned to UTC /
+            en-US, and forced onto the deterministic simulated data source, so the seeded 6-hour
+            waveform is byte-stable run-to-run.
+          </p>
+
+          <div class="tests">
+            <div class="test">
+              <div class="head">
+                <span class="name">network-activity</span>
+                <div class="vp-toggle" data-vp-toggle>
+                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
+                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
+                </div>
+                <span class="src">
+                  <a
+                    data-vp-target="mobile"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/14-network-activity.spec.ts#L95"
+                    >L95</a
+                  >
+                  <a
+                    data-vp-target="desktop"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/14-network-activity.spec.ts#L89"
+                    hidden
+                    >L89</a
+                  >
+                </span>
+              </div>
+              <div class="img">
+                <img
+                  data-vp-target="mobile"
+                  src="/handbook/screenshots/14-network-activity-mobile.png"
+                  alt="network activity mobile"
+                />
+                <img
+                  data-vp-target="desktop"
+                  src="/handbook/screenshots/14-network-activity-desktop.png"
+                  alt="network activity desktop"
+                  hidden
+                />
+              </div>
+              <div class="desc">
+                <span data-vp-target="mobile">
+                  Mobile: header, frozen IN/OUT mirror chart, simulated-source status row +
+                  explorer-preview note.
+                </span>
+                <span data-vp-target="desktop" hidden>
+                  Desktop 1440 × 900: the same frozen chart — seed-1337 waveform, UTC x-axis ticks,
+                  IN/OUT readouts.
+                </span>
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <details id="spec-15" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">15</span>Send — Scan QR</h2>
+                <div class="file">e2e/15-send-scan-qr.spec.ts · e2e/16-send-scan-fallback.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>4 tests · 2 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/15-send-scan-qr.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/16-send-scan-fallback.spec.ts"
+                    >Fallback spec ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            The Send screen's "Scan QR" affordance fills the recipient by decoding a zkCoins address
+            QR — the Receive screen's QR in reverse. The camera leg drives Chromium's fake video
+            device (<code>--use-file-for-fake-video-capture</code>) with a single-frame Y4M of a QR
+            code, exercising the full <code>getUserMedia → canvas → jsQR</code> pipeline against a
+            real image; the fallback leg decodes an uploaded PNG. Both are Chromium-only.
+          </p>
+
+          <div class="tests cols-2">
+            <div class="test">
+              <div class="head">
+                <span class="name">scan-camera-fills-recipient</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/15-send-scan-qr.spec.ts#L57"
+                    >L57</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/15-scan-filled.png" alt="recipient filled by scan" />
+              </div>
+              <div class="desc">
+                The fake camera plays a QR clip; the scanner decodes it, validates the payload, and
+                fills the recipient field — shown settled after the "Address scanned" flash clears.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">scan-modal-open</span
+                ><span class="src"
+                  ><a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/16-send-scan-fallback.spec.ts#L60"
+                    >L60</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img src="/handbook/screenshots/16-scan-modal-open.png" alt="scanner modal open" />
+              </div>
+              <div class="desc">
+                The scanner overlay in its scanning state: live camera viewport (masked), guidance
+                copy, and the "Upload image" fallback button.
+              </div>
+            </div>
+          </div>
+        </details>
+
+        <hr class="sep" />
+
+        <details id="spec-17" class="spec">
+          <summary>
+            <div class="spec-head">
+              <div class="lhs">
+                <h2><span class="num">17</span>Transaction detail</h2>
+                <div class="file">e2e/17-tx-detail.spec.ts</div>
+              </div>
+              <div class="rhs">
+                <b>4 tests · 3 baselines</b>
+                <div class="links">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/17-tx-detail.spec.ts"
+                    >Spec ↗</a
+                  >
+                  <a
+                    href="https://github.com/zk-coins/app/tree/develop/e2e/17-tx-detail.spec.ts-snapshots"
+                    >Baselines ↗</a
+                  >
+                </div>
+              </div>
+            </div>
+          </summary>
+          <p class="spec-intro">
+            The <code>/tx/[id]</code> transaction-detail page: every history row is clickable and
+            opens a dedicated page rendering the node's full
+            <code>GET /api/history/{id}</code> detail — direction, status, the decoded
+            account-state snapshot (balance before/after, send counter, commitment key), the
+            verifier circuit digest, and the on-chain reference. Per-run values (id, timestamp,
+            amounts, hashes) carry <code>tx-detail-v-*</code> testids and are masked + width-pinned,
+            so the goldens assert the layout, labels, and status chrome.
+          </p>
+
+          <div class="tests">
+            <div class="test">
+              <div class="head">
+                <span class="name">tx-detail</span>
+                <div class="vp-toggle" data-vp-toggle>
+                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
+                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
+                </div>
+                <span class="src">
+                  <a
+                    data-vp-target="mobile"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/17-tx-detail.spec.ts#L76"
+                    >L76</a
+                  >
+                  <a
+                    data-vp-target="desktop"
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/17-tx-detail.spec.ts#L48"
+                    hidden
+                    >L48</a
+                  >
+                </span>
+              </div>
+              <div class="img">
+                <img
+                  data-vp-target="mobile"
+                  src="/handbook/screenshots/17-tx-detail-mobile.png"
+                  alt="transaction detail mobile"
+                />
+                <img
+                  data-vp-target="desktop"
+                  src="/handbook/screenshots/17-tx-detail-desktop.png"
+                  alt="transaction detail desktop"
+                  hidden
+                />
+              </div>
+              <div class="desc">
+                <span data-vp-target="mobile">
+                  Mobile (full page): Alice's faucet-mint detail opened from the history row — hero
+                  with direction icon + signed amount + status chip, then the Overview, Amounts,
+                  Proof &amp; verification, On-chain, and Privacy sections. Volatile values masked.
+                </span>
+                <span data-vp-target="desktop" hidden>
+                  Desktop 1440 × 900: the same mint detail — labels and section chrome visible,
+                  per-run values (reference id, date, amounts, circuit digest) masked to uniform
+                  boxes.
+                </span>
+              </div>
+            </div>
+
+            <div class="test">
+              <div class="head">
+                <span class="name">tx-detail-missing</span>
+                <span class="src">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/17-tx-detail.spec.ts#L94"
+                    >L94</a
+                  >
+                </span>
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/17-tx-detail-missing.png"
+                  alt="transaction detail not found"
+                />
+              </div>
+              <div class="desc">
+                The not-found surface: an unknown id (or a row scoped to a different wallet)
+                renders "Transaction not found" with a back-to-wallet action — the same surface a
+                hard navigation without an unlocked account resolves to.
+              </div>
+            </div>
+          </div>
+        </details>
+
         <hr class="sep" />
 
         <!-- COVERAGE -->
@@ -2587,8 +2819,8 @@
               <tr>
                 <td>Network info badge</td>
                 <td><code>09-network-and-shell</code></td>
-                <td>6</td>
-                <td><span class="ok">6</span></td>
+                <td>4</td>
+                <td><span class="ok">4</span></td>
               </tr>
               <tr>
                 <td>Install as PWA</td>
@@ -2598,8 +2830,8 @@
               </tr>
               <tr>
                 <td colspan="2"><strong>Σ MVP</strong></td>
-                <td><strong>63</strong></td>
-                <td><strong class="ok">60</strong></td>
+                <td><strong>61</strong></td>
+                <td><strong class="ok">58</strong></td>
               </tr>
               <tr>
                 <td>+ Welcome / onboarding</td>
@@ -2615,8 +2847,8 @@
               </tr>
               <tr>
                 <td colspan="2"><strong>Σ total</strong></td>
-                <td><strong>70</strong></td>
-                <td><strong class="ok">67</strong></td>
+                <td><strong>68</strong></td>
+                <td><strong class="ok">65</strong></td>
               </tr>
             </tbody>
           </table>
@@ -2633,7 +2865,7 @@
             <li><code>Lint &amp; Build</code></li>
             <li><code>Unit Tests</code></li>
             <li><code>Rust Crypto Tests</code></li>
-            <li><code>E2E Tests</code> — all 70 tests including 67 visual-baseline comparisons</li>
+            <li><code>E2E Tests</code> — all 76 tests including 72 visual-baseline comparisons</li>
           </ul>
 
           <h3>Baseline regeneration</h3>
@@ -2652,10 +2884,6 @@
             <li>
               <strong>Passkey flows</strong> (gated) — covered functionally via
               <code>webauthn.spec.ts</code>, no visual baseline.
-            </li>
-            <li>
-              <strong>Network activity chart</strong> (keep) — simulated data breaks pixel diff, no
-              dedicated test.
             </li>
             <li><strong>Native browser install dialog</strong> — not headless-exercisable.</li>
             <li>

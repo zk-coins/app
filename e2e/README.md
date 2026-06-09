@@ -67,7 +67,7 @@ What exists today in `e2e/`:
 | `E2E_BASE_URL`         | `https://dev.zkcoins.app`     | Frontend under test. Switch to `https://zkcoins.app` for PRD.                                                                                                                                                                                                                        |
 | `E2E_API_URL`          | `https://dev-api.zkcoins.app` | Backend the helpers talk to directly (faucet, balance polling).                                                                                                                                                                                                                      |
 | `E2E_NETWORK_EXPECTED` | `signet`                      | Network the badge should show. Asserted in `09-network-and-shell.spec.ts`.                                                                                                                                                                                                           |
-| `E2E_FAUCET_CALLS`     | `1`                           | Number of `/api/mint` calls used to seed Alice (the server controls the per-call amount). Set to 0 to skip seeding for a custom run.                                                                                                                                                 |
+| `E2E_FAUCET_CALLS`     | `1`                           | Number of `/api/jobs/mint` admit+poll cycles used to seed Alice (the server controls the per-call amount). Set to 0 to skip seeding for a custom run.                                                                                                                                |
 | `E2E_NEED_FIXTURES`    | unset (treated as false)      | **Opt-in gate.** `globalSetup` is a no-op unless this is `'true'`. The legacy specs (wallet/send-flow/settings/visual/webauthn) don't need fixtures and the existing `e2e-tests` CI job leaves it unset; the regen workflow and the future `e2e-visual` job both set it to `'true'`. |
 | `E2E_KEEP_ACCOUNTS`    | unset                         | If `true`, `globalTeardown` skips wiping fixtures (useful for debugging).                                                                                                                                                                                                            |
 
@@ -91,6 +91,54 @@ export default defineConfig({
 
 The existing `fullyParallel: true`, `retries: 1`, and 30 s per-test timeout stay put. The new helpers must respect them — no `test.describe.configure({ mode: 'serial' })` unless a spec genuinely needs it.
 
+### 4.2 Dynamic target — `local` (served PR build, CI) vs `dev` (hosted stack)
+
+The suite runs against two interchangeable targets selected by **`E2E_TARGET`**. Both run the **same spec files** and assert against the **same `*-chromium-linux.png` baselines** — that is the whole point: a local run reproduces exactly what CI sees.
+
+| `E2E_TARGET`    | Frontend                           | Node                                                       | webServer | Used by                                   |
+| --------------- | ---------------------------------- | ---------------------------------------------------------- | --------- | ----------------------------------------- |
+| `local`         | locally-served standalone PR build | upstream via info-proxy (CI: dev-api; dev box: local node) | reuse     | CI (`ci.yaml`), `npm run test:e2e:local`  |
+| `dev` (default) | `https://dev.zkcoins.app`          | `https://dev-api.zkcoins.app`                              | none      | `npm run test:e2e` (deployed-stack smoke) |
+
+**CI runs the `local` target against the PR's own build.** `ci.yaml` builds the standalone bundle with the same-origin proxy config baked in, starts the `/api/info` normalisation proxy with `E2E_NODE_URL=https://dev-api.zkcoins.app` as upstream, serves the bundle on the runner, and runs both legs with `E2E_TARGET=local`. A red E2E therefore means the PR is wrong — not that the dev deployment (which reflects `develop`, never the PR branch) lags the code under test; during the Jobs-API migration that lag made every frontend-behaviour spec fail for reasons unrelated to the PR. The runner is `ubuntu-latest`, so visual diffs compare against the committed `*-chromium-linux.png` baselines on their native platform. The hosted DEV **node** stays the upstream — real ZK proof generation and broadcast, exactly as before.
+
+**`dev` stays the default when `E2E_TARGET` is unset** and reproduces the historical hosted-stack behaviour byte-for-byte: `baseURL = E2E_BASE_URL || https://dev.zkcoins.app`, no `webServer`, helpers point at `E2E_API_URL || https://dev-api.zkcoins.app`. Useful as a deployed-environment smoke check after a `develop` deploy.
+
+**`local` on a developer machine is a one-command flow:** `npm run test:e2e:local` → `scripts/e2e-local.sh` (Docker, defaults to a local node at `host.docker.internal:4242`; override `E2E_NODE_URL=https://dev-api.zkcoins.app` to mirror CI exactly). It is idempotent and self-cleaning.
+
+#### Why a Linux container (visual baselines are platform-specific)
+
+The committed baselines are `*-chromium-linux.png` — rendered on Linux. A native macOS Chromium produces sub-pixel-different glyph rasterisation and fails the visual diff. So the local **visual** leg **must** run inside a Linux Playwright image pinned to the **exact** `@playwright/test` version (`mcr.microsoft.com/playwright:v<ver>-noble`). `scripts/e2e-local.sh` derives the tag from the installed package so the two can never drift, and runs the whole flow inside that one container (build → serve → proxy → test). A native macOS Playwright run (`E2E_TARGET=local E2E_BASE_URL=… npx playwright test`) is **functional-only** — useful for stepping through a selector, but the visual assertions will mismatch on font rendering; do not treat a native diff as a real regression.
+
+#### Why a `/api/info` capability-normalisation proxy
+
+The baselines were captured against the hosted DEV stack, whose `/api/info` reports every opt-in capability **OFF** and `username_domain = dev.zkcoins.app`. A locally-run node built with `--all-features` reports them **ON** (`address_list/username_claim/lnurl = true`), a different `username_domain`, and an extra `bitcoin_network` field. In particular `username_claim:true` makes `WalletScreen` render an extra "Claim a username" form row (≈ +36 px) that shifts **~16 baselines** and fails the diff.
+
+To get baseline parity in local mode the `/api/info` surface must match DEV. `scripts/e2e-info-proxy.mjs` is a **test-only** reverse-proxy (E2E infra, never bundled, never shipped) that normalises **only `GET /api/info`** to the DEV surface (caps `false`, `username_domain = dev.zkcoins.app`, drops `bitcoin_network`) and passes **everything else** — jobs/mint/send/commit/balance/health — straight through to the real local node 1:1. (Rebuilding the node with a DEV-matching Cargo feature set was the alternative; the proxy is preferred because it is self-contained and does not couple this repo's E2E run to the node's build config.)
+
+#### Topology (all inside the one Playwright container)
+
+```text
+browser ─(same-origin /api/*)→ Next standalone :3090 ─(rewrites /api/* )→ proxy :4243 ─→ node :4242
+e2e helpers (Node, E2E_API_URL) ──────────────────────────────────────→ proxy :4243 ─→ node :4242
+```
+
+Both the browser path (via the Next same-origin rewrite — `LOCAL_NODE_PROXY_TARGET`, baked at build time because Next standalone applies `rewrites()` only via `node server.js`, never `next start`) and the test-helper path (`E2E_API_URL`) point at the proxy, so both observe the normalised `/api/info`. The same-origin rewrite also dodges the `Idempotency-Key` CORS-preflight problem on the real send (browser → own origin, never cross-origin to the node).
+
+The browser build bakes `NEXT_PUBLIC_API_URL = http://127.0.0.1:3090` (the app's own origin) so SDK calls resolve same-origin and flow through the rewrite.
+
+#### `scripts/e2e-local.sh` env overrides
+
+| Env var                | Default                            | Purpose                                       |
+| ---------------------- | ---------------------------------- | --------------------------------------------- |
+| `E2E_NODE_URL`         | `http://host.docker.internal:4242` | Upstream node as seen **from the container**. |
+| `E2E_LOCAL_APP_PORT`   | `3090`                             | Standalone app port inside the container.     |
+| `E2E_INFO_PROXY_PORT`  | `4243`                             | `/api/info` proxy port inside the container.  |
+| `E2E_NETWORK_EXPECTED` | `signet`                           | Network badge label (same as dev mode).       |
+| `E2E_FAUCET_CALLS`     | `1`                                | Mint cycles to seed Alice in globalSetup.     |
+
+The script runs the same two-leg shape as CI: leg 1 is the parallel suite `--grep-invert "send-success"`, leg 2 is `--grep "send-success" --workers=1` (one real send through the local node + funded publisher). The HTML report and any failure artifacts are copied to `playwright-report-local/` on the host (gitignored).
+
 ## 5. Global setup — fresh accounts every run
 
 File: `e2e/_global-setup.ts`. Runs once before any worker starts. Linked from `playwright.config.ts` (see §4.1).
@@ -102,7 +150,8 @@ File: `e2e/_global-setup.ts`. Runs once before any worker starts. Linked from `p
    length validated by `wasm.validateMnemonic`.
 2. Derive Alice + Bob accounts via `wasm.createAccountFromMnemonic(phrase)` —
    returns `{ address, numPubkeys, xpriv }` exactly like the app.
-3. Seed Alice: call POST /api/mint with Alice's address E2E_FAUCET_CALLS times.
+3. Seed Alice: admit POST /api/jobs/mint with Alice's address E2E_FAUCET_CALLS
+   times and poll each job to `completed`.
    The server controls the per-call amount; we observe the resulting balance via
    GET /api/balance and store it (`alice.seededBalance`). Retry × 3 with exp backoff.
    Bob is **not** funded — having one zero-balance fixture is required for
@@ -136,7 +185,8 @@ All paths relative to `e2e/`.
 export const api = {
   info(): Promise<InfoResponse>;
   balance(addressHex: string): Promise<BalanceResponse>;
-  mint(addressHex: string): Promise<SendResponse>; // server picks the amount
+  // Jobs API: admit POST /api/jobs/mint, then poll GET /api/jobs/:id to completed.
+  mint(addressHex: string): Promise<JobStatus>; // server picks the amount
   // No send/commit helpers — send is exercised through the UI.
 };
 ```
@@ -249,11 +299,11 @@ The `setViewport` helper defaults to `mobile` when called without an explicit vi
 
 ## 8. Test inventory (the exhaustive step list)
 
-This section is the result of a line-by-line audit of every MVP component (`src/components/onboarding/Onboarding.tsx`, `src/components/screens/WalletScreen.tsx`, `src/app/page.tsx`, `src/app/send/page.tsx`, `src/app/receive/page.tsx`, `src/app/settings/page.tsx`, `src/components/AppShell.tsx`, `src/components/BottomNav.tsx`, `src/components/FooterLinks.tsx`, `src/components/PwaPrompt.tsx`). **Every button, every visible visual state, every conditional render** that the MVP user can reach is enumerated below. Each row is one `test()` and one screenshot baseline (unless marked `(no shot)`).
+This section is the result of a line-by-line audit of every MVP component (`src/components/onboarding/Onboarding.tsx`, `src/components/screens/WalletScreen.tsx`, `src/app/page.tsx`, `src/app/send/page.tsx`, `src/app/receive/page.tsx`, `src/app/settings/page.tsx`, `src/components/AppShell.tsx`, `src/components/BottomNav.tsx`, `src/components/PwaPrompt.tsx`). **Every button, every visible visual state, every conditional render** that the MVP user can reach is enumerated below. Each row is one `test()` and one screenshot baseline (unless marked `(no shot)`).
 
 ### 8.0 DEV-bundle vs PRD-bundle — what we screenshot
 
-The E2E suite runs against the **DEV-built frontend** (https://dev.zkcoins.app) because that's the only deployment where `/api/mint` (faucet) is available — without it we can't seed Alice every run. The DEV bundle has every `FEATURES.*` flag ON. That introduces two categories of difference from PRD:
+The E2E suite runs against the **DEV-built frontend** (https://dev.zkcoins.app) because that's the only deployment where `/api/jobs/mint` (faucet) is available — without it we can't seed Alice every run. The DEV bundle has every `FEATURES.*` flag ON. That introduces two categories of difference from PRD:
 
 **(a) Pure navigation detours — traversed silently, not screenshotted.**
 
@@ -274,7 +324,6 @@ On screens we DO screenshot, the DEV bundle renders extra widgets the PRD bundle
 | Username claim input + button on the wallet              | `features.USERNAME_CLAIM` (runtime cap; off in hosted DEV+PRD)                | §8.6 `balance-funded-desktop/mobile`             |
 | Faucet button on empty-balance banner                    | `networkName !== mainnet` (MVP, no flag) — DEV runs Mutinynet, so it IS shown | §8.6 `balance-zero-faucet-visible`               |
 | `@user` / `$user` resolver hint placeholder on Send      | MVP — always rendered (username resolve is permanent)                         | §8.7 `send-default`, `recipient-valid-username`  |
-| `dev-*` hostnames in FooterLinks                         | runtime (`hostname.startsWith('dev')`)                                        | §8.1, §8.5, §8.9 (any screen with FooterLinks)   |
 | "Buy private BTC through DFX" link in no-balance variant | `FEATURES.APPS_DIRECTORY`                                                     | §8.7 `send-no-funds-banner`                      |
 
 A future PRD smoke pass (out of scope here) is the only way to assert the PRD-stripped variants exist. These specs deliberately do **not** try to assert PRD behaviour.
@@ -285,13 +334,13 @@ A future PRD smoke pass (out of scope here) is the only way to assert the PRD-st
 
 The landing entry plus both onward affordances. Onboarding has its own visual style (full-bleed hero on mobile, framed card on desktop, decorative pixel-grid background) that needs to lock in.
 
-| #   | Step                  | Notes                                                                                                                           |
-| --- | --------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | welcome-desktop       | Default 1440 × 900. PixelLogo, "Welcome to zkCoins" + ghost icon, 3 Benefit cards, both buttons, footer label, FooterLinks row. |
-| 2   | welcome-mobile        | 375 × 812. Same content stacked.                                                                                                |
-| 3   | welcome-tablet        | 768 × 1024 — the mid-breakpoint where the card frame appears (`md:border md:bg-surface`).                                       |
-| 4   | welcome-create-hover  | Hover on "CREATE WALLET" — colour shift to `bg-bitcoin-hover`. (Trace `:hover` via `page.hover()`.)                             |
-| 5   | welcome-restore-hover | Hover on "Restore existing wallet" — text colour shifts to bitcoin orange.                                                      |
+| #   | Step                  | Notes                                                                                               |
+| --- | --------------------- | --------------------------------------------------------------------------------------------------- |
+| 1   | welcome-desktop       | Default 1440 × 900. PixelLogo, "Welcome to zkCoins" + ghost icon, 3 Benefit cards, both buttons.    |
+| 2   | welcome-mobile        | 375 × 812. Same content stacked.                                                                    |
+| 3   | welcome-tablet        | 768 × 1024 — the mid-breakpoint where the card frame appears (`md:border md:bg-surface`).           |
+| 4   | welcome-create-hover  | Hover on "CREATE WALLET" — colour shift to `bg-bitcoin-hover`. (Trace `:hover` via `page.hover()`.) |
+| 5   | welcome-restore-hover | Hover on "Restore existing wallet" — text colour shifts to bitcoin orange.                          |
 
 ### 8.2 `02-create-seed.spec.ts` (10 tests / 9 shots, 1 no-shot)
 
@@ -370,16 +419,16 @@ Settings page from Alice's wallet, all sections + every interactive widget the u
 
 WalletScreen balance area + copy chip + faucet banner under Alice and Bob.
 
-| #   | Step                        | Notes                                                                                                                            |
-| --- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | balance-funded-desktop      | Alice loaded. Balance $X + BTC value (masked), eye icon, address chip, Send/Receive enabled, no empty banner.                    |
-| 2   | balance-funded-mobile       | Same, 375 × 812.                                                                                                                 |
-| 3   | balance-hidden              | Eye toggle clicked → balance shows `••••`, EyeOff icon, BTC line also masked.                                                    |
-| 4   | balance-zero-faucet-visible | Bob loaded. Empty-wallet banner with "Wallet is empty" + Faucet button (mint is MVP; DEV runs Mutinynet so the button is shown). |
-| 5   | balance-faucet-minting      | Faucet click — button shows "Minting…" disabled. Intercept `/api/mint` to delay 800 ms.                                          |
-| 6   | balance-copied-feedback     | Click address chip — Check icon + "copied" text appear for 1.5 s (assert via `waitForFunction` immediately after click).         |
+| #   | Step                        | Notes                                                                                                                                              |
+| --- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | balance-funded-desktop      | Alice loaded. Balance $X + BTC value (masked), eye icon, address chip, Send/Receive enabled, no empty banner.                                      |
+| 2   | balance-funded-mobile       | Same, 375 × 812.                                                                                                                                   |
+| 3   | balance-hidden              | Eye toggle clicked → balance shows `••••`, EyeOff icon, BTC line also masked.                                                                      |
+| 4   | balance-zero-faucet-visible | Bob loaded. Empty-wallet banner with "Wallet is empty" + Faucet button (mint is MVP; DEV runs Mutinynet so the button is shown).                   |
+| 5   | balance-faucet-minting      | Faucet click — button shows "Minting…" disabled. Intercept `/api/jobs/mint` to delay 800 ms. (Spec removed — mint is exercised via `globalSetup`.) |
+| 6   | balance-copied-feedback     | Click address chip — Check icon + "copied" text appear for 1.5 s (assert via `waitForFunction` immediately after click).                           |
 
-### 8.7 `07-send.spec.ts` (13 tests / 12 shots, 1 no-shot)
+### 8.7 `07-send.spec.ts` (12 tests / 12 shots)
 
 The originally-planned `sending-creating-proof` and `send-failure-network`
 baselines were dropped: SendPage's `send()` callback runs
@@ -390,21 +439,20 @@ and the error variant adds little signal over `send-success`.
 
 The full Send pipeline plus every error branch. Alice → Bob, 1 000 sats.
 
-| #   | Step                        | Notes                                                                                                                                                                                              |
-| --- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | send-default                | `/send`, both inputs empty, "Send privately" disabled.                                                                                                                                             |
-| 2   | send-no-funds-banner        | Same page reached as Bob — "No funds to send" banner visible.                                                                                                                                      |
-| 3   | recipient-valid-hex         | Bob's hex address pasted. Amount still empty → button disabled.                                                                                                                                    |
-| 4   | recipient-valid-username    | `bob@zkcoins.app` typed (DEV-bundle artefact, see §8.0).                                                                                                                                           |
-| 5   | amount-typed                | Both fields valid, Send enabled.                                                                                                                                                                   |
-| 6   | amount-set-max-clicked      | Click "Set max" → input value flips to formatted balance.                                                                                                                                          |
-| 7   | amount-invalid-text         | Type `abc` → click Send → error "Invalid amount".                                                                                                                                                  |
-| 8   | amount-insufficient         | Amount > Alice's balance → click Send → error "Insufficient balance".                                                                                                                              |
-| 9   | confirm-dialog-desktop      | After Send with valid inputs — confirm card visible with amount + recipient + Cancel + Confirm Send.                                                                                               |
-| 10  | confirm-dialog-mobile       | Same on 375 × 812.                                                                                                                                                                                 |
-| 11  | confirm-cancel-back         | Click Cancel → returns to the form with inputs preserved.                                                                                                                                          |
-| 12  | send-success                | Server confirms — success screen with Check icon, "Sent privately", amount, proof #N, Done.                                                                                                        |
-| 13  | recovering-banner (no shot) | Seed an unfinished inflight commit in localStorage, reload, assert the orange "Recovering a previous in-flight transaction…" banner exists. (No shot — too transient under happy-path conditions.) |
+| #   | Step                     | Notes                                                                                                |
+| --- | ------------------------ | ---------------------------------------------------------------------------------------------------- |
+| 1   | send-default             | `/send`, both inputs empty, "Send privately" disabled.                                               |
+| 2   | send-no-funds-banner     | Same page reached as Bob — "No funds to send" banner visible.                                        |
+| 3   | recipient-valid-hex      | Bob's hex address pasted. Amount still empty → button disabled.                                      |
+| 4   | recipient-valid-username | `bob@zkcoins.app` typed (DEV-bundle artefact, see §8.0).                                             |
+| 5   | amount-typed             | Both fields valid, Send enabled.                                                                     |
+| 6   | amount-set-max-clicked   | Click "Set max" → input value flips to formatted balance.                                            |
+| 7   | amount-invalid-text      | Type `abc` → click Send → error "Invalid amount".                                                    |
+| 8   | amount-insufficient      | Amount > Alice's balance → click Send → error "Insufficient balance".                                |
+| 9   | confirm-dialog-desktop   | After Send with valid inputs — confirm card visible with amount + recipient + Cancel + Confirm Send. |
+| 10  | confirm-dialog-mobile    | Same on 375 × 812.                                                                                   |
+| 11  | confirm-cancel-back      | Click Cancel → returns to the form with inputs preserved.                                            |
+| 12  | send-success             | Server confirms — success screen with Check icon, "Sent privately", amount, proof #N, Done.          |
 
 ### 8.8 `08-receive.spec.ts` (4 tests / 4 shots)
 
@@ -417,18 +465,16 @@ The full Send pipeline plus every error branch. Alice → Bob, 1 000 sats.
 | 3   | receive-after-copy      | Click Copy address → button text flips to "Copied" with Check icon. |
 | 4   | receive-back-to-wallet  | Click Back → WalletScreen renders again.                            |
 
-### 8.9 `09-network-and-shell.spec.ts` (6 tests / 6 shots)
+### 8.9 `09-network-and-shell.spec.ts` (4 tests / 4 shots)
 
-AppShell + BottomNav + Network info badge. Covers the MVP "Network info badge" function plus the navigation chrome (`AppShell`, `BottomNav`, `FooterLinks`) that wraps every other screen — those aren't MVP functions on their own but every other spec inherits their pixels and would diff on chrome changes if we didn't lock them once here.
+AppShell + BottomNav + Network info badge. Covers the MVP "Network info badge" function plus the navigation chrome (`AppShell`, `BottomNav`) that wraps every other screen — those aren't MVP functions on their own but every other spec inherits their pixels and would diff on chrome changes if we didn't lock them once here.
 
 | #   | Step                            | Notes                                                                                               |
 | --- | ------------------------------- | --------------------------------------------------------------------------------------------------- |
 | 1   | shell-bottomnav-wallet-active   | WalletScreen rendered, Wallet tab orange, Apps + Settings inactive.                                 |
 | 2   | shell-bottomnav-settings-active | Navigate to Settings — Settings tab orange.                                                         |
-| 3   | shell-footerlinks-row           | Default row variant on Wallet screen — 7 entries dot-separated with dev-\* hosts.                   |
-| 4   | shell-footerlinks-grid          | Grid variant on Settings — same entries as 2-col cards with → and ↗ arrows.                         |
-| 5   | network-badge-signet            | Settings header right side — signet badge text + dot indicator. Subset shot of the badge area only. |
-| 6   | network-badge-loading           | Intercept `/api/info` with 1 s delay, screenshot Settings header before the badge appears.          |
+| 3   | network-info-node               | Connected node host shown in the Settings About card (`apiUrl` with the scheme stripped).            |
+| 4   | network-loading                 | Intercept `/api/info` with an 8 s delay, screenshot Settings while the Network row is absent.        |
 
 ### 8.10 `10-pwa.spec.ts` (4 tests / 4 shots)
 
@@ -485,7 +531,24 @@ keeps the allowlist entry until the next DEV deploy lands — the spec
 runs against DEV, so the entry only becomes false after the deploy.
 A trailing follow-up PR empties the array once DEV is live.
 
-### 8.14 Totals
+### 8.14 `14-network-activity.spec.ts` (2 tests / 2 shots)
+
+The `/network` "Network activity" page (issue #166) — the last always-on, ungated user-facing screen without a page-level golden. With these two shots, golden coverage of the live, ungated screens reaches 100% (env-gated features — PASSKEY, `/apps`, `/simulate` + `/reset` — stay excluded while their flags default to `false`). Spec 09 only shoots the network _badge_ on the Settings header, never `/network` itself.
+
+No login: `/network` has no route guard and reads no wallet state, so the spec navigates directly. No fixture dependency — the baselines are immune to DEV wallet state.
+
+Determinism (the page renders a live, self-advancing chart — three variance sources are pinned):
+
+1. **Clock** — `page.clock.install` + `page.clock.pauseAt(FIXED)` _before_ navigating freeze `Date.now()` and halt every timer (install alone resumes real time and would let the `POLL_MS = 8000` interval fire past ~8 s, appending a `nextSample()` built from unseeded `Math.random`). Frozen, `buildHistory({ endTs = Date.now(), seed = 1337 })` yields the identical 220-sample waveform every run and the chart can never tick before the snapshot.
+2. **Timezone + locale** — `timezoneId: 'UTC'` + `locale: 'en-US'` pin the `toLocaleTimeString` x-axis tick labels across runners (CI is UTC, dev machines usually aren't).
+3. **Data source** — the cross-origin explorer probe is `route.abort()`ed so `getNetworkActivity` always falls back to `source: 'simulated'`, regardless of the build's `NEXT_PUBLIC_EXPLORER_URL` (served-local CI bakes the not-yet-live PRD explorer URL; builds with the var unset never fetch, leaving the route inert). A visible-text guard on the explorer-preview note fails the spec loudly if the simulated path ever stops rendering. Service workers are blocked so the PWA SW cannot bypass the `page.route` intercept.
+
+| #   | Step                     | Notes                                                       |
+| --- | ------------------------ | ----------------------------------------------------------- |
+| 1   | network-activity-desktop | Frozen simulated chart, status row + explorer-preview note. |
+| 2   | network-activity-mobile  | Same on 375 × 812.                                          |
+
+### 8.15 Totals
 
 | Spec file                         | Tests  | Screenshots (linux only) |
 | --------------------------------- | ------ | ------------------------ |
@@ -497,13 +560,15 @@ A trailing follow-up PR empties the array once DEV is live.
 | `06-balance.spec.ts`              | 6      | 6                        |
 | `07-send.spec.ts`                 | 13     | 12                       |
 | `08-receive.spec.ts`              | 4      | 4                        |
-| `09-network-and-shell.spec.ts`    | 6      | 6                        |
+| `09-network-and-shell.spec.ts`    | 4      | 4                        |
 | `10-pwa.spec.ts`                  | 4      | 4                        |
 | `11-cross-spec-redirects.spec.ts` | 3      | 3                        |
 | `12-a11y.spec.ts`                 | 6      | 0                        |
-| **Σ**                             | **79** | **70**                   |
+| `13-send-server-errors.spec.ts`   | 4      | 3                        |
+| `14-network-activity.spec.ts`     | 2      | 2                        |
+| **Σ**                             | **83** | **73**                   |
 
-70 linux baselines, 79 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated. The accessibility spec is screenshot-free by design.
+73 linux baselines, 83 tests. Each baseline is justified by an enumerable interaction or render-conditional in the source — there is no padding, pure DEV-bundle navigation detours are traversed without a shot (§8.0 (a)), and visual-twin states (e.g. disabled toggles that don't change on hover) are folded into the canonical shot rather than duplicated. The accessibility spec is screenshot-free by design.
 
 ## 9. CI integration
 
@@ -584,7 +649,7 @@ Local iteration without CI: `E2E_BASE_URL=https://dev.zkcoins.app npx playwright
 
 - **PWA install**: §8.10 covers the deferred-prompt save path. The native browser prompt cannot be exercised headless. We accept this gap and document it here.
 - **Account creation crypto**: tested in unit tests (`src/__tests__/lib/crypto/*`) at 100%. Not re-tested at the E2E layer for individual byte values — E2E only proves "wallet exists and is functional after Create".
-- **Faucet flow** (`Mint test BTC` button): non-MVP, gated, but exists in the DEV build. We **do not** add a screenshot spec for it — it's exercised indirectly by the `globalSetup` faucet call, which fails the whole suite if `/api/mint` regresses.
+- **Faucet flow** (`Mint test BTC` button): non-MVP, gated, but exists in the DEV build. We **do not** add a screenshot spec for it — it's exercised indirectly by the `globalSetup` faucet call, which fails the whole suite if `/api/jobs/mint` regresses.
 - **Network-activity chart**: triage `keep`, non-MVP. Covered in `visual.spec.ts` today; the new specs drop it (no longer in the MVP file list).
 
 ## 11. Workflow for developers (and future Claude sessions)
@@ -592,7 +657,7 @@ Local iteration without CI: `E2E_BASE_URL=https://dev.zkcoins.app npx playwright
 ### 11.1 Adding a new MVP feature
 
 1. Add the feature to `README.md § Features` (mvp row).
-2. Add a step to the relevant spec or a new spec file in this plan (update §8 and the totals in §8.13).
+2. Add a step to the relevant spec or a new spec file in this plan (update §8 and the totals in §8.15).
 3. Implement the test. Add `data-testid` to the component only if a screenshot can't otherwise be stable (see §7).
 4. Run the baseline regen workflow on the feature branch.
 5. PR with `e2e-visual` green.
@@ -625,6 +690,7 @@ The implementation order **matters** because later specs depend on earlier helpe
 11. **PR-11** ✅: §8.10 `10-pwa.spec.ts` _(closes MVP triage gap)_.
 12. **PR-12** ✅: §8.11 `11-cross-spec-redirects.spec.ts`.
 13. **PR-13** ✅: §9 CI integration — `e2e-tests` job in `ci.yaml` plus `E2E Tests` as a required branch-protection context on `develop`.
+14. **PR-14**: §8.14 `14-network-activity.spec.ts` (issue #166) — page-level golden for `/network`; closes the last ungated-screen golden gap (live, ungated screens → 100%).
 
 **Transactions coverage** (the original "06 transactions" spec) lives inside `07-send.spec.ts`: every send produces a tx row, and the spec asserts both Alice's outbound row and Bob's inbound row at the end. The transaction icon variants (send/receive/mint) are exercised in `06-balance.spec.ts:balance-zero-faucet-visible` followed by the faucet-mint in `balance-faucet-minting`. No dedicated spec.
 
@@ -636,7 +702,7 @@ Each PR:
 - Dispatches `regenerate-visual-baselines.yml` via `gh workflow run "Regenerate Visual Baselines" --ref develop -f branch=develop`. The workflow opens a side-branch PR `e2e/regen-baselines-<run-id>` against develop (it does not push directly — see §9.2).
 - **Admin-merges the regen PR**: `gh pr merge <N> --squash --delete-branch --admin`. The protection rule allows admin override (`enforce_admins: false`), which is the unblocking mechanism while the GITHUB_TOKEN cascade-trigger limitation persists.
 - After baselines land, removes the spec from `testIgnore` in a second commit. CI now exercises the spec on every push.
-- Updates §8.13 totals in this file when the spec lands.
+- Updates §8.15 totals in this file when the spec lands.
 - Is reviewed for the screenshot diff in the regen PR by a human (or, for autonomous Claude work, by the next reviewer).
 
 If a PR can't reach green inside 25 minutes of CI: don't merge, downgrade to focused work; do **not** raise the timeout.
@@ -677,6 +743,11 @@ e2e/
 ├── 10-pwa.spec.ts-snapshots/
 ├── 11-cross-spec-redirects.spec.ts        # §8.11
 ├── 11-cross-spec-redirects.spec.ts-snapshots/
+├── 12-a11y.spec.ts                        # §8.13 — axe-core, screenshot-free
+├── 13-send-server-errors.spec.ts          # send error-toast goldens
+├── 13-send-server-errors.spec.ts-snapshots/
+├── 14-network-activity.spec.ts            # §8.14
+├── 14-network-activity.spec.ts-snapshots/
 └── webauthn.spec.ts                       # unchanged — non-MVP DEV-bundle passkey coverage
 ```
 
@@ -716,3 +787,33 @@ node e2e/_audit/coverage.mjs --report-only # always exit 0 (escape hatch for tra
 **Allowlisting**
 
 If a testid is intentionally out-of-scope (e.g. PASSKEY non-MVP code, transient loading states), add it to `MVP_EXEMPT_TESTIDS` in `e2e/_audit/coverage.mjs`. If a file contains generic wrapper components whose `<button>`s legitimately have no testid (the testid lives on the wrapper's usage site), add the file path to `MVP_EXEMPT_FILES`. For a button sitting inside a `{FEATURES.X && (...)}` JSX block — dead-stripped from the PRD bundle — add it to `MVP_EXEMPT_BUTTON_SNIPPETS` pinned to a stable substring of the surrounding code. All three lists demand a one-line comment justifying the exemption.
+
+## 15. Golden-Coverage-Audit (`_audit/golden-coverage.mjs`)
+
+The sibling of §14 at the **screen** level (issue #167): it fails CI when an active, ungated screen ships without a page-level visual golden — the `/network` / #166 failure mode. A naive filename check false-passes (spec 09 emits `09-network-badge-*.png`, but those are shot on `/settings`), so coverage is asserted against a declarative registry that pins each screen to its **exact** baseline name(s).
+
+Two source-of-truth layers:
+
+- **Route screens** — auto-inventoried from `src/app/<seg>/page.tsx`, minus the env-gated routes. A route is treated as gated when its body is `!FEATURES.<flag>) notFound()` for a `<flag>` in `ENV_GATED_FEATURES` (`e2e/_audit/gates.mjs`) — the **same** shared flag set the §14 button audit uses for its `MVP_EXEMPT_BUTTON_SNIPPETS`, so the two audits cannot drift on what "env-gated" means.
+- **State-driven `/` views** (Onboarding / Unlock / Wallet) — not routes, so declared explicitly in the registry `e2e/_audit/screens.ts`.
+
+**Fails when** (a) a non-gated `page.tsx` route is absent from the registry (the "won't happen again" guarantee — a new route without a registered golden breaks CI), or (b) a registered screen's expected baseline file(s) are missing from the matching `e2e/*.spec.ts-snapshots/` directory; plus integrity failures (stale registry entry, unknown `gate`, or a registry gate that disagrees with the route's actual `notFound()` guard).
+
+**Run locally**
+
+```bash
+node e2e/_audit/golden-coverage.mjs              # strict: exit 1 on an uncovered screen or missing golden
+node e2e/_audit/golden-coverage.mjs --markdown   # output formatted for PR comments
+node e2e/_audit/golden-coverage.mjs --json       # machine-readable
+node e2e/_audit/golden-coverage.mjs --report-only # always exit 0 (escape hatch for transient debugging)
+```
+
+(Imports the typed registry `screens.ts` directly via Node's built-in TypeScript type-stripping — Node ≥ 22.18, same `node-version: '22'` the workflows pin.)
+
+**CI integration**
+
+`.github/workflows/audit-golden-coverage.yml` mirrors the button audit's trigger matrix (every PR regardless of target branch + push to `develop`) and posts a sticky comment (`audit-golden-coverage`) with the screen → golden table.
+
+**Registering / exempting**
+
+Add a new ungated screen to `SCREENS` in `e2e/_audit/screens.ts` with its expected baseline name(s), then land the golden via the `regenerate-visual-baselines` workflow. To exempt a route, env-gate it in source with `!FEATURES.<flag>) notFound()` and ensure `<flag>` is in `ENV_GATED_FEATURES` (`e2e/_audit/gates.mjs`) — that one list is the shared env-gate allowlist for both audits.

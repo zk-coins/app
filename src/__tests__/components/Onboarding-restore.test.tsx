@@ -59,7 +59,6 @@ beforeEach(() => {
   useWalletStore.setState({
     account: null,
     balance: null,
-    transactions: [],
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
