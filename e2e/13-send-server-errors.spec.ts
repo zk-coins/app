@@ -1,5 +1,5 @@
 /**
- * Spec 13 — Send Bitcoin: server `ApiError` → German toast (issue #99).
+ * Spec 13 — Send Bitcoin: server `ApiError` → localised toast (issue #99).
  *
  * The Jobs API (node PR #161) admits a send at `POST /api/jobs/send` and
  * verifies the signed request synchronously before enqueueing: a bad
@@ -18,9 +18,10 @@
  * the UI settles cleanly on the error state before we capture the shot.
  *
  * Locator strategy: testid-based on `send-error`. Each known server
- * string asserts both the *text* (German translation) and a screenshot
- * baseline. The fallback path (unmapped 418) is text-only — a regression
- * guard for the `Serverfehler <status>: <raw>` shape.
+ * string asserts both the *text* (the active-locale translation; the E2E
+ * build pins `NEXT_PUBLIC_E2E_LOCALE=en`) and a screenshot baseline. The
+ * fallback path (unmapped 418) is text-only — a regression guard for the
+ * `Server error <status>: <raw>` shape.
  */
 
 import { expect, test, type Page } from '@playwright/test';

@@ -8,32 +8,33 @@
  * updated in lockstep — the unit test in
  * `src/__tests__/lib/api/error-mapping.test.ts` fails otherwise.
  *
- * Lookup is two-layer:
- *   1. `SERVER_ERROR_TO_USER_MESSAGE` — exact-string match. This is the
- *      lockstep contract: every entry in `KNOWN_SERVER_ERRORS` must
- *      resolve here (asserted by the unit test) and stays in lockstep
- *      with the `api_remote.rs::error_strings_match_known_app_mapping`
- *      test in `zk-coins/node`.
- *   2. `SERVER_ERROR_PATTERNS` — regex fallback for *families* of
- *      diagnostic strings the node may emit with varying wording (e.g.
- *      `"<field> is not valid hex"` for any field name, or
- *      `"<field> must be 32 bytes (64 hex chars)"`). The node prefers
- *      diagnostic, field-naming strings; this layer keeps the UX
- *      consistent without forcing the node to flatten its messages back
- *      to the generic forms in `KNOWN_SERVER_ERRORS`.
+ * ## i18n
  *
- * Patterns intentionally may overlap with `KNOWN_SERVER_ERRORS`
- * strings (e.g. the hex pattern matches both the diagnostic
- * `"<field> is not valid hex"` and the exact `"Invalid hex"`). The
- * exact-match pass runs first, so the pattern is dead code for that
- * specific string — that is fine and asserted by the unit test
- * `every KNOWN_SERVER_ERRORS string resolves via the exact-match
- * table, not via a pattern`. Catching pattern takeover matters: if a
- * future refactor deletes an exact entry, the pattern fallback might
- * silently swap the German copy for a different translation.
+ * The user-facing copy now lives in the message catalogs
+ * (`messages/{de,en}.json` under the `errors.*` keys) rather than as
+ * hardcoded German literals here. The server-error string maps to a
+ * catalog KEY (`SERVER_ERROR_TO_KEY`); the actual translation is resolved
+ * by a translator. `userMessageFor` accepts an optional translator `t`
+ * (the `errors`-namespaced `useTranslations('errors')` from a component)
+ * so the message renders in the active locale. When called without one
+ * (pure-function contexts, the lockstep test) it falls back to a
+ * default-locale (`de`) translator built from the catalog — so the German
+ * copy still comes from the catalog, not from this file.
+ *
+ * Lookup is two-layer:
+ *   1. `SERVER_ERROR_TO_KEY` — exact-string match (the lockstep contract).
+ *   2. `SERVER_ERROR_PATTERNS` — regex fallback for *families* of
+ *      diagnostic strings the node may emit with varying wording.
  */
 
+import { createTranslator } from 'next-intl';
+
+import deMessages from '../../../messages/de.json';
+import { defaultLocale } from '@/i18n/config';
 import { ApiError, JobFailedError } from './client';
+
+/** A translator over the `errors` namespace — e.g. `useTranslations('errors')`. */
+export type ErrorTranslator = (key: string, values?: Record<string, string | number>) => string;
 
 /**
  * The exact set of `error` strings the server can emit. Used by the
@@ -65,100 +66,110 @@ export const KNOWN_SERVER_ERRORS = [
 ] as const;
 
 /**
- * @internal — exported only for the lockstep test in
- * `error-mapping.test.ts`. Not a public API; production callers use
- * `userMessageFor()` instead.
+ * Server-error string → catalog key (under the `errors` namespace). Every
+ * `KNOWN_SERVER_ERRORS` entry must resolve here (asserted by the unit
+ * test) and stay in lockstep with the node's
+ * `api_remote.rs::error_strings_match_known_app_mapping` test.
  */
-export const SERVER_ERROR_TO_USER_MESSAGE: Record<string, string> = {
+export const SERVER_ERROR_TO_KEY: Record<string, string> = {
   // 422 — user-fixable
-  'Insufficient funds': 'Nicht genug Guthaben für diese Überweisung.',
-  'Coin should not exist in coin history tree': 'Diese Coin wurde bereits versendet.',
-  'Too many in-coins for one transition': 'Zu viele eingehende Coins für eine Transaktion (max 8).',
-  'Too many out-coins for one transition': 'Zu viele Empfänger für eine Transaktion (max 8).',
+  'Insufficient funds': 'insufficientFunds',
+  'Coin should not exist in coin history tree': 'coinAlreadySent',
+  'Too many in-coins for one transition': 'tooManyInCoins',
+  'Too many out-coins for one transition': 'tooManyOutCoins',
 
   // 404 — user-fixable
-  'Unknown account address': 'Dieser Account ist auf dem Server nicht bekannt.',
+  'Unknown account address': 'unknownAccount',
 
   // 401 — user-fixable
-  'Signature verification failed': 'Signaturprüfung fehlgeschlagen.',
-  'Missing signature': 'Anfrage ist nicht signiert.',
-  'Request timestamp too old or in the future': 'Zeitstempel ausserhalb des Toleranzfensters.',
+  'Signature verification failed': 'signatureFailed',
+  'Missing signature': 'missingSignature',
+  'Request timestamp too old or in the future': 'timestampOutOfRange',
 
   // 422 — client-bug, generic
-  "In-coin not present in source's output_coins_root":
-    'Interner Fehler: Coin-Validierung fehlgeschlagen.',
-  'Source commitment not present in history MMR':
-    'Interner Fehler: Quellnachweis nicht in der Historie.',
-  'Coin is missing commitment': 'Interner Fehler: Coin-Commitment fehlt.',
-  'Should provide an inclusion proof': 'Interner Fehler: Inclusion-Proof fehlt.',
-  'Coin should not exist in tree yet': 'Interner Fehler: Coin-Baum inkonsistent.',
+  "In-coin not present in source's output_coins_root": 'inCoinMissing',
+  'Source commitment not present in history MMR': 'sourceCommitmentMissing',
+  'Coin is missing commitment': 'coinMissingCommitment',
+  'Should provide an inclusion proof': 'missingInclusionProof',
+  'Coin should not exist in tree yet': 'coinTreeInconsistent',
 
   // 400 — client-bug, generic
-  'prev_commitment_pubkey required for account update':
-    'Interner Fehler: Vorheriger Public Key fehlt.',
+  'prev_commitment_pubkey required for account update': 'prevPubkeyMissing',
 
   // 500 — operator-visible
-  'prove failed': 'Beweisgenerierung fehlgeschlagen. Bitte später erneut versuchen.',
-  'internal error': 'Unerwarteter Serverfehler.',
+  'prove failed': 'proveFailed',
+  'internal error': 'internalError',
 
   // 503 — transient
-  'Broadcast failed': 'Bitcoin-Broadcast fehlgeschlagen. Bitte später erneut versuchen.',
+  'Broadcast failed': 'broadcastFailed',
 
   // 422 — request shape
-  'Invalid hex': 'Ungültige Hex-Eingabe.',
-  'Invalid address length': 'Ungültige Adresslänge.',
+  'Invalid hex': 'invalidHex',
+  'Invalid address length': 'invalidAddressLength',
 };
+
+/** Default-locale (`de`) translator over the `errors` namespace. Cast to
+ *  the loose {@link ErrorTranslator} shape so callers (and the
+ *  `serverErrorFallback` placeholder substitution) need not satisfy
+ *  next-intl's compile-time message-key typing for a dynamically-chosen
+ *  key. */
+const defaultTranslator: ErrorTranslator = createTranslator({
+  locale: defaultLocale,
+  messages: deMessages,
+  namespace: 'errors',
+}) as unknown as ErrorTranslator;
+
+/**
+ * @internal — exported only for the lockstep test in
+ * `error-mapping.test.ts`. Resolves every {@link SERVER_ERROR_TO_KEY}
+ * entry through the default-locale (`de`) catalog so the test can assert
+ * each known server error has a real, non-fallback message. Production
+ * callers use `userMessageFor()`.
+ */
+export const SERVER_ERROR_TO_USER_MESSAGE: Record<string, string> = Object.fromEntries(
+  Object.entries(SERVER_ERROR_TO_KEY).map(([serverError, key]) => [
+    serverError,
+    defaultTranslator(key),
+  ]),
+);
 
 /**
  * Family-level patterns for diagnostic node error strings that vary by
- * field name or wording. Tried only when no exact match is found in
- * `SERVER_ERROR_TO_USER_MESSAGE`. Order matters: specific patterns must
- * precede broader ones. Each entry maps to one of the existing German
- * user messages so the UX is consistent between exact-matched and
- * family-matched errors.
+ * field name or wording → catalog key. Tried only when no exact match is
+ * found. Order matters: specific patterns must precede broader ones.
  */
 const SERVER_ERROR_PATTERNS: Array<readonly [RegExp, string]> = [
-  // Hex validation errors. Node emits e.g.
-  // "account_address is not valid hex" — any field, any wording variant.
-  [/(?:is not valid hex|invalid hex)/i, 'Ungültige Hex-Eingabe.'],
-  // Address length errors. Node emits e.g.
-  // "account_address must be 32 bytes (64 hex chars)" or
-  // "recipient must be 32 bytes (64 hex chars)" — varies by field.
-  [/(?:must be \d+ bytes|invalid address length|address length)/i, 'Ungültige Adresslänge.'],
-  // Bitcoin broadcast failures. Node may emit "Broadcast failed"
-  // (exact-matched above) or the diagnostic
-  // "Failed to broadcast commitment inscription on-chain".
-  [
-    /(?:^Broadcast failed$|^Failed to broadcast)/i,
-    'Bitcoin-Broadcast fehlgeschlagen. Bitte später erneut versuchen.',
-  ],
+  [/(?:is not valid hex|invalid hex)/i, 'invalidHex'],
+  [/(?:must be \d+ bytes|invalid address length|address length)/i, 'invalidAddressLength'],
+  [/(?:^Broadcast failed$|^Failed to broadcast)/i, 'broadcastFailed'],
 ];
 
 /**
  * Map an `ApiError` or `JobFailedError` to a translated, user-facing
- * message. Falls back to `Serverfehler <status>: <raw>` when the server
- * emits an unmapped string (a lockstep gap that the unit test must
- * catch — the fallback exists so production users don't see a crash,
- * not as a permitted resting state).
+ * message. Pass the `errors`-namespaced translator (`useTranslations(
+ * 'errors')`) from a component to render in the active locale; omit it
+ * (pure-function contexts / tests) to get the default-locale copy.
  *
- * Both error classes carry the same node failure-contract string in
- * `serverError`: an `ApiError` when the node rejects at admit time
- * (synchronous 4xx/5xx), a `JobFailedError` when the same failure
- * surfaces later on the async job (`status: failed | cancelled`,
- * issue #99's async leg). A `JobFailedError` may carry no string at
- * all (the node ended the job without an `error` field) — that case
- * gets the generic fallback with a German placeholder.
+ * Falls back to a translated "Server error <status>: <raw>" string when
+ * the server emits an unmapped error string (a lockstep gap the unit
+ * test must catch — the fallback exists so users don't see a crash).
  */
-export function userMessageFor(error: ApiError | JobFailedError): string {
+export function userMessageFor(
+  error: ApiError | JobFailedError,
+  t: ErrorTranslator = defaultTranslator,
+): string {
   const serverError = error.serverError;
   if (serverError !== undefined) {
-    const exact = SERVER_ERROR_TO_USER_MESSAGE[serverError];
-    if (exact !== undefined) return exact;
+    const exactKey = SERVER_ERROR_TO_KEY[serverError];
+    if (exactKey !== undefined) return t(exactKey);
 
-    for (const [pattern, message] of SERVER_ERROR_PATTERNS) {
-      if (pattern.test(serverError)) return message;
+    for (const [pattern, key] of SERVER_ERROR_PATTERNS) {
+      if (pattern.test(serverError)) return t(key);
     }
   }
 
-  return `Serverfehler ${error.status}: ${serverError ?? 'unbekannter Fehler'}`;
+  return t('serverErrorFallback', {
+    status: error.status,
+    detail: serverError ?? t('unknownError'),
+  });
 }

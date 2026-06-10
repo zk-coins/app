@@ -1,45 +1,30 @@
 /**
- * Live API contract test.
+ * Live API contract test (neutral multi-asset model).
  *
- * Issue #68 / Workstream 3 — Layer B.
+ * Skipped by default. Runs only when `process.env.RUN_API_CONTRACT === 'true'`.
+ * The point is to catch the case where the Rust server response shape drifts
+ * from what the Zod schemas expect — before it shows up as an opaque crash.
  *
- * Skipped by default. Runs only when `process.env.RUN_API_CONTRACT === 'true'`,
- * which is set by the `api-contract.yml` GitHub Actions workflow (push
- * to `main`, weekly cron, `workflow_dispatch`) and locally when you
- * opt in. The whole point is to catch the case where the Rust server
- * response shape drifts from what the Zod schemas in
- * `src/lib/api/schemas.ts` expect — *before* it shows up as an opaque
- * crash in production.
+ * **Endpoint choice.** The probe stays on endpoints that don't require a
+ * full WASM signing path (the real WASM module does not load under vitest's
+ * happy-dom runner — that belongs in the Playwright e2e suite):
  *
- * Cost / flake: each invocation hits the real API target
- * (`E2E_API_URL || https://dev-api.zkcoins.app`), spends a real proof,
- * and is gated by server health. Hence not part of required per-PR CI.
+ *   - `GET  /api/info`                  → InfoResponseSchema
+ *   - `GET  /api/balance/:address`      → OwnerBalanceResponseSchema
+ *   - `GET  /api/balance?address&asset` → BalanceResponseSchema
  *
- * **Endpoint choice.** The probe deliberately stays on endpoints that
- * do not require Schnorr-signed payloads:
- *
- *   - `GET  /api/info`                            → InfoResponseSchema
- *   - `POST /api/jobs/mint` + poll to `completed` → JobAccepted / JobStatus
- *   - `GET  /api/balance?address=…`               → BalanceResponseSchema
- *
- * The mint lifecycle exercises `JobAcceptedSchema` (202 admit) and
- * `JobStatusSchema` (poll body, incl. the completed `result` envelope).
- * Adding a real `/api/jobs/send` probe would mean running real WASM, and
- * the real WASM module does not load under vitest's happy-dom runner
- * (`isWasm === false`, JS fallback throws on every method) — that
- * branch belongs in the Playwright e2e suite, not here.
+ * The create-coin (mint) lifecycle needs Schnorr signing, so it is exercised
+ * end-to-end by the e2e harness against a real node, not here.
  */
 
 import { describe, it, expect, beforeAll } from 'vitest';
-import { api } from '@/lib/api/client';
+import { api, BalanceResponseSchema, OwnerBalanceResponseSchema } from '@/lib/api/client';
 import { useNetworkStore } from '@/stores/network';
-import { BalanceResponseSchema, InfoResponseSchema } from '@zkcoins/sdk';
+import { InfoResponseSchema } from '@zkcoins/sdk';
 
 const RUN = process.env.RUN_API_CONTRACT === 'true';
-const API_URL = process.env.E2E_API_URL ?? 'https://dev-api.zkcoins.app';
+const API_URL = process.env.E2E_API_URL ?? 'http://127.0.0.1:4242';
 
-/** Random 64-hex address. The server accepts any well-formed address
- *  for `/api/mint`; we never need to control the underlying keys. */
 function randomAddress(): string {
   const bytes = new Uint8Array(32);
   crypto.getRandomValues(bytes);
@@ -57,34 +42,15 @@ describe.skipIf(!RUN)('live API contract', () => {
     expect(typeof res.network).toBe('string');
   });
 
-  // `/api/mint` triggers real ZK proof generation on the server — typical
-  // 10–20 s on DEV. Vitest's 5 s default would time out before the
-  // response lands. Same per-test override for any endpoint that
-  // depends on a fresh mint.
-  const MINT_TIMEOUT_MS = 120_000;
+  it('GET /api/balance/:address parses against OwnerBalanceResponseSchema', async () => {
+    const res = await api.ownerBalances(randomAddress());
+    expect(() => OwnerBalanceResponseSchema.parse(res)).not.toThrow();
+    expect(Array.isArray(res.assets)).toBe(true);
+  });
 
-  it(
-    'POST /api/jobs/mint completes and returns a success result',
-    async () => {
-      const terminal = await api.mint(randomAddress());
-      expect(terminal.status).toBe('completed');
-      expect(terminal.result?.success).toBe(true);
-    },
-    MINT_TIMEOUT_MS,
-  );
-
-  it(
-    'GET /api/balance parses against BalanceResponseSchema',
-    async () => {
-      // Mint into a fresh address, then read its balance back. Here we
-      // want a fully populated row; the zero-balance path (unobserved
-      // address → 200 with `balance: 0`) is exercised by the unit tests.
-      const address = randomAddress();
-      await api.mint(address);
-      const res = await api.balance(address);
-      expect(() => BalanceResponseSchema.parse(res)).not.toThrow();
-      expect(res.balance).toBeGreaterThan(0);
-    },
-    MINT_TIMEOUT_MS,
-  );
+  it('GET /api/balance?address&asset_id parses against BalanceResponseSchema', async () => {
+    const res = await api.balance(randomAddress(), randomAddress());
+    expect(() => BalanceResponseSchema.parse(res)).not.toThrow();
+    expect(typeof res.balance).toBe('number');
+  });
 });

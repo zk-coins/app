@@ -1,5 +1,7 @@
 import type { Metadata, Viewport } from 'next';
 import { Inter, JetBrains_Mono, VT323 } from 'next/font/google';
+import { NextIntlClientProvider } from 'next-intl';
+import { activeLocale, getMessages } from '@/i18n/config';
 import './globals.css';
 
 const inter = Inter({
@@ -39,14 +41,17 @@ export const metadata: Metadata = {
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const messages = getMessages(activeLocale);
   return (
     <html
-      lang="en"
+      lang={activeLocale}
       className={`${inter.variable} ${mono.variable} ${pixel.variable}`}
       suppressHydrationWarning
     >
       <body className="min-h-screen bg-bg font-sans text-ink antialiased" suppressHydrationWarning>
-        {children}
+        <NextIntlClientProvider locale={activeLocale} messages={messages}>
+          {children}
+        </NextIntlClientProvider>
         <script
           dangerouslySetInnerHTML={{
             __html: `

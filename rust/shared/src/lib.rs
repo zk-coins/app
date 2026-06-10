@@ -8,9 +8,12 @@ use bitcoin::{
     Network,
 };
 use lazy_static::lazy_static;
+use plonky2::field::goldilocks_field::GoldilocksField;
+use plonky2::field::types::Field;
+use plonky2::hash::poseidon::PoseidonHash;
+use plonky2::plonk::config::Hasher;
 use rand::Rng;
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
 
 lazy_static! {
     pub static ref SECP256K1: Secp256k1<All> = Secp256k1::new();
@@ -20,8 +23,38 @@ pub type HashDigest = [u8; 32];
 pub type Address = HashDigest;
 pub type Amount = u64;
 
+/// Goldilocks field — the native field of the node's Poseidon (`F = GF(2^64 - 2^32 + 1)`).
+type F = GoldilocksField;
+
+/// Protocol hash `H` — Poseidon over Goldilocks, serialised to 32 bytes.
+///
+/// This MUST stay byte-for-byte identical to the node's
+/// `zkcoins_program::hash::{hash_bytes, digest_to_bytes}` (see
+/// `node/program-plonky2/src/hash.rs`): the node credits a minted asset to
+/// `owner = digest_to_bytes(Poseidon(creator_pubkey))`, so the wallet
+/// address — `H(pubkey_0)` — only matches the node's owner when this packing
+/// and serialisation match exactly.
+///
+///   - input bytes packed 7-per-field-element, little-endian (keeps each
+///     limb < 2^56 < Goldilocks modulus, so no non-canonical wraparound);
+///   - `hash_no_pad` over those field elements;
+///   - the 4-element digest serialised big-endian per element to 32 bytes.
+///
+/// SHA256 (the prior protocol hash) only survives at the Bitcoin-signing
+/// boundary, where the WASM signer hashes the message bytes before Schnorr.
 pub fn hash(data: &[u8]) -> HashDigest {
-    Sha256::digest(data).into()
+    let mut elements = Vec::with_capacity(data.len().div_ceil(7));
+    for chunk in data.chunks(7) {
+        let mut buf = [0u8; 8];
+        buf[..chunk.len()].copy_from_slice(chunk);
+        elements.push(F::from_canonical_u64(u64::from_le_bytes(buf)));
+    }
+    let digest = PoseidonHash::hash_no_pad(&elements);
+    let mut out = [0u8; 32];
+    for (i, e) in digest.elements.iter().enumerate() {
+        out[i * 8..(i + 1) * 8].copy_from_slice(&e.0.to_be_bytes());
+    }
+    out
 }
 
 #[derive(Deserialize, Serialize, Clone, Debug)]
