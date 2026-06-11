@@ -60,8 +60,10 @@ export function WalletScreen() {
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
 
-  // Faucet visibility (single-asset surface only): MVP `/api/mint` ships on
-  // every node; the only gate is defence-in-depth against minting on
+  // Faucet visibility (single-asset surface only): the faucet is a
+  // creator-signed self-mint (`api.mint` → `createCoin` — the node's
+  // neutral permissionless model has no server-mediated mint), so it works
+  // on every node; the only gate is defence-in-depth against minting on
   // mainnet. `bitcoin_network` is the normalised enum (node#193); fall back
   // to a lower-cased free-text compare when a pre-#193 node omits it.
   const isMainnet =
@@ -331,11 +333,13 @@ export function WalletScreen() {
                   data-testid="faucet-btn"
                   data-minting={minting || undefined}
                   onClick={async () => {
-                    if (!account || minting) return;
+                    // The creator-signed self-mint needs the wallet key —
+                    // same guard as the username claim above.
+                    if (!account || !account.xpriv || minting) return;
                     setMinting(true);
                     setMintError(null);
                     try {
-                      await api.mint(account.address);
+                      await api.mint({ account_address: account.address, xpriv: account.xpriv });
                       const res = await api.walletBalance(account.address);
                       setBalance(res.balance);
                       syncNumPubkeys(res.num_sends);

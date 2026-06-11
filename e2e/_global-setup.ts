@@ -54,8 +54,11 @@ async function pollPortfolioFunded(address: string): Promise<number> {
   );
 }
 
-/** Poll the single-asset balance until it rises above 0 (the faucet mint
- *  has settled). Single-asset leg. */
+/** Poll the single-asset balance read (`GET /api/balance?address=`, the
+ *  same request the single-asset UI performs — the CI info-proxy
+ *  translates it to a portfolio aggregate, see `_helpers/api.ts`) until
+ *  it rises above 0 (the creator-signed mint has settled). Single-asset
+ *  leg. */
 async function pollBalanceFunded(address: string): Promise<number> {
   const deadline = Date.now() + BALANCE_POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
@@ -72,32 +75,21 @@ async function pollBalanceFunded(address: string): Promise<number> {
   );
 }
 
-/** Faucet-mint `address` with a small retry on transient admit failures.
- *  Single-asset leg — credits the address directly (server-mediated). */
-async function mintWithRetry(address: string, attempt = 1): Promise<void> {
-  const maxAttempts = 3;
-  try {
-    await api.mint(address);
-  } catch (err) {
-    if (attempt >= maxAttempts) throw err;
-    const wait = 1_000 * 2 ** (attempt - 1);
-    console.warn(
-      `globalSetup: /api/jobs/mint failed (attempt ${attempt}/${maxAttempts}), retrying in ${wait}ms`,
-    );
-    await new Promise((r) => setTimeout(r, wait));
-    return mintWithRetry(address, attempt + 1);
-  }
-}
-
 /** Run the creator-signed create-coin flow for `mnemonic`'s wallet, with a
- *  small retry on transient admit/proof failures. Each call mints a fresh,
- *  uniquely-named asset (the helper auto-generates the name). Returns the
- *  wallet's Poseidon owner address — the one the node credits and the one
- *  the portfolio poll must query. */
-async function createCoinWithRetry(mnemonic: string, attempt = 1): Promise<string> {
+ *  small retry on transient admit/proof failures. Without `opts.name` each
+ *  call mints a fresh, uniquely-named asset (the helper auto-generates the
+ *  name); the single-asset leg passes a deterministic fixture name instead
+ *  so re-runs produce identical metadata. Returns the wallet's Poseidon
+ *  owner address — the one the node credits and the one the balance poll
+ *  must query. */
+async function createCoinWithRetry(
+  mnemonic: string,
+  opts: { name?: string } = {},
+  attempt = 1,
+): Promise<string> {
   const maxAttempts = 3;
   try {
-    const { address } = await api.createCoin(mnemonic);
+    const { address } = await api.createCoin(mnemonic, opts);
     return address;
   } catch (err) {
     if (attempt >= maxAttempts) throw err;
@@ -106,7 +98,7 @@ async function createCoinWithRetry(mnemonic: string, attempt = 1): Promise<strin
       `globalSetup: create-coin failed (attempt ${attempt}/${maxAttempts}), retrying in ${wait}ms`,
     );
     await new Promise((r) => setTimeout(r, wait));
-    return createCoinWithRetry(mnemonic, attempt + 1);
+    return createCoinWithRetry(mnemonic, opts, attempt + 1);
   }
 }
 
@@ -207,19 +199,24 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     );
   }
 
-  // Branch the seeding strategy on the node's REAL multi-asset capability.
-  // The E2E api helper hits the node directly (E2E_API_URL → the info-proxy
-  // in CI, which passes /api/jobs/* through 1:1), so this reflects what the
-  // upstream node actually supports:
-  //   - false → seed Alice via the MVP faucet (`/api/jobs/mint` crediting
-  //     her address directly), matching the single-asset wallet surface.
-  //   - true  → seed Alice via the creator-signed create-coin flow (she
-  //     mints her own asset), matching the multi-asset portfolio surface.
+  // Branch the seeding strategy on the REPORTED multi-asset capability.
+  // The E2E api helper hits E2E_API_URL (the info-proxy in CI, which
+  // normalises `multi_asset` to false and passes /api/jobs/* through 1:1).
+  // Either way the seed itself is the creator-signed create-coin flow —
+  // the node's neutral permissionless model has no server-mediated faucet,
+  // so a wallet is funded by minting an asset it owns. The branches differ
+  // only in surface semantics:
+  //   - false → single-asset UI mode: mint ONE deterministic fixture asset
+  //     and confirm funding via the same single-asset balance read the UI
+  //     performs (proxy-translated, see `_helpers/api.ts::walletBalance`).
+  //   - true  → multi-asset UI mode: mint uniquely-named assets and confirm
+  //     funding via the per-owner portfolio.
   const multiAsset = info.capabilities?.multi_asset === true;
 
   const browser = await chromium.launch();
   try {
-    // Alice: fresh wallet, then seed via /api/jobs/mint × FAUCET_CALLS.
+    // Alice: fresh wallet, then seed via the creator-signed
+    // /api/jobs/mint (admit → commit → completed) × FAUCET_CALLS.
     const aliceCtx = await browser.newContext({ baseURL });
     applyColdStartTimeouts(aliceCtx);
     const alice = await withPageRetry(aliceCtx, 'create Alice wallet', async (page) => {
@@ -252,10 +249,24 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       }
       seededBalance = await pollPortfolioFunded(mintedAddress || alice.address);
     } else {
-      // Single-asset: seed Alice via the MVP faucet, which credits her wallet
-      // address directly (no creator signature, no asset).
+      // Single-asset UI mode: same creator-signed mint (there is no faucet —
+      // the node rejects the old `{account_address, amount}` body with a 422),
+      // but with a deterministic fixture asset name so re-runs are stable.
+      // Alice is fresh per run and the asset_id derives from
+      // (creator_pubkey, name, decimals), so the constant base name cannot
+      // collide across runs; extra FAUCET_CALLS get an index suffix because
+      // the SAME creator re-minting an identical name WOULD collide.
+      let mintedAddress = '';
       for (let i = 0; i < FAUCET_CALLS; i++) {
-        await mintWithRetry(alice.address);
+        const name = i === 0 ? 'E2E-FIXTURE' : `E2E-FIXTURE-${i + 1}`;
+        mintedAddress = await createCoinWithRetry(alice.mnemonic.join(' '), { name });
+      }
+      if (mintedAddress && alice.address && mintedAddress !== alice.address) {
+        throw new Error(
+          `globalSetup: wasm-derived mint owner (${mintedAddress}) != wallet UI address ` +
+            `(${alice.address}). The app and the e2e helper derive the wallet address ` +
+            `differently — the wallet screen would never show the minted funds.`,
+        );
       }
       seededBalance = await pollBalanceFunded(alice.address);
     }

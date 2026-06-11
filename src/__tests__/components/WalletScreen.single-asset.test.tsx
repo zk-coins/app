@@ -127,7 +127,12 @@ describe('WalletScreen — single-asset balance hero', () => {
     await act(async () => {
       await user.click(faucet);
     });
-    expect(mintSpy).toHaveBeenCalledWith(ALICE.address);
+    // The faucet is a creator-signed self-mint — it signs with the wallet
+    // key instead of posting the old server-mediated `{account_address}`.
+    expect(mintSpy).toHaveBeenCalledWith({
+      account_address: ALICE.address,
+      xpriv: ALICE.xpriv,
+    });
     await waitFor(() => {
       expect(balanceSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
     });

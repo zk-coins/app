@@ -740,21 +740,33 @@ export const api = {
   walletBalance: (address: string): Promise<BalanceResponse> => client().balance(address),
 
   /**
-   * Faucet / authorised mint — single-asset surface only. Server-mediated
-   * end-to-end (no wallet signature): admit the job (mandatory
-   * `Idempotency-Key`) and poll to `completed`. Throws `JobFailedError` on
-   * a terminal `failed` / `cancelled`, `ApiError` on a non-2xx admit (e.g.
-   * mainnet, where the faucet is not served).
+   * Faucet self-mint — single-asset surface only. The node's neutral
+   * permissionless model (node #220) has no server-mediated faucet: every
+   * `POST /api/jobs/mint` is the creator-signed two-phase contract and
+   * credits `owner = H(creator_pubkey)` — the old `{account_address,
+   * amount}` body is rejected with a 422. "Faucet" therefore means the
+   * wallet mints a fresh asset of its own: this delegates to `createCoin`
+   * with a generated faucet asset name. The name is unique per call
+   * because the asset_id derives from `(creator_pubkey, name, decimals)`
+   * — re-minting an identical name from the same wallet would collide
+   * with the previous faucet asset. Throws `JobFailedError` on a terminal
+   * `failed` / `cancelled`, `ApiError` on a non-2xx admit.
    */
   mint: async (
-    address: string,
+    params: { account_address: string; xpriv: string },
     amount: number = 10_000,
     opts: { onPhase?: (status: JobStatus) => void } = {},
-  ): Promise<JobStatus> => {
-    const c = client();
-    const accepted = await c.mintJob({ account_address: address, amount }, newIdempotencyKey());
-    return waitForJob(c, accepted.job_id, TERMINAL_STATUSES, opts);
-  },
+  ): Promise<JobStatus> =>
+    api.createCoin(
+      {
+        account_address: params.account_address,
+        name: `FAUCET-${Date.now()}`,
+        decimals: 0,
+        amount,
+        xpriv: params.xpriv,
+      },
+      opts,
+    ),
 
   info: (): Promise<InfoResponse> => client().info(),
 

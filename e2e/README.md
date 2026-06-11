@@ -65,9 +65,9 @@ What exists today in `e2e/`:
 | Env var                | Default                       | Purpose                                                                                                                                                                                                                                                                              |
 | ---------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | `E2E_BASE_URL`         | `https://dev.zkcoins.app`     | Frontend under test. Switch to `https://zkcoins.app` for PRD.                                                                                                                                                                                                                        |
-| `E2E_API_URL`          | `https://dev-api.zkcoins.app` | Backend the helpers talk to directly (faucet, balance polling).                                                                                                                                                                                                                      |
+| `E2E_API_URL`          | `https://dev-api.zkcoins.app` | Backend the helpers talk to directly (creator-signed mint seeding, balance polling).                                                                                                                                                                                                                      |
 | `E2E_NETWORK_EXPECTED` | `signet`                      | Network the badge should show. Asserted in `09-network-and-shell.spec.ts`.                                                                                                                                                                                                           |
-| `E2E_FAUCET_CALLS`     | `1`                           | Number of `/api/jobs/mint` admit+poll cycles used to seed Alice (the server controls the per-call amount). Set to 0 to skip seeding for a custom run.                                                                                                                                |
+| `E2E_FAUCET_CALLS`     | `1`                           | Number of creator-signed mint cycles (admit → commit → completed) used to seed Alice with her own fixture asset. Set to 0 to skip seeding for a custom run.                                                                                                                                |
 | `E2E_NEED_FIXTURES`    | unset (treated as false)      | **Opt-in gate.** `globalSetup` is a no-op unless this is `'true'`. The legacy specs (wallet/send-flow/settings/visual/webauthn) don't need fixtures and the existing `e2e-tests` CI job leaves it unset; the regen workflow and the future `e2e-visual` job both set it to `'true'`. |
 | `E2E_KEEP_ACCOUNTS`    | unset                         | If `true`, `globalTeardown` skips wiping fixtures (useful for debugging).                                                                                                                                                                                                            |
 
@@ -150,10 +150,15 @@ File: `e2e/_global-setup.ts`. Runs once before any worker starts. Linked from `p
    length validated by `wasm.validateMnemonic`.
 2. Derive Alice + Bob accounts via `wasm.createAccountFromMnemonic(phrase)` —
    returns `{ address, numPubkeys, xpriv }` exactly like the app.
-3. Seed Alice: admit POST /api/jobs/mint with Alice's address E2E_FAUCET_CALLS
-   times and poll each job to `completed`.
-   The server controls the per-call amount; we observe the resulting balance via
-   GET /api/balance and store it (`alice.seededBalance`). Retry × 3 with exp backoff.
+3. Seed Alice: run the creator-signed two-phase mint (admit POST /api/jobs/mint
+   with the signed mint contract → poll to `awaiting_signature` → commit → poll
+   to `completed`) E2E_FAUCET_CALLS times. There is no server-mediated faucet —
+   the node's neutral permissionless model (zk-coins/node#220) credits
+   `owner = H(creator_pubkey)`, so Alice funds herself by minting her own
+   fixture asset (deterministic name `E2E-FIXTURE` on the single-asset leg).
+   We observe the resulting balance via GET /api/balance (proxy-translated to
+   the portfolio aggregate) and store it (`alice.seededBalance`). Retry × 3
+   with exp backoff.
    Bob is **not** funded — having one zero-balance fixture is required for
    06-balance:balance-zero-faucet-visible and the No-funds banner in 07-send.
 4. Poll GET /api/balance for Alice until balance > 0 (max 30 s). Server commits
