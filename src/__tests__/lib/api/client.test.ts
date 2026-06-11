@@ -459,26 +459,48 @@ describe('api.walletBalance (single-asset, native)', () => {
   });
 });
 
-describe('api.mint (faucet)', () => {
-  it('admits POST /api/jobs/mint and polls to completed', async () => {
+describe('api.mint (faucet self-mint)', () => {
+  const PARAMS = { account_address: 'aa'.repeat(32), xpriv: 'xprv_test' };
+
+  it('runs the creator-signed two-phase mint with a generated FAUCET asset name', async () => {
+    // Same lifecycle as `api.createCoin` — `api.mint` delegates to it.
     mockJsonResponse<JobAccepted>({ job_id: 'mint-fc', status: 'queued' }, 202);
+    mockJsonResponse<JobStatus>({
+      job_id: 'mint-fc',
+      kind: 'mint',
+      status: 'awaiting_signature',
+      phase: 'awaiting_signature',
+      proof_id: 9,
+      result: { account_state_hash: 'abc', output_coins_root: 'def' },
+    });
+    mockJsonResponse({ status: 'broadcasting' });
     mockJsonResponse<JobStatus>({
       job_id: 'mint-fc',
       kind: 'mint',
       status: 'completed',
       phase: 'completed',
-      result: { success: true },
+      result: { success: true, proof_id: 9 },
     });
-    const job = await api.mint('aa'.repeat(32), 10_000);
+
+    const job = await api.mint(PARAMS, 10_000);
     expect(job.status).toBe('completed');
+
     const admit = mockFetch.mock.calls.find(([u]) => String(u).endsWith('/api/jobs/mint'));
     expect(admit).toBeDefined();
     const body = JSON.parse(admit![1].body);
-    expect(body.account_address).toBe('aa'.repeat(32));
+    // The old server-mediated `{account_address, amount}` faucet body is
+    // gone — the node 422s it ("missing field creator_pubkey"). The faucet
+    // is now a creator-signed self-mint of a uniquely-named asset.
+    expect(body.account_address).toBeUndefined();
+    expect(body.name).toMatch(/^FAUCET-\d+$/);
+    expect(body.decimals).toBe(0);
     expect(body.amount).toBe(10_000);
-    // Faucet mint carries no creator signature (server-mediated).
-    expect(body.signature).toBeUndefined();
+    expect(typeof body.creator_pubkey).toBe('string');
+    expect(typeof body.signature).toBe('string');
     expect((admit![1].headers as Record<string, string>)['Idempotency-Key']).toBeTruthy();
+
+    const commitCall = mockFetch.mock.calls.find(([u]) => String(u).includes('/commit'));
+    expect(JSON.parse(commitCall![1].body).proof_id).toBe(9);
   });
 
   it('throws JobFailedError when the faucet mint fails', async () => {
@@ -490,7 +512,7 @@ describe('api.mint (faucet)', () => {
       phase: 'failed',
       error: 'faucet drained',
     });
-    await expect(api.mint('aa'.repeat(32))).rejects.toThrow(/faucet drained/);
+    await expect(api.mint(PARAMS)).rejects.toThrow(/faucet drained/);
   });
 });
 
