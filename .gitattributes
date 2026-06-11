@@ -12,5 +12,7 @@
 # GENERATED glue (client.js + .d.ts + .wasm) — mark it so linguist,
 # diffs, and code-quality reviewers treat it as machine-written instead
 # of flagging style findings (e.g. "useless assignment") in it. Never
-# hand-edit these files; regenerate them with wasm-pack.
-packages/zkcoins-wasm/src/pkg/* linguist-generated=true
+# hand-edit these files; regenerate them with wasm-pack. `**` (not `*`)
+# so future wasm-pack output in subdirectories (e.g. `snippets/`) stays
+# covered too.
+packages/zkcoins-wasm/src/pkg/** linguist-generated=true

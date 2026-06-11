@@ -21,6 +21,7 @@ import * as path from 'node:path';
 import type { BrowserContext, FullConfig, Page } from '@playwright/test';
 import { chromium } from '@playwright/test';
 import { api } from './_helpers/api';
+import { isReMintRejection } from './_helpers/remint';
 import { createSeedWallet, DEFAULT_PASSWORD, clearWalletState } from './_helpers/wallet';
 import type { Accounts } from './_helpers/fixtures';
 
@@ -92,6 +93,24 @@ async function createCoinWithRetry(
     const { address } = await api.createCoin(mnemonic, opts);
     return address;
   } catch (err) {
+    // Idempotency guard (deterministic `opts.name` only): a PREVIOUS attempt
+    // may have minted successfully server-side while this client's
+    // completed-poll blipped (a single fetch error, or the 240 s poll
+    // timeout). Re-admitting the same name then makes the node
+    // deterministically reject the duplicate ("Re-mint into an existing
+    // asset account is not supported", node/src/account_node.rs) — so on
+    // attempt >= 2 that rejection is evidence the seed already landed:
+    // return the wallet address and fall through to the caller's balance
+    // poll, which verifies the funding independently. On attempt 1 the
+    // rejection is a genuine collision and must stay fatal. Auto-generated
+    // names regenerate per attempt and never take this path.
+    if (attempt > 1 && opts.name !== undefined && isReMintRejection(err)) {
+      console.warn(
+        `globalSetup: create-coin retry for "${opts.name}" hit the node's re-mint rejection — ` +
+          `a previous attempt already minted it; deferring to the balance poll for verification`,
+      );
+      return (await api.account(mnemonic)).address;
+    }
     if (attempt >= maxAttempts) throw err;
     const wait = 1_000 * 2 ** (attempt - 1);
     console.warn(
@@ -255,7 +274,12 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       // Alice is fresh per run and the asset_id derives from
       // (creator_pubkey, name, decimals), so the constant base name cannot
       // collide across runs; extra FAUCET_CALLS get an index suffix because
-      // the SAME creator re-minting an identical name WOULD collide.
+      // the SAME creator re-minting an identical name WOULD collide. The
+      // deterministic name also makes createCoinWithRetry's RETRIES collide
+      // when an earlier attempt landed server-side but the client's poll
+      // blipped — the re-mint-rejection guard inside the helper treats that
+      // as "already seeded", and the pollBalanceFunded below independently
+      // verifies the funding either way.
       let mintedAddress = '';
       for (let i = 0; i < FAUCET_CALLS; i++) {
         const name = i === 0 ? 'E2E-FIXTURE' : `E2E-FIXTURE-${i + 1}`;
