@@ -17,7 +17,8 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import { render } from '@/__tests__/_helpers/intl';
 import Home from '@/app/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
@@ -31,6 +32,9 @@ const FEATURES_STATE = vi.hoisted(() => ({
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
   USERNAME_CLAIM: false,
+  // Runtime multi-asset capability ON: WalletScreen then renders the
+  // per-asset portfolio + create-coin entry these tests assert on.
+  MULTI_ASSET: true,
 }));
 // Home renders WalletScreen on the unlocked branch; WalletScreen
 // reads runtime capabilities via `useFeatures()`. The mock must
@@ -62,6 +66,7 @@ beforeEach(() => {
     ADDRESS_ROTATION: false,
     TOR_ROUTING: false,
     USERNAME_CLAIM: false,
+    MULTI_ASSET: true,
   });
   mockPathname = '/';
   useWalletStore.setState({
@@ -80,7 +85,7 @@ beforeEach(() => {
   // WalletScreen's useHistory additionally fires api.getHistory.
   // Stub them so the routing assertions don't race the network layer.
   vi.spyOn(api, 'info').mockResolvedValue({ network: 'signet' });
-  vi.spyOn(api, 'balance').mockResolvedValue({ balance: 0, num_sends: 0 });
+  vi.spyOn(api, 'ownerBalances').mockResolvedValue({ address: ALICE.address, assets: [] });
   vi.spyOn(api, 'getHistory').mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
 });
 
@@ -120,7 +125,7 @@ describe('Home — wallet branch (account in memory)', () => {
     await waitFor(() => {
       expect(screen.getByTestId('nav-wallet')).toBeInTheDocument();
     });
-    expect(screen.getByTestId('balance-value')).toBeInTheDocument();
+    expect(screen.getByTestId('create-coin-btn')).toBeInTheDocument();
   });
 });
 

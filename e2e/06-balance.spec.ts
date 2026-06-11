@@ -26,6 +26,9 @@ test.describe('View balance', () => {
     // Wait for the balance polling tick to land; until then the
     // empty-banner could briefly show.
     await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    // The single-asset balance hero (`multi_asset:false` surface) is the
+    // funded wallet's primary chrome — assert it before baselining.
+    await expect(page.getByTestId('balance-value')).toBeVisible({ timeout: 30_000 });
     // issue #175: a funded wallet renders its server-owned history
     // (`GET /api/history`) — at least the faucet mint — NOT the empty
     // state. Alice is seeded by globalSetup, so the mint row must appear

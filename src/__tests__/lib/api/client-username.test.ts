@@ -130,14 +130,14 @@ describe('api.balance with username', () => {
       username: 'alice',
       num_sends: 0,
     });
-    const result = await api.balance('aa'.repeat(32));
+    const result = await api.balance('aa'.repeat(32), 'cc'.repeat(32));
     expect(result.balance).toBe(50000);
     expect(result.username).toBe('alice');
   });
 
   it('returns undefined username when not set', async () => {
     mockJsonResponse<z.infer<typeof BalanceResponseSchema>>({ balance: 10000, num_sends: 0 });
-    const result = await api.balance('bb'.repeat(32));
+    const result = await api.balance('bb'.repeat(32), 'cc'.repeat(32));
     expect(result.balance).toBe(10000);
     expect(result.username).toBeUndefined();
   });

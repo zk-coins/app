@@ -264,8 +264,8 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
 
       // Best-effort balance fetch.
       try {
-        const { balance } = await api.balance(ad.address);
-        setBalance(balance);
+        const { assets } = await api.ownerBalances(ad.address);
+        setBalance(assets.reduce((sum, a) => sum + a.balance, 0));
       } catch {
         // Non-fatal — WalletScreen will keep its loading placeholder.
       }
@@ -470,8 +470,8 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
 
       // Best-effort balance fetch.
       try {
-        const { balance } = await api.balance(ad.address);
-        setBalance(balance);
+        const { assets } = await api.ownerBalances(ad.address);
+        setBalance(assets.reduce((sum, a) => sum + a.balance, 0));
       } catch {
         // Non-fatal — WalletScreen will keep its loading placeholder.
       }
@@ -628,15 +628,15 @@ function SeedImportFlow({
       setAuth('seed');
 
       try {
-        const res = await api.balance(ad.address);
-        setBalance(res.balance);
+        const res = await api.ownerBalances(ad.address);
+        setBalance(res.assets.reduce((sum, a) => sum + a.balance, 0));
         // Restore-from-seed has no local memory of past sends — the
         // mnemonic could correspond to an address that has already
         // sent N times against this server. Hydrate the BIP-32
         // child-index counter from the server BEFORE the user
         // navigates to /send to avoid the "Vorheriger Public Key
         // fehlt" 400 documented on `BalanceResponseSchema.num_sends`.
-        syncNumPubkeys(res.num_sends);
+        syncNumPubkeys(res.assets.reduce((sum, a) => sum + a.num_sends, 0));
       } catch {
         // Non-fatal — WalletScreen will keep its loading placeholder.
       }
@@ -815,12 +815,12 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
       setAuth('passkey', result.credentialId);
 
       try {
-        const res = await api.balance(ad.address);
-        setBalance(res.balance);
+        const res = await api.ownerBalances(ad.address);
+        setBalance(res.assets.reduce((sum, a) => sum + a.balance, 0));
         // Same rationale as the seed-restore path: a passkey-restored
         // wallet has no local memory of past sends. Hydrate the
         // counter from the server now to avoid a /send 400 later.
-        syncNumPubkeys(res.num_sends);
+        syncNumPubkeys(res.assets.reduce((sum, a) => sum + a.num_sends, 0));
       } catch {
         // Non-fatal.
       }

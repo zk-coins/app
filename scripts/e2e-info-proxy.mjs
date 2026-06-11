@@ -29,10 +29,36 @@
  * different `username_domain` changes the rendered address chip (it is
  * masked in screenshots, but the helpers also derive locators from it).
  *
- * So in local mode we put this proxy in front of the node and rewrite
- * ONLY `GET /api/info` to the DEV surface. Everything else
- * (jobs/mint/send/commit/balance/health/...) is passed through 1:1 — the
- * send-success leg drives a real send against the real local node.
+ * So we put this proxy in front of the node and rewrite `GET /api/info`
+ * to the single-asset surface. Everything else
+ * (jobs/mint/commit/health/...) is passed through 1:1 — the send-success
+ * leg drives a real send against the real upstream node.
+ *
+ * ── SINGLE-ASSET SURFACE TRANSLATION (node #220 era) ──────────────────
+ * Since the node's neutral permissionless minting (zk-coins/node #220),
+ * the upstream is ALWAYS multi-asset: `GET /api/balance?address=` without
+ * an `asset_id` is a hard 422 ("asset_id is required — no native asset"),
+ * and `POST /api/jobs/send` without an `asset_id` is rejected the same
+ * way. The single-asset app surface (what the baselines were captured
+ * against, `multi_asset:false`) performs exactly those two requests, so
+ * reporting `multi_asset:false` while passing them through 1:1 would
+ * leave the wallet hero permanently loading and every send 422ing. Two
+ * narrow translations keep the single-asset surface functional:
+ *
+ *   1. `GET /api/balance?address=X` (no `asset_id`) → upstream
+ *      `GET /api/balance/X` (per-owner portfolio), aggregated into the
+ *      legacy `{balance, num_sends, username?}` shape. `num_sends` is the
+ *      SUM across assets — the commitment SMT is keyed by pubkey across
+ *      ALL assets, so the wallet's BIP-32 send index is wallet-global
+ *      (mirrors the app's own multi-asset hydration in
+ *      `src/lib/api/client.ts::send`).
+ *   2. `POST /api/jobs/send` without `asset_id` → the sender's portfolio
+ *      is fetched upstream and, ONLY when the sender holds exactly one
+ *      asset, that `asset_id` is injected (the send signature covers
+ *      `account_address ‖ recipient ‖ amount ‖ timestamp` — not
+ *      `asset_id` — so the injection cannot break it). Zero or multiple
+ *      assets forward the body unchanged so the node's own 422 surfaces
+ *      loudly instead of a silent wrong-asset send.
  *
  * ── WHY A PROXY AND NOT "build the node with the DEV feature set" ──────
  * Rebuilding the node with a DEV-matching Cargo feature set couples this
@@ -88,6 +114,42 @@ export function normalizeInfo(upstream, usernameDomain) {
   normalized.username_domain = usernameDomain;
   delete normalized.bitcoin_network;
   return normalized;
+}
+
+/**
+ * Aggregate an upstream `GET /api/balance/:address` portfolio body into
+ * the legacy single-asset `{balance, num_sends, username?}` shape.
+ *
+ * `balance` is the sum across assets (the single-asset hero shows the
+ * wallet's one fixture/faucet asset; an empty portfolio is the canonical
+ * `balance: 0`). `num_sends` is ALSO the sum across assets: the wallet
+ * uses it as its global BIP-32 send index, and the commitment SMT is
+ * keyed by pubkey across all assets — identical to the app's multi-asset
+ * send hydration (`src/lib/api/client.ts::send`).
+ */
+export function aggregateOwnerBalance(portfolio) {
+  const assets = Array.isArray(portfolio.assets) ? portfolio.assets : [];
+  const out = {
+    balance: assets.reduce((sum, a) => sum + a.balance, 0),
+    num_sends: assets.reduce((sum, a) => sum + a.num_sends, 0),
+  };
+  if (portfolio.username) out.username = portfolio.username;
+  return out;
+}
+
+/**
+ * Resolve the `asset_id` to inject into an `asset_id`-less send body.
+ *
+ * Returns the sole asset's id when the sender's portfolio holds EXACTLY
+ * one asset, `null` otherwise (empty or ambiguous portfolio → forward
+ * unchanged and let the node's own 422 surface). Never guesses among
+ * multiple assets — a silent wrong-asset send under a 200 would be the
+ * worst possible failure mode for the suite.
+ */
+export function soleAssetId(portfolio) {
+  const assets = Array.isArray(portfolio.assets) ? portfolio.assets : [];
+  if (assets.length !== 1 || typeof assets[0].asset_id !== 'string') return null;
+  return assets[0].asset_id;
 }
 
 /** Collect a request body as a Buffer (undefined for bodyless methods). */
@@ -189,12 +251,76 @@ export function createProxyServer({ nodeUrl, usernameDomain }) {
     const reqUrl = req.url ?? '/';
     const url = new URL(reqUrl, 'http://localhost');
     const isInfo = req.method === 'GET' && url.pathname === '/api/info';
+    // Legacy single-asset balance read — `asset_id`-less form the
+    // multi-asset upstream 422s (see the header: SINGLE-ASSET SURFACE
+    // TRANSLATION). An `asset_id`-carrying query passes through 1:1.
+    const singleAssetBalanceAddress =
+      req.method === 'GET' && url.pathname === '/api/balance' && !url.searchParams.has('asset_id')
+        ? url.searchParams.get('address')
+        : null;
+    const isSend = req.method === 'POST' && url.pathname === '/api/jobs/send';
+
+    /** Fetch + parse the upstream per-owner portfolio (throws on non-2xx). */
+    const fetchPortfolio = async (address) => {
+      const res = await fetch(`${base}/api/balance/${encodeURIComponent(address)}`, {
+        redirect: 'manual',
+      });
+      if (!res.ok) {
+        throw new Error(`upstream portfolio lookup failed with ${res.status}`);
+      }
+      return res.json();
+    };
 
     try {
-      const body = await readBody(req);
+      // Translation 1 — single-asset balance read.
+      if (singleAssetBalanceAddress !== null && singleAssetBalanceAddress !== '') {
+        const portfolio = await fetchPortfolio(singleAssetBalanceAddress);
+        res.setHeader('content-type', 'application/json');
+        res.setHeader('access-control-allow-origin', '*');
+        res.statusCode = 200;
+        res.end(JSON.stringify(aggregateOwnerBalance(portfolio)));
+        return;
+      }
+
+      let body = await readBody(req);
+      let bodyRewritten = false;
+
+      // Translation 2 — inject the sender's sole asset_id into an
+      // asset_id-less send. Non-JSON or shape mismatches forward
+      // unchanged (the node answers those itself).
+      if (isSend && body && body.length > 0) {
+        let parsed = null;
+        try {
+          parsed = JSON.parse(body.toString('utf8'));
+        } catch {
+          /* not JSON — forward verbatim */
+        }
+        if (
+          parsed !== null &&
+          typeof parsed === 'object' &&
+          !Array.isArray(parsed) &&
+          parsed.asset_id === undefined &&
+          typeof parsed.account_address === 'string'
+        ) {
+          const portfolio = await fetchPortfolio(parsed.account_address);
+          const assetId = soleAssetId(portfolio);
+          if (assetId !== null) {
+            parsed.asset_id = assetId;
+            body = Buffer.from(JSON.stringify(parsed), 'utf8');
+            bodyRewritten = true;
+          }
+        }
+      }
+
+      const headers = forwardHeaders(req.headers);
+      if (bodyRewritten) {
+        // The original content-length no longer matches the injected
+        // body — drop it and let undici recompute.
+        delete headers['content-length'];
+      }
       const upstream = await fetch(`${base}${reqUrl}`, {
         method: req.method,
-        headers: forwardHeaders(req.headers),
+        headers,
         body,
         redirect: 'manual',
       });

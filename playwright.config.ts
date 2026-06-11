@@ -73,6 +73,10 @@ export default defineConfig({
   //   10-pwa.spec.ts                    (PR #27)
   //   11-cross-spec-redirects.spec.ts   (PR #27)
   //   14-network-activity.spec.ts       (PR #168, issue #166)
+  //   18-create-coin.spec.ts            (multi-asset: create-coin form)
+  //   19-portfolio.spec.ts              (multi-asset: per-asset portfolio)
+  //   20-send-asset.spec.ts             (multi-asset: send asset picker)
+  //   21-asset-detail.spec.ts           (multi-asset: per-asset detail)
   //
   // All exhaustive specs are now active. The testIgnore array is empty
   // outside of `E2E_REGENERATING`. We keep the conditional in place

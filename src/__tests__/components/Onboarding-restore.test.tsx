@@ -198,7 +198,10 @@ describe('SeedImportFlow — password stage validation', () => {
 
 describe('SeedImportFlow — restore side effects', () => {
   it('writes the account to the wallet store and sets authMethod=seed on success', async () => {
-    vi.spyOn(api, 'balance').mockResolvedValue({ balance: 42, num_sends: 0 });
+    vi.spyOn(api, 'ownerBalances').mockResolvedValue({
+      address: 'b'.repeat(64),
+      assets: [{ asset_id: 'c'.repeat(64), balance: 42, num_sends: 0 }],
+    });
 
     const user = userEvent.setup();
     await reachImportStage(user);
@@ -223,7 +226,7 @@ describe('SeedImportFlow — restore side effects', () => {
   });
 
   it('treats a balance-fetch failure as non-fatal and leaves balance null', async () => {
-    vi.spyOn(api, 'balance').mockRejectedValue(new Error('server down'));
+    vi.spyOn(api, 'ownerBalances').mockRejectedValue(new Error('server down'));
 
     const user = userEvent.setup();
     await reachImportStage(user);

@@ -62,14 +62,14 @@ What exists today in `e2e/`:
 
 `E2E_BASE_URL` and `E2E_API_URL` already drive the existing `playwright.config.ts`. The new helpers add:
 
-| Env var                | Default                       | Purpose                                                                                                                                                                                                                                                                              |
-| ---------------------- | ----------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| `E2E_BASE_URL`         | `https://dev.zkcoins.app`     | Frontend under test. Switch to `https://zkcoins.app` for PRD.                                                                                                                                                                                                                        |
-| `E2E_API_URL`          | `https://dev-api.zkcoins.app` | Backend the helpers talk to directly (faucet, balance polling).                                                                                                                                                                                                                      |
-| `E2E_NETWORK_EXPECTED` | `signet`                      | Network the badge should show. Asserted in `09-network-and-shell.spec.ts`.                                                                                                                                                                                                           |
-| `E2E_FAUCET_CALLS`     | `1`                           | Number of `/api/jobs/mint` admit+poll cycles used to seed Alice (the server controls the per-call amount). Set to 0 to skip seeding for a custom run.                                                                                                                                |
-| `E2E_NEED_FIXTURES`    | unset (treated as false)      | **Opt-in gate.** `globalSetup` is a no-op unless this is `'true'`. The legacy specs (wallet/send-flow/settings/visual/webauthn) don't need fixtures and the existing `e2e-tests` CI job leaves it unset; the regen workflow and the future `e2e-visual` job both set it to `'true'`. |
-| `E2E_KEEP_ACCOUNTS`    | unset                         | If `true`, `globalTeardown` skips wiping fixtures (useful for debugging).                                                                                                                                                                                                            |
+| Env var                | Default                       | Purpose                                                                                                                                                                                                                                                                                                           |
+| ---------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `E2E_BASE_URL`         | `https://dev.zkcoins.app`     | Frontend under test. Switch to `https://zkcoins.app` for PRD.                                                                                                                                                                                                                                                     |
+| `E2E_API_URL`          | `https://dev-api.zkcoins.app` | Backend the helpers talk to directly (creator-signed mint seeding, balance polling).                                                                                                                                                                                                                              |
+| `E2E_NETWORK_EXPECTED` | `signet`                      | Network the badge should show. Asserted in `09-network-and-shell.spec.ts`.                                                                                                                                                                                                                                        |
+| `E2E_FAUCET_CALLS`     | `1`                           | Number of creator-signed mint cycles (admit → commit → completed) used to seed Alice with her own fixture asset. Set to 0 to skip seeding for a custom run. **Warning:** values > 1 give Alice a multi-asset portfolio in the proxied single-asset environment, after which send injection declines loudly (422). |
+| `E2E_NEED_FIXTURES`    | unset (treated as false)      | **Opt-in gate.** `globalSetup` is a no-op unless this is `'true'`. The legacy specs (wallet/send-flow/settings/visual/webauthn) don't need fixtures and the existing `e2e-tests` CI job leaves it unset; the regen workflow and the future `e2e-visual` job both set it to `'true'`.                              |
+| `E2E_KEEP_ACCOUNTS`    | unset                         | If `true`, `globalTeardown` skips wiping fixtures (useful for debugging).                                                                                                                                                                                                                                         |
 
 PRD switch: `E2E_BASE_URL=https://zkcoins.app E2E_API_URL=https://api.zkcoins.app playwright test`. The plan deliberately does **not** support PRD: the server has the faucet feature off and `globalSetup` would refuse to seed Alice. The `06-balance.spec.ts:balance-zero-faucet-visible` and `06-balance.spec.ts:balance-faucet-minting` shots also assume DEV. A PRD smoke pass is a separate workstream (see §13).
 
@@ -150,10 +150,15 @@ File: `e2e/_global-setup.ts`. Runs once before any worker starts. Linked from `p
    length validated by `wasm.validateMnemonic`.
 2. Derive Alice + Bob accounts via `wasm.createAccountFromMnemonic(phrase)` —
    returns `{ address, numPubkeys, xpriv }` exactly like the app.
-3. Seed Alice: admit POST /api/jobs/mint with Alice's address E2E_FAUCET_CALLS
-   times and poll each job to `completed`.
-   The server controls the per-call amount; we observe the resulting balance via
-   GET /api/balance and store it (`alice.seededBalance`). Retry × 3 with exp backoff.
+3. Seed Alice: run the creator-signed two-phase mint (admit POST /api/jobs/mint
+   with the signed mint contract → poll to `awaiting_signature` → commit → poll
+   to `completed`) E2E_FAUCET_CALLS times. There is no server-mediated faucet —
+   the node's neutral permissionless model (zk-coins/node#220) credits
+   `owner = H(creator_pubkey)`, so Alice funds herself by minting her own
+   fixture asset (deterministic name `E2E-FIXTURE` on the single-asset leg).
+   We observe the resulting balance via GET /api/balance (proxy-translated to
+   the portfolio aggregate) and store it (`alice.seededBalance`). Retry × 3
+   with exp backoff.
    Bob is **not** funded — having one zero-balance fixture is required for
    06-balance:balance-zero-faucet-visible and the No-funds banner in 07-send.
 4. Poll GET /api/balance for Alice until balance > 0 (max 30 s). Server commits
@@ -251,31 +256,33 @@ export function bobLogin(page: Page, password: string): Promise<void>;
 
 ### Default masks (applied by `snap` to every shot)
 
-| Locator                              | What it hides                                  | Source file                                                                                   |
-| ------------------------------------ | ---------------------------------------------- | --------------------------------------------------------------------------------------------- |
-| `text=/[0-9a-f]{8}@zkcoins\.app/`    | Wallet address chip                            | Already a content match — no attribute change needed                                          |
-| `[data-testid="balance-amount-usd"]` | The USD value text (`$X`)                      | `src/components/screens/WalletScreen.tsx` — the `<h1>` only, NOT the surrounding card         |
-| `[data-testid="balance-amount-btc"]` | The BTC value text (`X BTC`)                   | same file — the `<p>` only                                                                    |
-| `[data-testid="tx-row-amount"]`      | Transaction row amount                         | `src/components/screens/WalletScreen.tsx::TransactionsList`                                   |
-| `[data-testid="tx-row-time"]`        | Transaction row timestamp                      | same file                                                                                     |
-| `[data-testid="seed-grid"]`          | The 12 mnemonic words                          | `src/components/onboarding/Onboarding.tsx::SeedFlow` — wrap the `grid-cols-3 gap-2 …` `<div>` |
-| `[data-testid="qr-code"]`            | The receive QR (depends on address)            | `src/app/receive/page.tsx` — wrap the `QRCodeSVG` parent `<div>`                              |
-| `[data-testid="proof-id"]`           | The "proof #N" line on the send success screen | `src/app/send/page.tsx`                                                                       |
+| Locator                              | What it hides                                    | Source file                                                                                   |
+| ------------------------------------ | ------------------------------------------------ | --------------------------------------------------------------------------------------------- |
+| `text=/[0-9a-f]{8}@zkcoins\.app/`    | Wallet address chip                              | Already a content match — no attribute change needed                                          |
+| `[data-testid="balance-amount-usd"]` | The USD value text (`$X`) — single-asset hero    | `src/components/screens/WalletScreen.tsx` — the `<h1>` only, NOT the surrounding card         |
+| `[data-testid="balance-amount-btc"]` | The BTC value text (`X BTC`) — single-asset hero | same file — the `<p>` only                                                                    |
+| `[data-testid="asset-row-balance"]`  | The per-asset portfolio balance value            | `src/components/screens/WalletScreen.tsx` — the portfolio row's balance `<span>` only         |
+| `[data-testid="tx-row-amount"]`      | Transaction row amount                           | `src/components/screens/WalletScreen.tsx::TransactionsList`                                   |
+| `[data-testid="tx-row-time"]`        | Transaction row timestamp                        | same file                                                                                     |
+| `[data-testid="seed-grid"]`          | The 12 mnemonic words                            | `src/components/onboarding/Onboarding.tsx::SeedFlow` — wrap the `grid-cols-3 gap-2 …` `<div>` |
+| `[data-testid="qr-code"]`            | The receive QR (depends on address)              | `src/app/receive/page.tsx` — wrap the `QRCodeSVG` parent `<div>`                              |
+| `[data-testid="proof-id"]`           | The "proof #N" line on the send success screen   | `src/app/send/page.tsx`                                                                       |
 
-The two balance masks replaced the previous `[data-testid="balance-value"]` mask. The old mask covered the entire balance card (USD heading + toggle button + BTC text + username/address row), which on mobile dominated the visible viewport and collapsed `balance-hidden`, `balance-copied-feedback`, and several wallet-screen tests onto the same baseline. Masking only the volatile USD/BTC value text preserves the toggle-icon flip and the copy-feedback strip as differentiators.
+The wallet home is **capability-adaptive**: on a `multi_asset:false` node it renders the single-asset USD/BTC balance hero (masks `balance-amount-usd` / `balance-amount-btc`, the `<h1>` / `<p>` value text only — not the surrounding card, so the eye-toggle flip and copy-feedback strip stay in the diff); on a `multi_asset:true` node it renders the per-asset portfolio list (masks `asset-row-balance`). Both mask sets live in `_helpers/screenshot.ts`'s default list; Playwright ignores selectors with no matches, so only the rendered surface's elements actually mask. The portfolio specs (06/19/21) also mask the volatile asset name + id per-spec, since those are spec-local rather than present on every shot.
 
 The data-testid attributes are added **incrementally**, by the PR that first needs each one — not all at once in PR-2. The `snap` helper in `_helpers/screenshot.ts` references the full list from PR-1; Playwright's `mask` ignores selectors with no matches, so unused entries are inert until the matching component lands. No `data-testid` proliferation beyond this set — anything else has to be stable without one.
 
 Per-PR ownership:
 
-| Attribute       | First needed by                    | Added in PR                                           |
-| --------------- | ---------------------------------- | ----------------------------------------------------- |
-| `seed-grid`     | `_helpers/wallet.ts` + §8.2 / §8.3 | PR-1 (helper reads the mnemonic during `globalSetup`) |
-| `balance-value` | §8.6                               | PR-7                                                  |
-| `tx-row-amount` | §8.7 (post-send list shot)         | PR-8                                                  |
-| `tx-row-time`   | §8.7                               | PR-8                                                  |
-| `proof-id`      | §8.7 `send-success`                | PR-8                                                  |
-| `qr-code`       | §8.8                               | PR-9                                                  |
+| Attribute           | First needed by                    | Added in PR                                                 |
+| ------------------- | ---------------------------------- | ----------------------------------------------------------- |
+| `seed-grid`         | `_helpers/wallet.ts` + §8.2 / §8.3 | PR-1 (helper reads the mnemonic during `globalSetup`)       |
+| `balance-value`     | §8.6 (single-asset balance shot)   | PR-7 (single-asset hero on the `multi_asset:false` surface) |
+| `asset-row-balance` | §8.6 (portfolio balance shot)      | multi-asset surface (`multi_asset:true`)                    |
+| `tx-row-amount`     | §8.7 (post-send list shot)         | PR-8                                                        |
+| `tx-row-time`       | §8.7                               | PR-8                                                        |
+| `proof-id`          | §8.7 `send-success`                | PR-8                                                        |
+| `qr-code`           | §8.8                               | PR-9                                                        |
 
 ### File naming
 
@@ -469,12 +476,12 @@ The full Send pipeline plus every error branch. Alice → Bob, 1 000 sats.
 
 AppShell + BottomNav + Network info badge. Covers the MVP "Network info badge" function plus the navigation chrome (`AppShell`, `BottomNav`) that wraps every other screen — those aren't MVP functions on their own but every other spec inherits their pixels and would diff on chrome changes if we didn't lock them once here.
 
-| #   | Step                            | Notes                                                                                               |
-| --- | ------------------------------- | --------------------------------------------------------------------------------------------------- |
-| 1   | shell-bottomnav-wallet-active   | WalletScreen rendered, Wallet tab orange, Apps + Settings inactive.                                 |
-| 2   | shell-bottomnav-settings-active | Navigate to Settings — Settings tab orange.                                                         |
-| 3   | network-info-node               | Connected node host shown in the Settings About card (`apiUrl` with the scheme stripped).            |
-| 4   | network-loading                 | Intercept `/api/info` with an 8 s delay, screenshot Settings while the Network row is absent.        |
+| #   | Step                            | Notes                                                                                         |
+| --- | ------------------------------- | --------------------------------------------------------------------------------------------- |
+| 1   | shell-bottomnav-wallet-active   | WalletScreen rendered, Wallet tab orange, Apps + Settings inactive.                           |
+| 2   | shell-bottomnav-settings-active | Navigate to Settings — Settings tab orange.                                                   |
+| 3   | network-info-node               | Connected node host shown in the Settings About card (`apiUrl` with the scheme stripped).     |
+| 4   | network-loading                 | Intercept `/api/info` with an 8 s delay, screenshot Settings while the Network row is absent. |
 
 ### 8.10 `10-pwa.spec.ts` (4 tests / 4 shots)
 
@@ -683,7 +690,7 @@ The implementation order **matters** because later specs depend on earlier helpe
 4. **PR-4** ✅: §8.3 `03-restore-seed.spec.ts`. Wires up `fixtures.aliceLogin`.
 5. **PR-5** ✅: §8.4 `04-unlock-password.spec.ts` _(closes MVP triage gap)_.
 6. **PR-6** ✅: §8.5 `05-disconnect.spec.ts`.
-7. **PR-7** ✅: §8.6 `06-balance.spec.ts`. Adds `data-testid="balance-value"` to `WalletScreen.tsx`.
+7. **PR-7** ✅: §8.6 `06-balance.spec.ts`. Adds `data-testid="balance-value"` to `WalletScreen.tsx` (the single-asset balance hero, rendered on the `multi_asset:false` surface). The multi-asset surface instead masks `asset-row-balance` on the per-asset portfolio.
 8. **PR-8** ✅: §8.7 `07-send.spec.ts` (this is the big one — Alice → Bob real on-chain send). Adds `data-testid="tx-row-amount"` + `"tx-row-time"` to `WalletScreen.tsx::TransactionsList` and `"proof-id"` to `send/page.tsx`.
 9. **PR-9** ✅: §8.8 `08-receive.spec.ts`. Adds `data-testid="qr-code"` to `receive/page.tsx`.
 10. **PR-10** ✅: §8.9 `09-network-and-shell.spec.ts`.
