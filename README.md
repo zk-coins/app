@@ -78,14 +78,14 @@ npm run lint     # ESLint + Prettier check (run before every commit)
 npm run lint:fix # auto-fix
 ```
 
-| Command                 | Description                                                 |
-| ----------------------- | ----------------------------------------------------------- |
-| `npm run dev`           | Start dev server (port 3090)                                |
-| `npm run build`         | Production build (standalone Next.js output)                |
-| `npm run lint`          | ESLint + Prettier check                                     |
-| `npm run test`          | Vitest unit tests (`src/lib/**`, `src/stores/**`)           |
-| `npm run test:coverage` | v8 coverage — CI enforces 100% on the activated MVP surface |
-| `npm run test:e2e`      | Playwright E2E against `E2E_BASE_URL`                       |
+| Command                 | Description                                                                                                       |
+| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `npm run dev`           | Start dev server (port 3090)                                                                                      |
+| `npm run build`         | Production build (standalone Next.js output)                                                                      |
+| `npm run lint`          | ESLint + Prettier check                                                                                           |
+| `npm run test`          | Vitest unit tests (`src/lib/**`, `src/stores/**`)                                                                 |
+| `npm run test:coverage` | v8 coverage — CI enforces 100% on the default-active surface (everything not behind a `NEXT_PUBLIC_ENABLE_*` flag)   |
+| `npm run test:e2e`      | Playwright E2E against `E2E_BASE_URL`                                                                             |
 
 **Prerequisites:** Node 20+, npm 10+. Rebuilding the WASM crypto crate (`rust/client`) additionally needs Rust 1.81+ and LLVM 21+ with the `wasm32` target — the committed `pkg/` lets you skip this unless you change Rust code. A JS fallback runs if WASM fails to load. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full setup, code style, and WASM build steps.
 

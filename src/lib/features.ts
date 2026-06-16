@@ -12,7 +12,7 @@
 //    by the server at `/api/info` (see
 //    `zk-coins/node::router.rs::Capabilities`) and stored in
 //    `useCapabilities`. Only *opt-in* server features get a bit:
-//    MVP functionality (mint/faucet endpoints, username resolve and
+//    Always-on functionality (mint/faucet endpoints, username resolve and
 //    display) is permanently part of every node build and is therefore
 //    unconditional in the UI — no capability check guards it.
 //    Consumers must read runtime bits via `useFeatures()` inside a
@@ -62,7 +62,7 @@ export const FEATURES = buildTime;
  * capabilities. Subscribes to the capabilities store, so the host
  * component re-renders when `/api/info` lands.
  *
- * MVP server functionality (mint, username resolve/display) is
+ * Always-on server functionality (mint, username resolve/display) is
  * unconditional and is not represented here — call those endpoints
  * directly. Only features a self-hoster might switch off get a flag.
  */

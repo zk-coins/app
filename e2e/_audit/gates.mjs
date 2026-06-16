@@ -10,10 +10,10 @@
  * route's body behind `if (!FEATURES.X) notFound()`, a `{FEATURES.X &&
  * (...)}` button) does not ship and cannot be driven on the hosted
  * images. Anything gated behind one of these flags is therefore out of
- * MVP scope for BOTH audits.
+ * scope for both audits.
  *
  * This is the same exemption ground (a) — "build-time DCE" — documented
- * on `MVP_EXEMPT_TESTIDS` in `coverage.mjs`. Keeping the flag set here,
+ * on `EXEMPT_TESTIDS` in `coverage.mjs`. Keeping the flag set here,
  * imported by both audits, is what stops the button audit and the golden
  * audit from drifting apart on what "env-gated" means: add a flag here
  * once and both audits honour it.
@@ -31,7 +31,7 @@
 
 /**
  * Build-time `NEXT_PUBLIC_ENABLE_*` flags that default off in the shipped
- * bundles, so code behind them is dead-stripped and out of MVP scope.
+ * bundles, so code behind them is dead-stripped and out of scope (env-gated).
  * Names match the keys of `FEATURES` in `src/lib/features.ts`.
  */
 export const ENV_GATED_FEATURES = Object.freeze([

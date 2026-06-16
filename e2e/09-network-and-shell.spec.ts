@@ -1,7 +1,7 @@
 /**
  * Spec 09 — Network info + AppShell chrome
  *
- * Covers § 8.9 of e2e/README.md. The MVP "network info" surface — the
+ * Covers § 8.9 of e2e/README.md. The default-active "network info" surface — the
  * connected node host shown in the Settings About card — plus the
  * navigation chrome that wraps every other screen (BottomNav tab
  * states). 4 tests, 4 baselines.

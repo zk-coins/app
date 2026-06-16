@@ -28,74 +28,73 @@ export default defineConfig({
         // entry that binds a port is `c8 ignore`d (E2E-exercised only).
         'scripts/e2e-info-proxy.mjs',
       ],
-      // Exclude code paths that are not part of the MVP activated surface.
-      // The PRD bundle is built with every NEXT_PUBLIC_ENABLE_* flag off, so
-      // these files are unreachable from any user-facing route and we don't
-      // require unit coverage on them. The Network Activity chart is `keep`-
-      // tagged in the triage and never exercised in the MVP path either.
+      // Coverage-scope rule — one deterministic criterion, no exceptions:
+      //
+      //   Code that is NOT behind a `NEXT_PUBLIC_ENABLE_*` build flag is
+      //   default-active (it ships and is reachable) and MUST reach 100 %
+      //   coverage — unit here, plus e2e. Code behind such a flag is
+      //   dead-stripped from the shipped bundle and is exempt. That is the
+      //   only exemption: "decorative", "no logic" or "triage:keep" do not
+      //   qualify a file for exclusion.
+      //
+      // The env-gate flag set is the single source of truth in
+      // `e2e/_audit/gates.mjs` (`ENV_GATED_FEATURES`) — the same set the
+      // button- and golden-coverage audits consume, so unit and e2e scope
+      // cannot drift apart.
       exclude: [
-        'src/__tests__/**',
-        'src/lib/crypto/passkey.ts', // gated by NEXT_PUBLIC_ENABLE_PASSKEY
-        'src/lib/simulate-network.ts', // network activity chart (triage: keep)
-        'src/lib/api/explorer.ts', // network activity chart (triage: keep)
-        // App + component surface exclusions:
-        'src/app/layout.tsx', // Next.js root layout, no logic
-        'src/app/apps/page.tsx', // FEATURES.APPS_DIRECTORY → notFound() in PRD
-        'src/app/reset/page.tsx', // FEATURES.DEV_ROUTES → notFound() in PRD
-        'src/app/network/page.tsx', // network activity chart (triage: keep)
-        'src/components/NetworkActivity.tsx', // network activity chart (triage: keep)
-        'src/components/PixelIcon.tsx', // decorative sprite data
-        'src/components/icons/**', // decorative svg wrappers
+        'src/__tests__/**', // the test files themselves
+        // ── Permanent: env-gated (behind a NEXT_PUBLIC_ENABLE_* flag, so
+        //    dead-stripped from the shipped bundle and exempt by the rule).
+        'src/lib/crypto/passkey.ts', // PASSKEY
+        'src/app/apps/page.tsx', // APPS_DIRECTORY → notFound()
+        'src/app/reset/page.tsx', // DEV_ROUTES → notFound()
+        // ── DEBT: NOT env-gated → default-active → coverage-required by the
+        //    rule above. Excluded only to keep CI green until each file's
+        //    unit tests land; an entry leaves this list in the same PR that
+        //    covers its file. This group only ever shrinks — never add to it.
+        'src/lib/simulate-network.ts', // network-activity chart
+        'src/lib/api/explorer.ts', // network-activity chart
+        'src/app/layout.tsx', // Next.js root layout
+        'src/app/network/page.tsx', // network-activity chart
+        'src/components/NetworkActivity.tsx', // network-activity chart
+        'src/components/PixelIcon.tsx', // sprite renderer
+        'src/components/icons/**', // svg wrappers
       ],
       reporter: ['text', 'lcov'],
       // Coverage thresholds operate at two tiers:
       //
-      // 1. `src/lib/**` + `src/stores/**` (the original MVP activated
-      //    surface) — strict 100 % on every axis. Any new line,
-      //    statement, branch, or function that is not exercised by a
-      //    test fails CI. Defensive code that genuinely cannot be
-      //    reached in the unit test environment (SSR guards, IDB
-      //    error callbacks, timeout fallbacks) is marked
+      // 1. `src/lib/**` + `src/stores/**` + `src/hooks/**` — strict 100 %
+      //    on every axis. Any new line, statement, branch, or function
+      //    that is not exercised by a test fails CI. Defensive code that
+      //    genuinely cannot be reached in the unit test environment (SSR
+      //    guards, IDB error callbacks, timeout fallbacks) is marked
       //    `/* c8 ignore */` at the source.
       //
-      // 2. Global aggregate (now also includes `src/app/**` +
-      //    `src/components/**`) — set just below the current numbers
-      //    so any regression that drops coverage on the UI surface
-      //    fails CI. Calibrated after the second wave of UI tests
-      //    (home / receive / settings / Onboarding-create) landed —
-      //    the WalletScreen-branches PR (#109) was retired as
-      //    obsolete after the Capabilities-shrink refactor, so the
-      //    aggregate settles ~85 % on lines instead of the ~90 %
-      //    the original plan assumed.
+      // 2. Global aggregate (includes `src/app/**` + `src/components/**`).
+      //    The end state under the coverage-scope rule above is 100 % here
+      //    too — every default-active file fully covered. The floors below
+      //    sit just under the current numbers so no regression can drop UI
+      //    coverage; they ratchet upward toward 100 % as each `DEBT` file in
+      //    the exclude list gains tests and leaves that list. They do not
+      //    move down. (The remaining gap to 100 % is exactly the excluded
+      //    `DEBT` files plus the non-function axes on the app surface.)
       //
-      //    The `@zkcoins/sdk` migration removed the app-owned
-      //    `src/lib/api/schemas.ts` (the wire schemas now come from the
-      //    SDK). Those statements were 100 %-covered, so dropping them
-      //    shrank the aggregate denominator and nudged the statement
-      //    figure to ~84.9 %; the global statement floor is recalibrated
-      //    to 84 accordingly. The strict per-glob `src/lib/**` /
-      //    `src/stores/**` 100 % gate below is unchanged and still
-      //    enforces full coverage on the activated surface.
-      //
-      //    Issue #188: the `src/app/**` route surface was lifted to 100 %
-      //    function coverage (every route-component handler now has a unit
-      //    test; the only excluded paths are the disabled-only settings
-      //    Toggle handlers, `c8 ignore`d at source). The global `functions`
-      //    floor is recalibrated upward (86 → 93) to lock that gain in, and
-      //    a per-glob `src/app/**` functions:100 gate (below) pins the route
-      //    surface at full function coverage so it cannot silently regress —
-      //    same rationale as the strict lib/stores/hooks gates.
+      //    Issue #188: the `src/app/**` route surface is at 100 % function
+      //    coverage (every route-component handler is unit-tested), pinned by
+      //    the per-glob `src/app/**` functions:100 gate below; the global
+      //    `functions` floor was lifted to 93 to lock that in. Lines /
+      //    statements / branches there are not yet 100 % (some render
+      //    branches + defensive guards remain E2E-only).
       thresholds: {
         // Global aggregate over every included file (incl. lib/stores).
         lines: 85,
         statements: 84,
         functions: 93,
         branches: 74,
-        // Original strict gate, applied per-glob aggregate. The
-        // aggregate over `src/lib/**` (and `src/stores/**`) must be
-        // 100 %, which — since aggregate = covered / total — is
-        // equivalent to every file in those globs being fully
-        // covered, matching the prior per-file invariant.
+        // Strict gate, applied per-glob aggregate. The aggregate over
+        // `src/lib/**` (and `src/stores/**`) must be 100 %, which — since
+        // aggregate = covered / total — is equivalent to every file in
+        // those globs being fully covered.
         'src/lib/**': { lines: 100, statements: 100, functions: 100, branches: 100 },
         'src/stores/**': { lines: 100, statements: 100, functions: 100, branches: 100 },
         // Hooks are activated surface too (issue #175 — `useHistory` is the
