@@ -50,6 +50,7 @@ export default function NetworkPage() {
     }, POLL_MS);
 
     return () => {
+      /* c8 ignore next — intervalRef is always set when this cleanup is registered */
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [loaded, source, samples.length]);
