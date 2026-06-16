@@ -25,18 +25,21 @@ import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api/client';
 import { deleteCredential } from '@/lib/crypto/storage';
 
+// The stubs are queried by role/name (no `data-testid`) so the
+// button-inventory audit — which scans all of src/ including __tests__ —
+// sees no orphan testids.
 vi.mock('@/components/onboarding/UnlockScreen', () => ({
   UnlockScreen: ({ onReset }: { onReset: () => void }) => (
-    <button data-testid="stub-reset" onClick={onReset}>
-      reset
+    <button aria-label="stub reset" onClick={onReset}>
+      stub reset
     </button>
   ),
 }));
 vi.mock('@/components/onboarding/Onboarding', () => ({
-  Onboarding: () => <div data-testid="stub-onboarding" />,
+  Onboarding: () => <div role="note">stub onboarding</div>,
 }));
 vi.mock('@/components/screens/WalletScreen', () => ({
-  WalletScreen: () => <div data-testid="stub-wallet" />,
+  WalletScreen: () => <div role="note">stub wallet</div>,
 }));
 
 // Keep the real storage module — `deleteWallet` relies on the real
@@ -84,7 +87,7 @@ describe('Home — unlock-screen reset escape hatch', () => {
     });
 
     render(<Home />);
-    await userEvent.click(await screen.findByTestId('stub-reset'));
+    await userEvent.click(await screen.findByRole('button', { name: 'stub reset' }));
 
     await waitFor(() => {
       expect(deleteCredential).toHaveBeenCalled();
