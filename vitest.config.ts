@@ -53,8 +53,6 @@ export default defineConfig({
         //    unit tests land; an entry leaves this list in the same PR that
         //    covers its file. This group only ever shrinks — never add to it.
         'src/app/layout.tsx', // Next.js root layout
-        'src/app/network/page.tsx', // network-activity chart
-        'src/components/NetworkActivity.tsx', // network-activity chart
         'src/components/PixelIcon.tsx', // sprite renderer
         'src/components/icons/**', // svg wrappers
       ],
