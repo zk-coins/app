@@ -52,8 +52,6 @@ export default defineConfig({
         //    rule above. Excluded only to keep CI green until each file's
         //    unit tests land; an entry leaves this list in the same PR that
         //    covers its file. This group only ever shrinks — never add to it.
-        'src/lib/simulate-network.ts', // network-activity chart
-        'src/lib/api/explorer.ts', // network-activity chart
         'src/app/layout.tsx', // Next.js root layout
         'src/app/network/page.tsx', // network-activity chart
         'src/components/NetworkActivity.tsx', // network-activity chart
