@@ -297,7 +297,7 @@ describe('SendPage — error surfacing', () => {
   });
 });
 
-describe('SendPage — username resolution (MVP, always on)', () => {
+describe('SendPage — username resolution (always on)', () => {
   it('strips the @zkcoins.app suffix and calls /api/username/resolve', async () => {
     portfolioNumSends = 0;
     const user = userEvent.setup();

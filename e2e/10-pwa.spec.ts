@@ -5,7 +5,7 @@
  * (native / ios / manual) plus the "installing…" sub-state of native.
  * 4 tests, 4 baselines.
  *
- * Closes the MVP triage gap for "Install as PWA": before this spec, the
+ * Closes the coverage gap for "Install as PWA": before this spec, the
  * component had no functional coverage at all.
  *
  * DEV-only widgets visible in these baselines (per § 8.0 (b)):

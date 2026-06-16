@@ -6,7 +6,7 @@
  * (empty). 4 tests, 4 linux baselines (one mobile).
  *
  * The faucet-button-visible / faucet-minting tests are gone — mint is
- * MVP and the UI gates the button purely on `networkName !==
+ * always-on and the UI gates the button purely on `networkName !==
  * mainnet`, so the button IS present on DEV (Mutinynet). Faucet-flow
  * functional coverage lives in the legacy `wallet.spec.ts`; this spec
  * just baselines the empty/funded chrome.

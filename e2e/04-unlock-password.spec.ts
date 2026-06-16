@@ -7,7 +7,7 @@
  * reset-flow test is functional-only — the post-wipe screen is the
  * Welcome screen already baselined by 01-onboarding-welcome).
  *
- * Closes the MVP triage gap noted in README.md (no E2E coverage on
+ * Closes the coverage gap noted in README.md (no E2E coverage on
  * `Unlock wallet — password` previously).
  *
  * DEV-only widgets visible in these baselines: none — the unlock

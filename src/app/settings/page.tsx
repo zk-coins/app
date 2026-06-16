@@ -25,9 +25,9 @@ function Toggle({
 }) {
   const [on, setOn] = useState(defaultOn);
   // Every settings toggle currently ships disabled ("Planned"), so the
-  // interactive enable path is unreachable in the MVP surface. Excluded
-  // from coverage until a real (enabled) toggle lands — same rationale as
-  // the vitest.config "not part of the MVP activated surface" excludes.
+  // interactive enable path is unreachable — there is no way to toggle it
+  // on. It is `c8 ignore`d until a real (enabled) toggle lands, the same
+  // way other genuinely-unreachable defensive code is ignored at source.
   /* c8 ignore start */
   const handleToggle = () => !disabled && setOn((v) => !v);
   /* c8 ignore stop */
