@@ -43,18 +43,13 @@ export default defineConfig({
       // cannot drift apart.
       exclude: [
         'src/__tests__/**', // the test files themselves
-        // ── Permanent: env-gated (behind a NEXT_PUBLIC_ENABLE_* flag, so
-        //    dead-stripped from the shipped bundle and exempt by the rule).
+        // Only env-gated files are exempt (behind a NEXT_PUBLIC_ENABLE_* flag,
+        // so dead-stripped from the shipped bundle). Everything else is
+        // default-active and covered — the DEBT burn-down is complete; do not
+        // re-add non-env-gated files here.
         'src/lib/crypto/passkey.ts', // PASSKEY
         'src/app/apps/page.tsx', // APPS_DIRECTORY → notFound()
         'src/app/reset/page.tsx', // DEV_ROUTES → notFound()
-        // ── DEBT: NOT env-gated → default-active → coverage-required by the
-        //    rule above. Excluded only to keep CI green until each file's
-        //    unit tests land; an entry leaves this list in the same PR that
-        //    covers its file. This group only ever shrinks — never add to it.
-        'src/app/layout.tsx', // Next.js root layout
-        'src/components/PixelIcon.tsx', // sprite renderer
-        'src/components/icons/**', // svg wrappers
       ],
       reporter: ['text', 'lcov'],
       // Coverage thresholds operate at two tiers:
@@ -67,26 +62,26 @@ export default defineConfig({
       //    `/* c8 ignore */` at the source.
       //
       // 2. Global aggregate (includes `src/app/**` + `src/components/**`).
-      //    The end state under the coverage-scope rule above is 100 % here
-      //    too — every default-active file fully covered. The floors below
-      //    sit just under the current numbers so no regression can drop UI
-      //    coverage; they ratchet upward toward 100 % as each `DEBT` file in
-      //    the exclude list gains tests and leaves that list. They do not
-      //    move down. (The remaining gap to 100 % is exactly the excluded
-      //    `DEBT` files plus the non-function axes on the app surface.)
+      //    The DEBT exclude list is fully burned down — every default-active
+      //    file is now covered, so the only files outside the aggregate are
+      //    the env-gated ones above. The floors below sit just under the live
+      //    numbers so no regression can drop coverage; they ratchet upward and
+      //    never move down. The residual gap to 100 % is the non-function axes
+      //    on the app surface (render branches + defensive guards that are
+      //    exercised by E2E, not unit).
       //
       //    Issue #188: the `src/app/**` route surface is at 100 % function
       //    coverage (every route-component handler is unit-tested), pinned by
-      //    the per-glob `src/app/**` functions:100 gate below; the global
-      //    `functions` floor was lifted to 93 to lock that in. Lines /
-      //    statements / branches there are not yet 100 % (some render
-      //    branches + defensive guards remain E2E-only).
+      //    the per-glob `src/app/**` functions:100 gate below.
       thresholds: {
         // Global aggregate over every included file (incl. lib/stores).
-        lines: 85,
-        statements: 84,
-        functions: 93,
-        branches: 74,
+        // Ratcheted up after the DEBT burn-down completed (network-activity
+        // lib + chart UI, decorative icons, root layout all now covered) —
+        // floors sit just under the live numbers and only move upward.
+        lines: 92,
+        statements: 92,
+        functions: 94,
+        branches: 85,
         // Strict gate, applied per-glob aggregate. The aggregate over
         // `src/lib/**` (and `src/stores/**`) must be 100 %, which — since
         // aggregate = covered / total — is equivalent to every file in
