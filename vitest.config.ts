@@ -76,11 +76,20 @@ export default defineConfig({
       //    to 84 accordingly. The strict per-glob `src/lib/**` /
       //    `src/stores/**` 100 % gate below is unchanged and still
       //    enforces full coverage on the activated surface.
+      //
+      //    Issue #188: the `src/app/**` route surface was lifted to 100 %
+      //    function coverage (every route-component handler now has a unit
+      //    test; the only excluded paths are the disabled-only settings
+      //    Toggle handlers, `c8 ignore`d at source). The global `functions`
+      //    floor is recalibrated upward (86 → 93) to lock that gain in, and
+      //    a per-glob `src/app/**` functions:100 gate (below) pins the route
+      //    surface at full function coverage so it cannot silently regress —
+      //    same rationale as the strict lib/stores/hooks gates.
       thresholds: {
         // Global aggregate over every included file (incl. lib/stores).
         lines: 85,
         statements: 84,
-        functions: 86,
+        functions: 93,
         branches: 74,
         // Original strict gate, applied per-glob aggregate. The
         // aggregate over `src/lib/**` (and `src/stores/**`) must be
@@ -92,6 +101,13 @@ export default defineConfig({
         // Hooks are activated surface too (issue #175 — `useHistory` is the
         // App's only transaction-history source of truth): same strict gate.
         'src/hooks/**': { lines: 100, statements: 100, functions: 100, branches: 100 },
+        // Route surface (issue #188): every route-component handler is now
+        // unit-tested, so pin function coverage at 100 % per-glob. Lines /
+        // statements / branches are NOT yet at 100 % here (several render
+        // branches and defensive guards remain E2E-only), so only the
+        // functions axis is gated — enough to stop an untested handler from
+        // landing in a route component, which the global aggregate let slip.
+        'src/app/**': { functions: 100 },
         // Security-sensitive E2E proxy (CodeQL: stack-trace-exposure +
         // clear-text-logging were fixed here) — keep every reachable
         // line/branch test-covered so the hardened behaviour cannot

@@ -133,6 +133,27 @@ describe('ReceivePage — copy feedback', () => {
     expect(timerSpy).toHaveBeenCalledWith(expect.any(Function), 1_500);
     timerSpy.mockRestore();
   });
+
+  it('stays on "Copy address" when the clipboard write is rejected', async () => {
+    // Exercises the `writeText(...).then(onOk, onErr)` rejection leg: a
+    // denied/unavailable clipboard must leave the button untouched (no
+    // "Copied" flip) and must not throw.
+    const writeSpy = vi
+      .spyOn(navigator.clipboard, 'writeText')
+      .mockRejectedValue(new Error('clipboard denied'));
+    const user = userEvent.setup();
+    render(<ReceivePage />);
+
+    const button = screen.getByTestId('receive-copy-btn');
+    await user.click(button);
+    await act(async () => {
+      await Promise.resolve();
+    });
+
+    expect(writeSpy).toHaveBeenCalledWith(ALICE_ZK);
+    expect(button).toHaveTextContent('Copy address');
+    expect(button).not.toHaveAttribute('data-copied');
+  });
 });
 
 describe('ReceivePage — no-account redirect', () => {
