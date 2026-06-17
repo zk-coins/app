@@ -19,13 +19,13 @@ let mockParamId = ASSET_ID;
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: mockParamId }),
   useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
-  // The page guards with `!FEATURES.MULTI_ASSET) notFound()`; the features
-  // mock below forces the flag ON, so this is never invoked.
+  // `notFound` stub kept for next/navigation module-surface completeness; the
+  // route is default-active now and no longer guards with it.
   notFound: vi.fn(),
 }));
 
-// MULTI_ASSET ON so the per-asset detail route renders instead of
-// 404-ing / redirecting home.
+// MULTI_ASSET is the runtime node capability; ON here so the per-asset detail
+// route renders instead of redirecting home.
 const FEATURES_STATE = vi.hoisted(() => ({
   APPS_DIRECTORY: false,
   PASSKEY: false,
