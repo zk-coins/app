@@ -7,7 +7,7 @@
  * Alice (funded, 100 000 sats) sends 1 000 sats to Bob. The send
  * goes through real `/api/send` + `/api/commit` against DEV.
  *
- * DEV mirrors PRD: username resolve is MVP and always renders the
+ * DEV mirrors PRD: username resolve is always-on and always renders the
  * `@user` placeholder; `FEATURES.APPS_DIRECTORY` is off so the DFX
  * link in the no-funds banner is dead-stripped. The
  * `recipient-valid-username` test was removed with the migration.

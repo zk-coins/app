@@ -36,7 +36,7 @@ export default defineConfig({
   // Helpers and global-setup files live under e2e/ but should not be
   // picked up as tests. Spec files are numerically prefixed
   // (`{01..11}-*.spec.ts`) plus the still-active legacy `webauthn.spec.ts`
-  // (non-MVP DEV-bundle passkey coverage). Underscore-prefixed files
+  // (env-gated DEV-bundle passkey coverage). Underscore-prefixed files
   // (`_global-setup.ts`, `_helpers/*.ts`) are excluded by the glob.
   //
   // Retired legacy specs (replaced by the exhaustive 01..11 suite):

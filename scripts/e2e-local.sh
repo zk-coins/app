@@ -121,10 +121,11 @@ if [[ "${1:-}" == "__in_container" ]]; then
   # failure in the readiness wait can never leak the proxy / app servers.
   trap 'publish_artifacts; cleanup' EXIT
 
-  echo "▶ [container] starting /api/info normalisation proxy :${PROXY_PORT} → ${NODE_URL}"
+  echo "▶ [container] starting /api/info normalisation proxy :${PROXY_PORT} → ${NODE_URL} (multi_asset=${E2E_MULTI_ASSET:-false})"
   E2E_INFO_PROXY_PORT="$PROXY_PORT" \
   E2E_NODE_URL="$NODE_URL" \
   E2E_INFO_USERNAME_DOMAIN="dev.zkcoins.app" \
+  E2E_INFO_MULTI_ASSET="${E2E_MULTI_ASSET:-}" \
     node scripts/e2e-info-proxy.mjs &
   INFO_PROXY_PID=$!
 
@@ -219,7 +220,11 @@ echo "▶ [host] report + artifacts → ${OUT_DIR}"
 
 # Note: not `exec` — we need a post-run step to sync regenerated baselines
 # back into the working tree (the container can't write the read-only /src
-# mount, so it stages them under /out/snapshots/ instead).
+# mount, so it stages them under /out/snapshots/ instead). `set +e` around
+# the run so a non-zero exit (e.g. a few specs failing on an
+# `--update-snapshots` regen) does NOT abort before that sync step — the
+# whole point of a regen run is to surface the baselines it produced.
+set +e
 docker run --rm -i \
   --add-host=host.docker.internal:host-gateway \
   -v "${REPO_ROOT}:/src:ro" \
@@ -229,10 +234,12 @@ docker run --rm -i \
   -e E2E_INFO_PROXY_PORT="${E2E_INFO_PROXY_PORT:-4243}" \
   -e E2E_NETWORK_EXPECTED="${E2E_NETWORK_EXPECTED:-signet}" \
   -e E2E_FAUCET_CALLS="${E2E_FAUCET_CALLS:-1}" \
+  -e E2E_MULTI_ASSET="${E2E_MULTI_ASSET:-}" \
   -e CI="${CI:-}" \
   "${IMAGE}" \
   bash /src/scripts/e2e-local.sh __in_container "$@"
 DOCKER_EXIT=$?
+set -e
 
 # On an `--update-snapshots` run, sync the regenerated baselines the container
 # staged under /out/snapshots/ back into the working tree. The container runs
@@ -240,7 +247,7 @@ DOCKER_EXIT=$?
 # `*-chromium-linux.png` goldens reach the repo. Gated on the flag so a plain
 # verification run never mutates committed baselines.
 case " $* " in
-  *" --update-snapshots "*|*" -u "*)
+  *--update-snapshots*|*" -u "*)
     if [[ -d "${OUT_DIR}/snapshots/e2e" ]]; then
       echo "▶ [host] syncing regenerated baselines → ${REPO_ROOT}/e2e"
       cp -a "${OUT_DIR}/snapshots/e2e/." "${REPO_ROOT}/e2e/"

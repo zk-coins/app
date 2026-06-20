@@ -79,6 +79,9 @@
  *   E2E_INFO_PROXY_PORT   listen port           (default 4243)
  *   E2E_NODE_URL          upstream node base URL (default http://host.docker.internal:4242)
  *   E2E_INFO_USERNAME_DOMAIN  domain to report   (default dev.zkcoins.app)
+ *   E2E_INFO_MULTI_ASSET  'true' → report multi_asset:true and pass per-asset
+ *                         balance/send through 1:1 (the multi-asset leg,
+ *                         specs 18–21); default single-asset surface.
  *
  * No dependencies — Node ≥ 18 built-ins only (http, fetch).
  *
@@ -104,13 +107,21 @@ const DEV_CAPABILITIES = {
   multi_asset: false,
 };
 
-/** Normalise an upstream `/api/info` body to the hosted-DEV surface. */
-export function normalizeInfo(upstream, usernameDomain) {
+/**
+ * Normalise an upstream `/api/info` body to the hosted-DEV surface.
+ *
+ * `multiAsset` selects which leg's baselines are being driven: the default
+ * (false) is the single-asset surface; true reports `multi_asset:true` so the
+ * shared Wallet/Send screens render the per-asset surface and the dedicated
+ * multi-asset routes (specs 18–21) run instead of skipping. The other opt-in
+ * capabilities stay OFF either way so the rest of the surface is identical.
+ */
+export function normalizeInfo(upstream, usernameDomain, multiAsset = false) {
   // Start from the upstream object so any future field the node adds is
-  // preserved by default, then overwrite the three baseline-affecting
-  // dimensions and drop `bitcoin_network` (DEV omits it).
+  // preserved by default, then overwrite the baseline-affecting dimensions
+  // and drop `bitcoin_network` (DEV omits it).
   const normalized = { ...upstream };
-  normalized.capabilities = DEV_CAPABILITIES;
+  normalized.capabilities = { ...DEV_CAPABILITIES, multi_asset: multiAsset };
   normalized.username_domain = usernameDomain;
   delete normalized.bitcoin_network;
   return normalized;
@@ -239,7 +250,7 @@ export function startupMessage(port) {
  * Exported as a factory (rather than a module-level singleton) so the
  * unit suite can point it at a mock upstream on an ephemeral port.
  */
-export function createProxyServer({ nodeUrl, usernameDomain }) {
+export function createProxyServer({ nodeUrl, usernameDomain, multiAsset = false }) {
   const base = nodeUrl.replace(/\/+$/, '');
 
   return http.createServer(async (req, res) => {
@@ -272,8 +283,9 @@ export function createProxyServer({ nodeUrl, usernameDomain }) {
     };
 
     try {
-      // Translation 1 — single-asset balance read.
-      if (singleAssetBalanceAddress !== null && singleAssetBalanceAddress !== '') {
+      // Translation 1 — single-asset balance read. Skipped on the multi-asset
+      // leg, where the app issues native per-asset requests itself.
+      if (!multiAsset && singleAssetBalanceAddress !== null && singleAssetBalanceAddress !== '') {
         const portfolio = await fetchPortfolio(singleAssetBalanceAddress);
         res.setHeader('content-type', 'application/json');
         res.setHeader('access-control-allow-origin', '*');
@@ -287,8 +299,9 @@ export function createProxyServer({ nodeUrl, usernameDomain }) {
 
       // Translation 2 — inject the sender's sole asset_id into an
       // asset_id-less send. Non-JSON or shape mismatches forward
-      // unchanged (the node answers those itself).
-      if (isSend && body && body.length > 0) {
+      // unchanged (the node answers those itself). Skipped on the
+      // multi-asset leg, where the app sends a real `asset_id` itself.
+      if (!multiAsset && isSend && body && body.length > 0) {
         let parsed = null;
         try {
           parsed = JSON.parse(body.toString('utf8'));
@@ -327,7 +340,7 @@ export function createProxyServer({ nodeUrl, usernameDomain }) {
 
       if (isInfo && upstream.ok) {
         const json = await upstream.json();
-        const normalized = JSON.stringify(normalizeInfo(json, usernameDomain));
+        const normalized = JSON.stringify(normalizeInfo(json, usernameDomain, multiAsset));
         res.setHeader('content-type', 'application/json');
         // Preserve the node's permissive CORS so the browser path behaves
         // identically whether it hits the node or the proxy.
@@ -362,7 +375,8 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const port = Number.parseInt(process.env.E2E_INFO_PROXY_PORT ?? DEFAULT_PORT, 10);
   const nodeUrl = process.env.E2E_NODE_URL ?? DEFAULT_NODE_URL;
   const usernameDomain = process.env.E2E_INFO_USERNAME_DOMAIN ?? DEFAULT_USERNAME_DOMAIN;
-  const server = createProxyServer({ nodeUrl, usernameDomain });
+  const multiAsset = process.env.E2E_INFO_MULTI_ASSET === 'true';
+  const server = createProxyServer({ nodeUrl, usernameDomain, multiAsset });
   server.listen(port, '0.0.0.0', () => {
     // Log the port the OS actually bound (server.address()), not the
     // env-derived config value — the diagnostic stays accurate and no

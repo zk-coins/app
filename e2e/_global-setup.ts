@@ -214,7 +214,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   if (info.network === 'mainnet') {
     throw new Error(
       `globalSetup: refusing to seed accounts on mainnet (E2E_API_URL=${process.env.E2E_API_URL ?? 'default'}). ` +
-        `Point at a testnet (signet) API or run an MVP smoke spec instead.`,
+        `Point at a testnet (signet) API or run a smoke spec instead.`,
     );
   }
 

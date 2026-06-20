@@ -19,14 +19,13 @@ const routerReplace = vi.fn();
 const routerPush = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: routerReplace, push: routerPush }),
-  // The page guards with `!FEATURES.MULTI_ASSET) notFound()`; the features
-  // mock below forces the flag ON so this is never invoked, but it must
-  // exist on the module for the import to resolve.
+  // `notFound` stub kept for next/navigation module-surface completeness; the
+  // route is default-active now and no longer guards with it.
   notFound: vi.fn(),
 }));
 
-// MULTI_ASSET ON (build-time route gate + runtime capability) so the
-// create-coin route renders instead of 404-ing / redirecting home.
+// MULTI_ASSET is the runtime node capability; ON here so the create-coin
+// route renders instead of redirecting home.
 const FEATURES_STATE = vi.hoisted(() => ({
   APPS_DIRECTORY: false,
   PASSKEY: false,
@@ -140,6 +139,27 @@ describe('CreateCoinPage — happy path', () => {
 
     await user.click(screen.getByTestId('create-done-btn'));
     expect(routerPush).toHaveBeenCalledWith('/');
+  });
+
+  it('forwards job phase updates from createCoin to the phase indicator', async () => {
+    // The default happy-path mock never invokes `onPhase`; drive it here so
+    // the `onPhase: (job) => setPhase(job.phase)` callback runs.
+    createSpy.mockImplementation((async (
+      _req: unknown,
+      opts: { onPhase?: (s: JobStatus) => void },
+    ) => {
+      opts.onPhase?.({ job_id: 'mint-1', status: 'proving', phase: 'proving' } as JobStatus);
+      return completed;
+    }) as unknown as typeof api.createCoin);
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+
+    expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
+    expect(createSpy).toHaveBeenCalledWith(expect.any(Object), expect.any(Object));
   });
 });
 

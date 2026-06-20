@@ -11,8 +11,6 @@ describe('FEATURES (build-time client flags)', () => {
     expect(typeof FEATURES.AUTO_LOCK).toBe('boolean');
     expect(typeof FEATURES.ADDRESS_ROTATION).toBe('boolean');
     expect(typeof FEATURES.TOR_ROUTING).toBe('boolean');
-    // MULTI_ASSET is a build-time route gate (dead-strips /create + /asset).
-    expect(typeof FEATURES.MULTI_ASSET).toBe('boolean');
   });
 
   it('exposes exactly the build-time flags — runtime-only capabilities live on useFeatures()', () => {
@@ -21,7 +19,6 @@ describe('FEATURES (build-time client flags)', () => {
       'APPS_DIRECTORY',
       'AUTO_LOCK',
       'DEV_ROUTES',
-      'MULTI_ASSET',
       'PASSKEY',
       'TOR_ROUTING',
     ]);
