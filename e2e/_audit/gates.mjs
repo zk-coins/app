@@ -38,13 +38,6 @@ export const ENV_GATED_FEATURES = Object.freeze([
   'PASSKEY',
   'APPS_DIRECTORY',
   'DEV_ROUTES',
-  // The dedicated multi-asset routes (`/create`, `/asset/[id]`) are guarded
-  // by `!FEATURES.MULTI_ASSET) notFound()`. The flag defaults off in the
-  // single-asset PRD/DEV bundles the committed baselines are captured
-  // against, so the route bodies are dead-stripped and carry no golden —
-  // exactly the env-gate contract this set encodes. Their multi-asset specs
-  // (18-21) skip on a `multi_asset:false` node and run on a true node.
-  'MULTI_ASSET',
 ]);
 
 /** Whether `flag` is a recognised env-gate (one of {@link ENV_GATED_FEATURES}). */

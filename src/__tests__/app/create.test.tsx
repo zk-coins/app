@@ -19,14 +19,13 @@ const routerReplace = vi.fn();
 const routerPush = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: routerReplace, push: routerPush }),
-  // The page guards with `!FEATURES.MULTI_ASSET) notFound()`; the features
-  // mock below forces the flag ON so this is never invoked, but it must
-  // exist on the module for the import to resolve.
+  // `notFound` stub kept for next/navigation module-surface completeness; the
+  // route is default-active now and no longer guards with it.
   notFound: vi.fn(),
 }));
 
-// MULTI_ASSET ON (build-time route gate + runtime capability) so the
-// create-coin route renders instead of 404-ing / redirecting home.
+// MULTI_ASSET is the runtime node capability; ON here so the create-coin
+// route renders instead of redirecting home.
 const FEATURES_STATE = vi.hoisted(() => ({
   APPS_DIRECTORY: false,
   PASSKEY: false,
