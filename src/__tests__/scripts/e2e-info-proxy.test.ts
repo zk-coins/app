@@ -63,6 +63,24 @@ describe('normalizeInfo', () => {
     expect(out.network).toBe('Mutinynet');
     expect(out.future_field).toBe('kept');
   });
+
+  it('reports multi_asset:true on the multi-asset leg, every other capability still off', () => {
+    const out = normalizeInfo(
+      {
+        capabilities: { address_list: true, username_claim: true, lnurl: true, multi_asset: true },
+        username_domain: 'local.zkcoins.test',
+      },
+      'dev.zkcoins.app',
+      true,
+    );
+    expect(out.capabilities).toEqual({
+      address_list: false,
+      username_claim: false,
+      lnurl: false,
+      multi_asset: true,
+    });
+    expect(out.username_domain).toBe('dev.zkcoins.app');
+  });
 });
 
 describe('forwardHeaders', () => {
@@ -465,5 +483,65 @@ describe('createProxyServer', () => {
     expect(JSON.stringify(body)).not.toMatch(/detail|stack|ECONNREFUSED|127\.0\.0\.1/);
     // The cause is logged server-side only (never returned to the caller).
     expect(errorSpy).toHaveBeenCalled();
+  });
+
+  it('multi-asset leg: reports multi_asset:true and passes per-asset balance/send through 1:1', async () => {
+    const seen: string[] = [];
+    const upstream = http.createServer((req, res) => {
+      const chunks: Buffer[] = [];
+      req.on('data', (c) => chunks.push(c as Buffer));
+      req.on('end', () => {
+        seen.push(req.url ?? '');
+        res.setHeader('content-type', 'application/json');
+        if (req.url === '/api/info') {
+          res.end(
+            JSON.stringify({
+              capabilities: {
+                address_list: true,
+                username_claim: true,
+                lnurl: true,
+                multi_asset: true,
+              },
+              username_domain: 'local.zkcoins.test',
+              bitcoin_network: 'mutinynet',
+            }),
+          );
+          return;
+        }
+        res.statusCode = 200;
+        res.end(JSON.stringify({ ok: true }));
+      });
+    });
+    const nodeUrl = await listen(upstream);
+    const proxyUrl = await listen(
+      createProxyServer({ nodeUrl, usernameDomain: 'dev.zkcoins.app', multiAsset: true }),
+    );
+
+    // /api/info now reports multi_asset:true (the other caps stay normalised off).
+    const info = await (await fetch(`${proxyUrl}/api/info`)).json();
+    expect(info.capabilities).toEqual({
+      address_list: false,
+      username_claim: false,
+      lnurl: false,
+      multi_asset: true,
+    });
+
+    // The asset_id-less balance read is NOT rewritten to /api/balance/<addr>,
+    // and an asset_id-less send is NOT given a portfolio lookup + injection —
+    // the multi-asset app issues native per-asset requests itself.
+    await fetch(`${proxyUrl}/api/balance?address=${'aa'.repeat(32)}`);
+    await fetch(`${proxyUrl}/api/jobs/send`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        account_address: 'aa'.repeat(32),
+        recipient: 'bb'.repeat(32),
+        amount: 1,
+      }),
+    });
+
+    expect(seen).toContain(`/api/balance?address=${'aa'.repeat(32)}`); // verbatim, not aggregated
+    expect(seen).toContain('/api/jobs/send');
+    expect(seen).not.toContain(`/api/balance/${'aa'.repeat(32)}`); // no portfolio lookup hop
   });
 });
