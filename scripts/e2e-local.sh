@@ -67,9 +67,15 @@ if [[ "${1:-}" == "__in_container" ]]; then
   echo "▶ [container] npm ci"
   npm ci
 
-  echo "▶ [container] next build (NEXT_PUBLIC_API_URL=http://127.0.0.1:${APP_PORT}, proxy→127.0.0.1:${PROXY_PORT})"
+  # Render in English: the committed `*-chromium-linux.png` baselines (and the
+  # specs' visible-text assertions) are produced against the hosted DEV stack,
+  # which serves English. The app is German-first by default (`i18n/config.ts`),
+  # so bake the e2e-only `NEXT_PUBLIC_E2E_LOCALE=en` override to reproduce the
+  # baseline locale here. Production builds never set this and stay German.
+  echo "▶ [container] next build (NEXT_PUBLIC_API_URL=http://127.0.0.1:${APP_PORT}, proxy→127.0.0.1:${PROXY_PORT}, locale=en)"
   NEXT_PUBLIC_API_URL="http://127.0.0.1:${APP_PORT}" \
   NEXT_PUBLIC_EXPLORER_URL="https://zkcoins.space" \
+  NEXT_PUBLIC_E2E_LOCALE="en" \
   LOCAL_NODE_PROXY_TARGET="http://127.0.0.1:${PROXY_PORT}" \
     npm run build
 
@@ -94,19 +100,32 @@ if [[ "${1:-}" == "__in_container" ]]; then
   # debuggable from outside the container.
   publish_artifacts() {
     if [[ -d /out ]]; then
-      rm -rf /out/playwright-report /out/test-results 2>/dev/null || true
+      rm -rf /out/playwright-report /out/test-results /out/snapshots 2>/dev/null || true
       [[ -d playwright-report ]] && cp -a playwright-report /out/playwright-report || true
       [[ -d test-results ]] && cp -a test-results /out/test-results || true
+      # Surface any `*-snapshots/` baselines back to the host: the repo is
+      # mounted read-only at /src and Playwright runs in the writable /work
+      # copy, so `--update-snapshots` writes the regenerated PNGs into
+      # /work/e2e/**/*-snapshots/ — which would be lost on container exit. Copy
+      # them (preserving the repo-relative path) into /out/snapshots/ so the
+      # host entrypoint can sync them into the working tree. Only meaningful on
+      # an `--update-snapshots` run; a no-op (harmless) otherwise.
+      mkdir -p /out/snapshots
+      find e2e -type d -name '*-snapshots' 2>/dev/null | while read -r dir; do
+        mkdir -p "/out/snapshots/$(dirname "$dir")"
+        cp -a "$dir" "/out/snapshots/$(dirname "$dir")/" 2>/dev/null || true
+      done
     fi
   }
   # Set the combined trap BEFORE launching any background process so a
   # failure in the readiness wait can never leak the proxy / app servers.
   trap 'publish_artifacts; cleanup' EXIT
 
-  echo "▶ [container] starting /api/info normalisation proxy :${PROXY_PORT} → ${NODE_URL}"
+  echo "▶ [container] starting /api/info normalisation proxy :${PROXY_PORT} → ${NODE_URL} (multi_asset=${E2E_MULTI_ASSET:-false})"
   E2E_INFO_PROXY_PORT="$PROXY_PORT" \
   E2E_NODE_URL="$NODE_URL" \
   E2E_INFO_USERNAME_DOMAIN="dev.zkcoins.app" \
+  E2E_INFO_MULTI_ASSET="${E2E_MULTI_ASSET:-}" \
     node scripts/e2e-info-proxy.mjs &
   INFO_PROXY_PID=$!
 
@@ -165,6 +184,17 @@ fi
 # ──────────────────────────────────────────────────────────────────────
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
+# The documented usage is `scripts/e2e-local.sh [-- extra playwright args]`.
+# Strip a single leading `--` separator so the extra args are forwarded to
+# Playwright as flags, not as a literal `--` (a bare `--` makes Playwright
+# treat everything after it as test-file path filters → "No tests found").
+# `npm run test:e2e:local -- --update-snapshots` already strips the npm `--`,
+# but a direct `scripts/e2e-local.sh -- --update-snapshots` invocation does
+# not, so normalise it here.
+if [[ "${1:-}" == "--" ]]; then
+  shift
+fi
+
 if ! command -v docker >/dev/null 2>&1; then
   echo "✗ docker is required for the visual leg (the baselines are *-chromium-linux.png)." >&2
   echo "  Native macOS Playwright runs functionally only — see e2e/README.md § 4.2." >&2
@@ -188,7 +218,14 @@ OUT_DIR="${REPO_ROOT}/playwright-report-local"
 mkdir -p "${OUT_DIR}"
 echo "▶ [host] report + artifacts → ${OUT_DIR}"
 
-exec docker run --rm -i \
+# Note: not `exec` — we need a post-run step to sync regenerated baselines
+# back into the working tree (the container can't write the read-only /src
+# mount, so it stages them under /out/snapshots/ instead). `set +e` around
+# the run so a non-zero exit (e.g. a few specs failing on an
+# `--update-snapshots` regen) does NOT abort before that sync step — the
+# whole point of a regen run is to surface the baselines it produced.
+set +e
+docker run --rm -i \
   --add-host=host.docker.internal:host-gateway \
   -v "${REPO_ROOT}:/src:ro" \
   -v "${OUT_DIR}:/out" \
@@ -197,6 +234,25 @@ exec docker run --rm -i \
   -e E2E_INFO_PROXY_PORT="${E2E_INFO_PROXY_PORT:-4243}" \
   -e E2E_NETWORK_EXPECTED="${E2E_NETWORK_EXPECTED:-signet}" \
   -e E2E_FAUCET_CALLS="${E2E_FAUCET_CALLS:-1}" \
+  -e E2E_MULTI_ASSET="${E2E_MULTI_ASSET:-}" \
   -e CI="${CI:-}" \
   "${IMAGE}" \
   bash /src/scripts/e2e-local.sh __in_container "$@"
+DOCKER_EXIT=$?
+set -e
+
+# On an `--update-snapshots` run, sync the regenerated baselines the container
+# staged under /out/snapshots/ back into the working tree. The container runs
+# in a /src copy, so this is the only path by which new/changed
+# `*-chromium-linux.png` goldens reach the repo. Gated on the flag so a plain
+# verification run never mutates committed baselines.
+case " $* " in
+  *--update-snapshots*|*" -u "*)
+    if [[ -d "${OUT_DIR}/snapshots/e2e" ]]; then
+      echo "▶ [host] syncing regenerated baselines → ${REPO_ROOT}/e2e"
+      cp -a "${OUT_DIR}/snapshots/e2e/." "${REPO_ROOT}/e2e/"
+    fi
+    ;;
+esac
+
+exit "$DOCKER_EXIT"

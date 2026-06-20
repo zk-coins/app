@@ -19,9 +19,9 @@
  *     ghost B entries), so the PR comment lists exactly what to fix.
  *
  * Exit codes:
- *   0 -- no uncovered MVP testids and no fully unlabeled MVP buttons.
- *   1 -- at least one section A finding outside MVP_EXEMPT_TESTIDS, or one
- *       section C finding outside MVP_EXEMPT_FILES / MVP_EXEMPT_BUTTON_SNIPPETS.
+ *   0 -- no uncovered testids and no fully unlabeled buttons.
+ *   1 -- at least one section A finding outside EXEMPT_TESTIDS, or one
+ *       section C finding outside EXEMPT_FILES / EXEMPT_BUTTON_SNIPPETS.
  *
  * Output respects --markdown (sticky PR comment format) and --json. The
  * --json mode always emits all three sections so tooling/debugging keeps
@@ -38,7 +38,7 @@ const repoRoot = path.resolve(__dirname, '..', '..');
 const srcDir = path.join(repoRoot, 'src');
 const e2eDir = path.join(repoRoot, 'e2e');
 
-// MVP scope: testids on this list are not required to have e2e coverage.
+// Exempt: testids on this list are not required to have e2e coverage.
 // Two exemption grounds apply:
 //   (a) Build-time DCE — the testid lives behind a `NEXT_PUBLIC_ENABLE_*`
 //       flag that is off in the PRD bundle, so Next.js strips the code
@@ -47,7 +47,7 @@ const e2eDir = path.join(repoRoot, 'e2e');
 //       opt-in server capability bit (`username_claim`, …) that is off
 //       on both hosted DEV and PRD nodes, so the element never renders.
 //       Self-hosters who flip the capability ship their own E2E.
-const MVP_EXEMPT_TESTIDS = new Set([
+const EXEMPT_TESTIDS = new Set([
   'passkey-restore-btn',
   'unlock-passkey-btn',
   // Gated on the runtime `username_claim` capability reported by
@@ -73,20 +73,20 @@ const MVP_EXEMPT_TESTIDS = new Set([
 
 // Generic wrapper components are allowed to expose <button> without testid
 // because the testid lives on the wrapper's usage site.
-const MVP_EXEMPT_FILES = new Set([
+const EXEMPT_FILES = new Set([
   'src/components/PwaPrompt.tsx', // shared Dismiss-X across PWA variants
   'src/app/settings/page.tsx', // generic Toggle component
 ]);
 
 // Buttons sitting inside a `{FEATURES.X && (...)}` JSX block are dead-
 // stripped from the PRD bundle by Next.js DCE when the corresponding
-// NEXT_PUBLIC_ENABLE_* flag is off, and are therefore out of MVP scope.
+// NEXT_PUBLIC_ENABLE_* flag is off, and are therefore out of scope (env-gated).
 // Pinned by the snippet substring (not line number) so the allowlist
 // survives unrelated reflows of the surrounding code. The `feature` field
 // names the gating flag from the shared `ENV_GATED_FEATURES` set (see
 // `gates.mjs`) — the same source of truth the screen-level golden audit
 // subtracts, so the two audits cannot drift on what "env-gated" means.
-const MVP_EXEMPT_BUTTON_SNIPPETS = [
+const EXEMPT_BUTTON_SNIPPETS = [
   // PasskeyFlow register button — FEATURES.PASSKEY gated, dead-stripped from PRD bundle.
   {
     file: 'src/components/onboarding/Onboarding.tsx',
@@ -107,10 +107,10 @@ const MVP_EXEMPT_BUTTON_SNIPPETS = [
 // env-gate flag. If a future flag is removed from `ENV_GATED_FEATURES`
 // (or mistyped here) this fails loudly at load instead of silently
 // exempting a button that now ships.
-for (const { file, snippet, feature } of MVP_EXEMPT_BUTTON_SNIPPETS) {
+for (const { file, snippet, feature } of EXEMPT_BUTTON_SNIPPETS) {
   if (!isEnvGatedFeature(feature)) {
     throw new Error(
-      `coverage.mjs: MVP_EXEMPT_BUTTON_SNIPPETS entry {${file}: "${snippet}"} names feature ` +
+      `coverage.mjs: EXEMPT_BUTTON_SNIPPETS entry {${file}: "${snippet}"} names feature ` +
         `"${feature}", which is not in ENV_GATED_FEATURES (${ENV_GATED_FEATURES.join(', ')}).`,
     );
   }
@@ -202,7 +202,7 @@ function matchesTemplatePrefix(id) {
 const sectionA = []; // uncovered testids in src
 for (const [id, locs] of srcLiteralIds) {
   if (!isCoveredInE2e(id)) {
-    sectionA.push({ id, locs, exempt: MVP_EXEMPT_TESTIDS.has(id) });
+    sectionA.push({ id, locs, exempt: EXEMPT_TESTIDS.has(id) });
   }
 }
 sectionA.sort((a, b) => Number(a.exempt) - Number(b.exempt) || a.id.localeCompare(b.id));
@@ -248,7 +248,7 @@ for (const file of walk(srcDir, ['.tsx'])) {
 // --- failure determination -------------------------------------------------
 
 function isFeatureGatedExempt(entry) {
-  return MVP_EXEMPT_BUTTON_SNIPPETS.some(
+  return EXEMPT_BUTTON_SNIPPETS.some(
     ({ file, snippet }) => entry.file === file && entry.window.includes(snippet),
   );
 }
@@ -256,7 +256,7 @@ function isFeatureGatedExempt(entry) {
 const fails = {
   uncoveredTestids: sectionA.filter((e) => !e.exempt),
   unlabeledButtons: sectionC.filter(
-    (e) => !MVP_EXEMPT_FILES.has(e.file) && !isFeatureGatedExempt(e),
+    (e) => !EXEMPT_FILES.has(e.file) && !isFeatureGatedExempt(e),
   ),
 };
 
@@ -332,11 +332,11 @@ if (fails.unlabeledButtons.length > 0) {
 }
 
 lines.push(`${sub}Summary`);
-lines.push(`- ${fails.uncoveredTestids.length} uncovered MVP testid(s)`);
-lines.push(`- ${fails.unlabeledButtons.length} unlabeled MVP button(s)`);
+lines.push(`- ${fails.uncoveredTestids.length} uncovered testid(s)`);
+lines.push(`- ${fails.unlabeledButtons.length} unlabeled button(s)`);
 lines.push('');
 lines.push(
-  'Add a `getByTestId(...)` assertion in the relevant spec, or -- if intentionally out-of-scope -- add the id to `MVP_EXEMPT_TESTIDS` / file to `MVP_EXEMPT_FILES` in `e2e/_audit/coverage.mjs` with a one-line justification.',
+  'Add a `getByTestId(...)` assertion in the relevant spec, or -- if intentionally out-of-scope -- add the id to `EXEMPT_TESTIDS` / file to `EXEMPT_FILES` in `e2e/_audit/coverage.mjs` with a one-line justification.',
 );
 if (REPORT_ONLY) {
   lines.push('');

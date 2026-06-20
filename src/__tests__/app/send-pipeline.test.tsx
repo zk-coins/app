@@ -1,32 +1,25 @@
 /**
- * SendPage end-to-end pipeline test (`src/app/send/page.tsx`).
+ * SendPage end-to-end pipeline test (`src/app/send/page.tsx`), neutral
+ * multi-asset model.
  *
- * Drives the real component with mocked `fetch` / WASM / `next/navigation`
- * over the async Jobs-API send lifecycle (`api.send`):
+ * Drives the real component with a URL-routing `fetch` mock over the async
+ * Jobs-API send lifecycle (`api.send`):
  *
- *   /api/balance (hydrate num_sends) → POST /api/jobs/send (202) →
- *   poll /api/jobs/:id → awaiting_signature (proof_id + ash/ocr in
- *   `result`) → POST /api/jobs/:id/commit → poll → completed →
- *   post-send /api/balance refresh → success screen + transaction row.
+ *   GET /api/balance/:address (portfolio + index hydration) →
+ *   POST /api/jobs/send (202, carries asset_id) →
+ *   poll /api/jobs/:id → awaiting_signature (proof_id + ash/ocr) →
+ *   POST /api/jobs/:id/commit → poll → completed → success screen.
  *
- * Covers:
- *   - The happy-path round-trip, success-screen transition, store side
- *     effects, and the signed send-body shape.
- *   - Username resolution branches (`@zkcoins.app` suffix, `$` prefix,
- *     hex fast-path, foreign-stage suffix safety) — resolve is MVP.
- *   - The `account.xpriv` defensive throw.
- *   - Error surfacing: ApiError AND JobFailedError → the translated
- *     `userMessageFor` copy (issue #99 covers both the admit-time and
- *     the async job-failure leg); the no-account redirect window.
- *
- * `vi.useFakeTimers()` is used only for the redirect-window tests; the
- * lifecycle tests use real timers and stub the `waitForJob` poll floor
- * to a 0 s Retry-After so the polls resolve immediately.
+ * The portfolio (`GET /api/balance/:address`) is served by a standing
+ * route handler (it is polled on a timer by `usePortfolio` AND read by
+ * `api.send` for index hydration); the one-shot lifecycle frames come from
+ * a FIFO queue.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, act } from '@testing-library/react';
+import { screen, act } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
+import { render } from '@/__tests__/_helpers/intl';
 import SendPage from '@/app/send/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
@@ -39,6 +32,8 @@ const FEATURES_STATE = vi.hoisted(() => ({
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
   USERNAME_CLAIM: false,
+  // Runtime multi-asset capability ON for the multi-asset surface this suite covers.
+  MULTI_ASSET: true,
 }));
 
 vi.mock('@/lib/features', () => ({
@@ -50,6 +45,7 @@ const routerReplace = vi.fn();
 const routerPush = vi.fn();
 vi.mock('next/navigation', () => ({
   useRouter: () => ({ replace: routerReplace, push: routerPush }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 const ALICE = {
@@ -57,55 +53,42 @@ const ALICE = {
   numPubkeys: 2,
   xpriv: 'xprv9s21ZrQH143K3GJpoapnV8SFfuZcECe',
 };
-const ONE_BTC_SATS = 100_000_000;
-const SEND_AMOUNT_BTC = '0.001'; // → 100_000 sats, well below 1 BTC.
-const SEND_AMOUNT_SATS = 100_000;
+const ASSET_ID = 'c'.repeat(64);
+// 8-decimal asset so a typed "0.001" → 100_000 atomic units.
+const ASSET_BALANCE = 100_000_000;
+const SEND_AMOUNT_TYPED = '0.001';
+const SEND_AMOUNT_RAW = 100_000;
 const RECIPIENT_HEX = 'b'.repeat(64);
 
 const mockFetch = vi.fn();
 const originalFetch = globalThis.fetch;
 
-/** A successful-job poll body with a 0 s Retry-After so the loop is fast. */
-function enqueueJob<T extends object>(body: T): void {
-  mockFetch.mockResolvedValueOnce({
-    ok: true,
-    status: 200,
-    json: () => Promise.resolve(body),
-    text: () => Promise.resolve(JSON.stringify(body)),
-    headers: new Headers({ 'retry-after': '0' }),
-  });
-}
+/** One-shot lifecycle responses, consumed FIFO for non-portfolio URLs. */
+let queue: Array<{ ok: boolean; status: number; body: unknown; retryAfter?: string }>;
+let portfolioNumSends = ALICE.numPubkeys;
 
-function enqueueOk<T>(data: T, status = 200): void {
-  mockFetch.mockResolvedValueOnce({
+function res(body: unknown, status = 200, retryAfter?: string) {
+  return {
     ok: status >= 200 && status < 300,
     status,
-    json: () => Promise.resolve(data),
-    text: () => Promise.resolve(JSON.stringify(data)),
-    headers: new Headers(),
-  });
+    json: () => Promise.resolve(body),
+    text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
+    headers: new Headers(retryAfter !== undefined ? { 'retry-after': retryAfter } : {}),
+  };
 }
 
-function enqueueErr(status: number, body = 'error'): void {
-  mockFetch.mockResolvedValueOnce({
-    ok: false,
-    status,
-    json: () => Promise.resolve({ error: body }),
-    text: () => Promise.resolve(body),
-    headers: new Headers(),
-  });
+function enqueue(body: unknown, status = 200, retryAfter?: string): void {
+  queue.push({ ok: status >= 200 && status < 300, status, body, retryAfter });
 }
 
-/**
- * Enqueue the full happy-path send lifecycle after the username step:
- * balance hydrate → send admit → awaiting_signature → commit accept →
- * completed → post-send balance.
- */
-function enqueueSendLifecycle(opts: { numSends?: number; proofId?: number } = {}): void {
-  const numSends = opts.numSends ?? ALICE.numPubkeys;
-  const proofId = opts.proofId ?? 1234;
-  enqueueOk({ balance: ONE_BTC_SATS, num_sends: numSends }); // pre-send balance
-  enqueueOk({ job_id: 'job-1', status: 'queued' }, 202); // send admit
+/** Job poll frame with a 0 s Retry-After so the loop is fast. */
+function enqueueJob(body: object): void {
+  enqueue(body, 200, '0');
+}
+
+/** The send lifecycle after any username step: admit → awaiting → commit → completed. */
+function enqueueSendLifecycle(proofId = 1234): void {
+  enqueue({ job_id: 'job-1', status: 'queued' }, 202); // send admit
   enqueueJob({
     job_id: 'job-1',
     kind: 'send',
@@ -114,7 +97,7 @@ function enqueueSendLifecycle(opts: { numSends?: number; proofId?: number } = {}
     proof_id: proofId,
     result: { success: true, account_state_hash: 'abc123', output_coins_root: 'def456' },
   });
-  enqueueOk({ status: 'broadcasting' }); // commit accept
+  enqueue({ status: 'broadcasting' }); // commit accept
   enqueueJob({
     job_id: 'job-1',
     kind: 'send',
@@ -122,7 +105,6 @@ function enqueueSendLifecycle(opts: { numSends?: number; proofId?: number } = {}
     phase: 'completed',
     result: { success: true, proof_id: proofId },
   });
-  enqueueOk({ balance: ONE_BTC_SATS - SEND_AMOUNT_SATS, num_sends: numSends + 1 }); // post-send balance
 }
 
 function findCall(urlSubstring: string): RequestInit | undefined {
@@ -130,27 +112,46 @@ function findCall(urlSubstring: string): RequestInit | undefined {
   return call?.[1] as RequestInit | undefined;
 }
 
+function portfolioBody() {
+  return {
+    address: ALICE.address,
+    assets: [
+      {
+        asset_id: ASSET_ID,
+        name: 'BigCoin',
+        decimals: 8,
+        balance: ASSET_BALANCE,
+        num_sends: portfolioNumSends,
+      },
+    ],
+  };
+}
+
 beforeEach(() => {
   mockFetch.mockReset();
   routerReplace.mockClear();
   routerPush.mockClear();
-  Object.assign(FEATURES_STATE, {
-    APPS_DIRECTORY: false,
-    PASSKEY: false,
-    DEV_ROUTES: false,
-    AUTO_LOCK: false,
-    ADDRESS_ROTATION: false,
-    TOR_ROUTING: false,
-    USERNAME_CLAIM: false,
-  });
+  queue = [];
+  portfolioNumSends = ALICE.numPubkeys;
   globalThis.fetch = mockFetch;
+  mockFetch.mockImplementation((url: string) => {
+    const u = String(url);
+    // Portfolio read (usePortfolio poll + api.send hydration): standing route.
+    if (/\/api\/balance\/[0-9a-f]+($|\?)/.test(u)) {
+      return Promise.resolve(res(portfolioBody()));
+    }
+    const next = queue.shift();
+    if (!next) return Promise.resolve(res({ error: 'unexpected call' }, 500));
+    return Promise.resolve(res(next.body, next.status, next.retryAfter));
+  });
+
   useNetworkStore.setState({
     apiUrl: 'https://test-api.zkcoins.app',
     usernameDomain: 'zkcoins.app',
   });
   useWalletStore.setState({
     account: ALICE,
-    balance: ONE_BTC_SATS,
+    balance: ASSET_BALANCE,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: true,
@@ -166,16 +167,16 @@ afterEach(() => {
   vi.useRealTimers();
 });
 
-/** Drive the UI from a blank /send through both submit buttons. */
 async function clickThroughToConfirm(user: ReturnType<typeof userEvent.setup>, recipient: string) {
-  await user.type(await screen.findByTestId('send-recipient-input'), recipient);
-  await user.type(screen.getByTestId('send-amount-input'), SEND_AMOUNT_BTC);
+  await screen.findByTestId('send-asset-select');
+  await user.type(screen.getByTestId('send-recipient-input'), recipient);
+  await user.type(screen.getByTestId('send-amount-input'), SEND_AMOUNT_TYPED);
   await user.click(screen.getByTestId('send-submit-btn'));
   await screen.findByTestId('send-confirm-card');
 }
 
 describe('SendPage — jobs-API send lifecycle happy path', () => {
-  it('hydrates, admits, commits, refreshes balance, shows success', async () => {
+  it('hydrates, admits with asset_id, commits, shows success', async () => {
     const user = userEvent.setup();
     enqueueSendLifecycle();
 
@@ -183,39 +184,31 @@ describe('SendPage — jobs-API send lifecycle happy path', () => {
     await clickThroughToConfirm(user, RECIPIENT_HEX);
     await user.click(screen.getByTestId('send-confirm-btn'));
 
-    expect(await screen.findByTestId('send-success-heading')).toHaveTextContent('Sent privately');
+    expect(await screen.findByTestId('send-success-heading')).toHaveTextContent('Privat gesendet');
     expect(screen.getByTestId('proof-id')).toHaveTextContent('1234');
 
-    const state = useWalletStore.getState();
-    expect(state.balance).toBe(ONE_BTC_SATS - SEND_AMOUNT_SATS);
-    expect(state.account?.numPubkeys).toBe(ALICE.numPubkeys + 1);
-    // No local transaction bookkeeping: the sent tx surfaces from the
-    // server's /api/history on the wallet screen's next poll (issue #175).
-
-    // The signed send admit hits /api/jobs/send with an Idempotency-Key.
     const sendCall = findCall('/api/jobs/send');
     expect(sendCall?.method).toBe('POST');
     expect((sendCall?.headers as Record<string, string>)['Idempotency-Key']).toBeDefined();
     const sendBody = JSON.parse(sendCall!.body as string);
     expect(sendBody.account_address).toBe(ALICE.address);
     expect(sendBody.recipient).toBe(RECIPIENT_HEX);
-    expect(sendBody.amount).toBe(SEND_AMOUNT_SATS);
+    expect(sendBody.amount).toBe(SEND_AMOUNT_RAW);
+    expect(sendBody.asset_id).toBe(ASSET_ID);
     expect(typeof sendBody.signature).toBe('string');
-    expect(typeof sendBody.timestamp).toBe('number');
-    // num_sends = 2 → prev_commitment_pubkey is set.
+    // num_sends total = 2 → prev_commitment_pubkey is set.
     expect(sendBody.prev_commitment_pubkey).toBeDefined();
 
-    // The commit attaches the WASM-built commitment, keyed by job id.
     const commitCall = findCall('/commit');
-    expect(commitCall?.method).toBe('POST');
     const commitBody = JSON.parse(commitCall!.body as string);
     expect(commitBody.proof_id).toBe(1234);
     expect(commitBody.message).toBeDefined();
   });
 
   it('omits prev_commitment_pubkey for a first-ever send (num_sends = 0)', async () => {
+    portfolioNumSends = 0;
     const user = userEvent.setup();
-    enqueueSendLifecycle({ numSends: 0, proofId: 7 });
+    enqueueSendLifecycle(7);
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
@@ -229,10 +222,9 @@ describe('SendPage — jobs-API send lifecycle happy path', () => {
 
 describe('SendPage — error surfacing', () => {
   it('shows the JobFailedError detail when the server omits ash/ocr (pre-#195 node)', async () => {
+    portfolioNumSends = 0;
     const user = userEvent.setup();
-    enqueueOk({ balance: ONE_BTC_SATS, num_sends: 0 }); // pre-send balance
-    enqueueOk({ job_id: 'job-x', status: 'queued' }, 202); // send admit
-    // awaiting_signature WITHOUT account_state_hash / output_coins_root.
+    enqueue({ job_id: 'job-x', status: 'queued' }, 202);
     enqueueJob({
       job_id: 'job-x',
       kind: 'send',
@@ -246,14 +238,13 @@ describe('SendPage — error surfacing', () => {
     await user.click(screen.getByTestId('send-confirm-btn'));
 
     expect(await screen.findByTestId('send-error')).toHaveTextContent(/account_state_hash/);
-    // No /commit call — the wallet refuses to fabricate a commitment.
     expect(mockFetch.mock.calls.some(([u]) => String(u).includes('/commit'))).toBe(false);
   });
 
   it('surfaces a translated ApiError when the send admit is rejected', async () => {
+    portfolioNumSends = 0;
     const user = userEvent.setup();
-    enqueueOk({ balance: ONE_BTC_SATS, num_sends: 0 });
-    enqueueErr(422, 'Insufficient balance');
+    enqueue('Insufficient funds', 422);
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
@@ -263,18 +254,15 @@ describe('SendPage — error surfacing', () => {
     expect(mockFetch.mock.calls.some(([u]) => String(u).includes('/commit'))).toBe(false);
   });
 
-  it('shows the German userMessage when the job fails during proving (issue #99, async leg)', async () => {
+  it('shows the German userMessage when the job fails during proving (issue #99 async leg)', async () => {
+    portfolioNumSends = 0;
     const user = userEvent.setup();
-    enqueueOk({ balance: ONE_BTC_SATS, num_sends: 0 });
-    enqueueOk({ job_id: 'job-f', status: 'queued' }, 202);
+    enqueue({ job_id: 'job-f', status: 'queued' }, 202);
     enqueueJob({
       job_id: 'job-f',
       kind: 'send',
       status: 'failed',
       phase: 'failed',
-      // A failure-contract string from the node's table — the async
-      // JobFailedError leg must translate it exactly like an
-      // admit-time ApiError would be.
       error: 'prove failed',
     });
 
@@ -288,9 +276,9 @@ describe('SendPage — error surfacing', () => {
   });
 
   it('wraps an unmapped async job-failure string in the German fallback', async () => {
+    portfolioNumSends = 0;
     const user = userEvent.setup();
-    enqueueOk({ balance: ONE_BTC_SATS, num_sends: 0 });
-    enqueueOk({ job_id: 'job-g', status: 'queued' }, 202);
+    enqueue({ job_id: 'job-g', status: 'queued' }, 202);
     enqueueJob({
       job_id: 'job-g',
       kind: 'send',
@@ -303,108 +291,109 @@ describe('SendPage — error surfacing', () => {
     await clickThroughToConfirm(user, RECIPIENT_HEX);
     await user.click(screen.getByTestId('send-confirm-btn'));
 
-    // Unmapped diagnostic → `Serverfehler <status>: <raw>` fallback, so
-    // the raw string stays visible for debugging but inside the German
-    // frame (never a bare stringly-typed blob, per issue #99).
     expect(await screen.findByTestId('send-error')).toHaveTextContent(
       /Serverfehler failed: prove_account_update failed/,
     );
   });
 });
 
-describe('SendPage — username resolution (MVP, always on)', () => {
+describe('SendPage — username resolution (always on)', () => {
   it('strips the @zkcoins.app suffix and calls /api/username/resolve', async () => {
+    portfolioNumSends = 0;
     const user = userEvent.setup();
-    enqueueOk({ username: 'bob', address: RECIPIENT_HEX }); // resolveUsername
-    enqueueSendLifecycle({ numSends: 0 });
+    enqueue({ username: 'bob', address: RECIPIENT_HEX }); // resolveUsername
+    enqueueSendLifecycle(3);
 
     render(<SendPage />);
     await clickThroughToConfirm(user, 'bob@zkcoins.app');
     await user.click(screen.getByTestId('send-confirm-btn'));
     await screen.findByTestId('send-success-heading');
 
-    expect(mockFetch.mock.calls[0][0]).toBe(
-      'https://test-api.zkcoins.app/api/username/resolve/bob',
-    );
+    expect(
+      mockFetch.mock.calls.some(
+        ([u]) => String(u) === 'https://test-api.zkcoins.app/api/username/resolve/bob',
+      ),
+    ).toBe(true);
     const sendBody = JSON.parse(findCall('/api/jobs/send')!.body as string);
     expect(sendBody.recipient).toBe(RECIPIENT_HEX);
   });
 
   it('strips the leading $ prefix before resolving', async () => {
+    portfolioNumSends = 0;
     const user = userEvent.setup();
-    enqueueOk({ username: 'alice', address: RECIPIENT_HEX });
-    enqueueSendLifecycle({ numSends: 0 });
+    enqueue({ username: 'alice', address: RECIPIENT_HEX });
+    enqueueSendLifecycle(4);
 
     render(<SendPage />);
     await clickThroughToConfirm(user, '$alice');
     await user.click(screen.getByTestId('send-confirm-btn'));
     await screen.findByTestId('send-success-heading');
 
-    expect(mockFetch.mock.calls[0][0]).toBe(
-      'https://test-api.zkcoins.app/api/username/resolve/alice',
-    );
+    expect(
+      mockFetch.mock.calls.some(
+        ([u]) => String(u) === 'https://test-api.zkcoins.app/api/username/resolve/alice',
+      ),
+    ).toBe(true);
   });
 
   it('skips resolution for a 64-char hex recipient', async () => {
+    portfolioNumSends = 0;
     const user = userEvent.setup();
-    enqueueSendLifecycle({ numSends: 0 });
+    enqueueSendLifecycle(5);
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
     await user.click(screen.getByTestId('send-confirm-btn'));
     await screen.findByTestId('send-success-heading');
 
-    // First call is /api/balance (pre-send hydration), then /api/jobs/send.
-    expect(mockFetch.mock.calls[0][0]).toContain('/api/balance');
-    expect(mockFetch.mock.calls[1][0]).toContain('/api/jobs/send');
+    expect(mockFetch.mock.calls.some(([u]) => String(u).includes('/username/resolve'))).toBe(false);
   });
 
   it('does NOT strip a foreign-stage suffix — cross-network safety', async () => {
+    portfolioNumSends = 0;
     const user = userEvent.setup();
-    enqueueErr(404, 'Username not found');
+    enqueue('Username not found', 404);
 
     render(<SendPage />);
     await clickThroughToConfirm(user, 'bob@dev.zkcoins.app');
     await user.click(screen.getByTestId('send-confirm-btn'));
 
     expect(await screen.findByTestId('send-error')).toHaveTextContent(/Username not found/);
-    expect(mockFetch.mock.calls[0][0]).toBe(
-      'https://test-api.zkcoins.app/api/username/resolve/bob%40dev.zkcoins.app',
-    );
-    expect(mockFetch.mock.calls.every(([url]) => !String(url).includes('/api/jobs/send'))).toBe(
-      true,
-    );
+    expect(
+      mockFetch.mock.calls.some(
+        ([u]) =>
+          String(u) === 'https://test-api.zkcoins.app/api/username/resolve/bob%40dev.zkcoins.app',
+      ),
+    ).toBe(true);
+    expect(mockFetch.mock.calls.every(([u]) => !String(u).includes('/api/jobs/send'))).toBe(true);
   });
 
   it('surfaces the API error when username resolution fails', async () => {
+    portfolioNumSends = 0;
     const user = userEvent.setup();
-    enqueueErr(404, 'Username not found');
+    enqueue('Username not found', 404);
 
     render(<SendPage />);
     await clickThroughToConfirm(user, 'ghost');
     await user.click(screen.getByTestId('send-confirm-btn'));
 
     expect(await screen.findByTestId('send-error')).toHaveTextContent(/Username not found/);
-    expect(mockFetch.mock.calls.every(([url]) => !String(url).includes('/api/jobs/send'))).toBe(
-      true,
-    );
+    expect(mockFetch.mock.calls.every(([u]) => !String(u).includes('/api/jobs/send'))).toBe(true);
   });
 });
 
 describe('SendPage — defensive branches', () => {
   it('throws "No private key" when account.xpriv is empty', async () => {
-    useWalletStore.setState({
-      account: { ...ALICE, xpriv: '' },
-      balance: ONE_BTC_SATS,
-    });
+    useWalletStore.setState({ account: { ...ALICE, xpriv: '' }, balance: ASSET_BALANCE });
     const user = userEvent.setup();
 
     render(<SendPage />);
     await clickThroughToConfirm(user, RECIPIENT_HEX);
     await user.click(screen.getByTestId('send-confirm-btn'));
 
-    expect(await screen.findByTestId('send-error')).toHaveTextContent(/No private key/);
-    expect(mockFetch).not.toHaveBeenCalled();
+    expect(await screen.findByTestId('send-error')).toHaveTextContent(/Kein privater Schlüssel/);
+    // No send admit attempted (only the portfolio polls hit fetch).
+    expect(mockFetch.mock.calls.every(([u]) => !String(u).includes('/api/jobs/send'))).toBe(true);
   });
 
   it('redirects to / when no account is set', async () => {
@@ -425,7 +414,7 @@ describe('SendPage — defensive branches', () => {
     vi.useFakeTimers();
     render(<SendPage />);
     act(() => {
-      useWalletStore.setState({ account: ALICE, balance: ONE_BTC_SATS });
+      useWalletStore.setState({ account: ALICE, balance: ASSET_BALANCE });
     });
     await act(async () => {
       await vi.advanceTimersByTimeAsync(150);

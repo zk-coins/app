@@ -210,6 +210,7 @@ function buildPaths(samples: NetworkSample[]): {
  * Tension = 0.5 gives natural-looking curves without overshoot.
  */
 function catmullRomToBezier(points: { x: number; y: number }[]): string {
+  /* c8 ignore next — defensive: only reached via buildPaths, which guards length < 2 */
   if (points.length < 2) return '';
   const segs: string[] = [`M ${points[0].x} ${points[0].y}`];
   const t = 0.5;

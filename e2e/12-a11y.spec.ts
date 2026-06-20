@@ -3,7 +3,7 @@
  *
  * Issue #68 / Workstream 2.
  *
- * Runs axe-core against every reachable MVP route and fails on any
+ * Runs axe-core against every reachable default-active route and fails on any
  * `serious` or `critical` WCAG 2 A/AA violation that is not in
  * `KNOWN_VIOLATIONS` (see below). Each allowlist entry is a
  * `(rule id, route, reason)` tuple — different routes can independently

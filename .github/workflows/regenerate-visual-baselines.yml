@@ -56,7 +56,7 @@ jobs:
     timeout-minutes: 25
     env:
       E2E_BASE_URL: https://dev.zkcoins.app
-      E2E_API_URL: https://dev-api.zkcoins.app
+      E2E_API_URL: https://ci.zkcoins.app
       E2E_NETWORK_EXPECTED: signet
       E2E_FAUCET_CALLS: '1'
       # Opt globalSetup in so Alice + Bob get minted before the suite runs.

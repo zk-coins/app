@@ -36,7 +36,7 @@ export default defineConfig({
   // Helpers and global-setup files live under e2e/ but should not be
   // picked up as tests. Spec files are numerically prefixed
   // (`{01..11}-*.spec.ts`) plus the still-active legacy `webauthn.spec.ts`
-  // (non-MVP DEV-bundle passkey coverage). Underscore-prefixed files
+  // (env-gated DEV-bundle passkey coverage). Underscore-prefixed files
   // (`_global-setup.ts`, `_helpers/*.ts`) are excluded by the glob.
   //
   // Retired legacy specs (replaced by the exhaustive 01..11 suite):
@@ -73,6 +73,10 @@ export default defineConfig({
   //   10-pwa.spec.ts                    (PR #27)
   //   11-cross-spec-redirects.spec.ts   (PR #27)
   //   14-network-activity.spec.ts       (PR #168, issue #166)
+  //   18-create-coin.spec.ts            (multi-asset: create-coin form)
+  //   19-portfolio.spec.ts              (multi-asset: per-asset portfolio)
+  //   20-send-asset.spec.ts             (multi-asset: send asset picker)
+  //   21-asset-detail.spec.ts           (multi-asset: per-asset detail)
   //
   // All exhaustive specs are now active. The testIgnore array is empty
   // outside of `E2E_REGENERATING`. We keep the conditional in place

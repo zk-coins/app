@@ -7,7 +7,7 @@
  * Alice (funded, 100 000 sats) sends 1 000 sats to Bob. The send
  * goes through real `/api/send` + `/api/commit` against DEV.
  *
- * DEV mirrors PRD: username resolve is MVP and always renders the
+ * DEV mirrors PRD: username resolve is always-on and always renders the
  * `@user` placeholder; `FEATURES.APPS_DIRECTORY` is off so the DFX
  * link in the no-funds banner is dead-stripped. The
  * `recipient-valid-username` test was removed with the migration.
@@ -100,7 +100,7 @@ test.describe('Send Bitcoin', () => {
     await page.getByTestId('send-submit-btn').click();
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 5_000 });
     // i18n-todo: discriminate invalid vs insufficient via data-error-kind.
-    await expect(page.getByTestId('send-error')).toHaveText(/Invalid amount/);
+    await expect(page.getByTestId('send-error')).toHaveText(/Ungültiger Betrag/);
     await snap(page, '07-amount-invalid-text', {
       mask: [page.getByTestId('send-recipient-input')],
     });
@@ -115,7 +115,7 @@ test.describe('Send Bitcoin', () => {
     await page.getByTestId('send-submit-btn').click();
     await expect(page.getByTestId('send-error')).toBeVisible({ timeout: 5_000 });
     // i18n-todo: discriminate invalid vs insufficient via data-error-kind.
-    await expect(page.getByTestId('send-error')).toHaveText(/Insufficient balance/);
+    await expect(page.getByTestId('send-error')).toHaveText(/Nicht genug Guthaben/);
     await snap(page, '07-amount-insufficient', {
       mask: [page.getByTestId('send-recipient-input')],
     });
@@ -227,6 +227,9 @@ test.describe('Send Bitcoin', () => {
       throw new Error(`send-success: server returned an error: ${errorText}`);
     }
     await expect(heading).toBeVisible();
+    // The success screen shows the sent amount (BTC on the single-asset
+    // surface) — assert it before baselining.
+    await expect(page.getByTestId('send-success-amount')).toBeVisible();
     await snap(page, '07-send-success');
   });
 

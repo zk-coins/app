@@ -12,7 +12,7 @@
 //    by the server at `/api/info` (see
 //    `zk-coins/node::router.rs::Capabilities`) and stored in
 //    `useCapabilities`. Only *opt-in* server features get a bit:
-//    MVP functionality (mint/faucet endpoints, username resolve and
+//    Always-on functionality (mint/faucet endpoints, username resolve and
 //    display) is permanently part of every node build and is therefore
 //    unconditional in the UI — no capability check guards it.
 //    Consumers must read runtime bits via `useFeatures()` inside a
@@ -49,7 +49,7 @@ export const FEATURES = buildTime;
  * capabilities. Subscribes to the capabilities store, so the host
  * component re-renders when `/api/info` lands.
  *
- * MVP server functionality (mint, username resolve/display) is
+ * Always-on server functionality (mint, username resolve/display) is
  * unconditional and is not represented here — call those endpoints
  * directly. Only features a self-hoster might switch off get a flag.
  */
@@ -64,7 +64,14 @@ export function useFeatures() {
       ({
         ...buildTime,
         USERNAME_CLAIM: caps.username_claim,
+        // Runtime node capability: the shared Wallet / Send screens read this
+        // to pick the single-asset hero vs the per-asset surface based on what
+        // the *connected node* reports at `/api/info`. The dedicated
+        // multi-asset routes (`/create`, `/asset/[id]`) ship unconditionally —
+        // there is no build-time gate — and redirect home at runtime when the
+        // node reports `multi_asset:false`.
+        MULTI_ASSET: caps.multi_asset,
       }) as const,
-    [caps.username_claim],
+    [caps.username_claim, caps.multi_asset],
   );
 }

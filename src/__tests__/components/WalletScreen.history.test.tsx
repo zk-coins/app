@@ -1,17 +1,18 @@
 /**
  * Transaction-list rendering in `WalletScreen` from server `/api/history`
- * truth (issue #175). Complements `WalletScreen.polling.test.tsx` (balance
- * cadence) by exercising the list/empty-state gating and the per-row
- * mapping of the node's `HistoryItem` shape (direction → label/sign,
- * Unix-seconds timestamp).
+ * truth (issue #175). Complements `WalletScreen.polling.test.tsx`
+ * (portfolio cadence) by exercising the list/empty-state gating and the
+ * per-row mapping of the node's `HistoryItem` shape (direction → label,
+ * Unix-seconds timestamp). Labels are German (the default locale).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
+import { render } from '@/__tests__/_helpers/intl';
 import { WalletScreen } from '@/components/screens/WalletScreen';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { api, type HistoryItem } from '@/lib/api/client';
+import { api, type HistoryItem, type OwnerBalanceResponse } from '@/lib/api/client';
 
 const FEATURES_STATE = vi.hoisted(() => ({
   APPS_DIRECTORY: false,
@@ -21,6 +22,8 @@ const FEATURES_STATE = vi.hoisted(() => ({
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
   USERNAME_CLAIM: false,
+  // Runtime multi-asset capability ON for the multi-asset surface this suite covers.
+  MULTI_ASSET: true,
 }));
 
 vi.mock('@/lib/features', () => ({
@@ -45,21 +48,19 @@ function row(over: Partial<HistoryItem> = {}): HistoryItem {
   };
 }
 
+const FUNDED: OwnerBalanceResponse = {
+  address: ALICE.address,
+  assets: [
+    { asset_id: 'c'.repeat(64), name: 'MyCoin', decimals: 0, balance: 10_000, num_sends: 0 },
+  ],
+};
+
 let historySpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  Object.assign(FEATURES_STATE, {
-    APPS_DIRECTORY: false,
-    PASSKEY: false,
-    DEV_ROUTES: false,
-    AUTO_LOCK: false,
-    ADDRESS_ROTATION: false,
-    TOR_ROUTING: false,
-    USERNAME_CLAIM: false,
-  });
   useNetworkStore.setState({
     apiUrl: 'https://test.api',
-    networkName: 'signet',
+    networkName: 'Mutinynet',
     bitcoinNetwork: 'mutinynet',
   });
   useWalletStore.setState({
@@ -72,8 +73,8 @@ beforeEach(() => {
     storedAuthMethod: null,
     error: null,
   });
-  vi.spyOn(api, 'info').mockResolvedValue({ network: 'signet', bitcoin_network: 'mutinynet' });
-  vi.spyOn(api, 'balance').mockResolvedValue({ balance: 10_000, num_sends: 0 });
+  vi.spyOn(api, 'info').mockResolvedValue({ network: 'Mutinynet', bitcoin_network: 'mutinynet' });
+  vi.spyOn(api, 'ownerBalances').mockResolvedValue(FUNDED);
   historySpy = vi.spyOn(api, 'getHistory');
 });
 
@@ -83,17 +84,17 @@ afterEach(() => {
 });
 
 describe('WalletScreen — transaction list from server history', () => {
-  it('renders the faucet mint row for a funded wallet without any local action', async () => {
+  it('renders the mint row for a funded wallet without any local action', async () => {
     historySpy.mockResolvedValue({ items: [row()], total: 1, limit: 50, offset: 0 });
 
     render(<WalletScreen />);
 
-    expect(await screen.findByText('Faucet')).toBeInTheDocument();
-    expect(screen.queryByText('No transactions yet')).not.toBeInTheDocument();
+    expect(await screen.findByText('Erstellt')).toBeInTheDocument();
+    expect(screen.queryByText('Noch keine Transaktionen')).not.toBeInTheDocument();
     expect(screen.getByTestId('tx-row-amount')).toBeInTheDocument();
   });
 
-  it('maps direction to label and sign (mint, receive credit; send debit)', async () => {
+  it('maps direction to label (mint, receive, send)', async () => {
     historySpy.mockResolvedValue({
       items: [
         row({ id: 1, direction: 'mint', amount: 10_000 }),
@@ -107,20 +108,20 @@ describe('WalletScreen — transaction list from server history', () => {
 
     render(<WalletScreen />);
 
-    expect(await screen.findByText('Faucet')).toBeInTheDocument();
-    expect(screen.getByText('Received')).toBeInTheDocument();
-    expect(screen.getByText('Sent')).toBeInTheDocument();
+    // Scope to the tx rows: "Empfangen" / "Gesendet" also appear on the
+    // Receive / Send action buttons, so assert via the row containers.
+    const rows = await screen.findAllByTestId('tx-row');
+    const labels = rows.map((r) => r.textContent ?? '');
+    expect(labels.some((l) => l.includes('Erstellt'))).toBe(true);
+    expect(labels.some((l) => l.includes('Empfangen'))).toBe(true);
+    expect(labels.some((l) => l.includes('Gesendet'))).toBe(true);
 
     const amounts = screen.getAllByTestId('tx-row-amount').map((n) => n.textContent ?? '');
-    // The send row is the only debit → the only one rendered with the
-    // Unicode minus (U+2212); the two credits carry a leading '+'.
-    expect(amounts.filter((t) => t.includes('−'))).toHaveLength(1);
-    expect(amounts.filter((t) => t.includes('+'))).toHaveLength(2);
+    // The send row is the only debit → the only one with a leading minus.
+    expect(amounts.filter((t) => t.trim().startsWith('-'))).toHaveLength(1);
   });
 
   it('renders the row time from a Unix-seconds timestamp (not raw ms)', async () => {
-    // 1_780_000_000 s → a real wall-clock time; the raw value treated as ms
-    // would render an epoch-1970 time. Assert a valid HH:MM, never "Invalid".
     historySpy.mockResolvedValue({ items: [row()], total: 1, limit: 50, offset: 0 });
 
     render(<WalletScreen />);
@@ -135,20 +136,16 @@ describe('WalletScreen — transaction list from server history', () => {
 
     render(<WalletScreen />);
 
-    expect(await screen.findByText('No transactions yet')).toBeInTheDocument();
+    expect(await screen.findByText('Noch keine Transaktionen')).toBeInTheDocument();
   });
 
   it('holds the empty state back while the first history fetch is in flight', async () => {
-    // Never-resolving fetch → loaded stays false → neither the list nor the
-    // empty placeholder renders (no "No transactions yet" flash on a funded
-    // wallet whose first /api/history round-trip has not landed yet).
     historySpy.mockReturnValue(new Promise<never>(() => {}));
 
     render(<WalletScreen />);
 
-    // Balance area confirms the screen mounted.
-    await waitFor(() => expect(screen.getByTestId('balance-amount-usd')).toBeInTheDocument());
-    expect(screen.queryByText('No transactions yet')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByTestId('create-coin-btn')).toBeInTheDocument());
+    expect(screen.queryByText('Noch keine Transaktionen')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tx-row-amount')).not.toBeInTheDocument();
   });
 
@@ -158,8 +155,7 @@ describe('WalletScreen — transaction list from server history', () => {
 
     render(<WalletScreen />);
 
-    expect(await screen.findByText('Create a wallet to get started.')).toBeInTheDocument();
-    // No account → useHistory is parked, no fetch.
+    expect(await screen.findByText('Erstelle ein Wallet, um zu starten.')).toBeInTheDocument();
     expect(historySpy).not.toHaveBeenCalled();
   });
 });

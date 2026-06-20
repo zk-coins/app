@@ -148,7 +148,10 @@ describe('Onboarding — SeedFlow stage transitions', () => {
 
 describe('Onboarding — full create happy path', () => {
   it('writes account + authMethod=seed + balance through the entire create flow', async () => {
-    vi.spyOn(api, 'balance').mockResolvedValue({ balance: 555, num_sends: 0 });
+    vi.spyOn(api, 'ownerBalances').mockResolvedValue({
+      address: 'b'.repeat(64),
+      assets: [{ asset_id: 'c'.repeat(64), balance: 555, num_sends: 0 }],
+    });
 
     const user = userEvent.setup();
     render(<Onboarding />);
@@ -173,7 +176,7 @@ describe('Onboarding — full create happy path', () => {
   });
 
   it('treats a balance-fetch failure as non-fatal', async () => {
-    vi.spyOn(api, 'balance').mockRejectedValue(new Error('server down'));
+    vi.spyOn(api, 'ownerBalances').mockRejectedValue(new Error('server down'));
 
     const user = userEvent.setup();
     render(<Onboarding />);

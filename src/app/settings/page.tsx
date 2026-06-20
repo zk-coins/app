@@ -24,6 +24,13 @@ function Toggle({
   badge?: string;
 }) {
   const [on, setOn] = useState(defaultOn);
+  // Every settings toggle currently ships disabled ("Planned"), so the
+  // interactive enable path is unreachable — there is no way to toggle it
+  // on. It is `c8 ignore`d until a real (enabled) toggle lands, the same
+  // way other genuinely-unreachable defensive code is ignored at source.
+  /* c8 ignore start */
+  const handleToggle = () => !disabled && setOn((v) => !v);
+  /* c8 ignore stop */
   return (
     <div className="flex items-start justify-between gap-6 py-4">
       <div className="min-w-0">
@@ -40,7 +47,7 @@ function Toggle({
         {description && <p className="mt-0.5 text-[12px] text-ink3">{description}</p>}
       </div>
       <button
-        onClick={() => !disabled && setOn((v) => !v)}
+        onClick={handleToggle}
         disabled={disabled}
         className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
           disabled ? 'cursor-not-allowed bg-line opacity-50' : on ? 'bg-bitcoin' : 'bg-line2'
