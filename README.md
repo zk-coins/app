@@ -7,7 +7,7 @@
 
 The end-user **wallet** for zkCoins — a Next.js 15 PWA. The seed is encrypted on-device (IndexedDB); BIP-32 derivation and Schnorr signing run in an on-device Rust→WASM crate. Installable, LNURL receive.
 
-> Live: [zkcoins.app](https://zkcoins.app) (PRD) · [dev.zkcoins.app](https://dev.zkcoins.app) (DEV) — Full system docs: **[docs.zkcoins.app](https://docs.zkcoins.app)** · Specification: **[docs.zkcoins.app/specification](https://docs.zkcoins.app/specification)**
+> Live: [zkcoins.app](https://zkcoins.app) (PRD) · [dev.zkcoins.app](https://dev.zkcoins.app) (DEV) — Full system docs: **[docs.zkcoins.com](https://docs.zkcoins.com)** · Specification: **[docs.zkcoins.com/specification](https://docs.zkcoins.com/specification)**
 
 Container images: **[hub.docker.com/r/zkcoins/app](https://hub.docker.com/r/zkcoins/app)**
 
@@ -43,7 +43,7 @@ The zkCoins **wallet** — a thin, installable web client. It holds the keys; th
 | Client    | `@zkcoins/sdk`            | Typed REST/LNURL client, shared response schemas                   |
 | PWA       | Service Worker + Manifest | Installable, offline-capable, standalone mode                      |
 
-Full rationale: [docs.zkcoins.app/tech-decisions](https://docs.zkcoins.app/tech-decisions)
+Full rationale: [docs.zkcoins.com/tech-decisions](https://docs.zkcoins.com/tech-decisions)
 
 ### Trust model — your keys on-device, proving on the node
 
@@ -134,7 +134,7 @@ Feature PRs target **`staging`** (the integration buffer), which is auto-promote
 
 ## Protocol
 
-Based on [Shielded CSV](https://eprint.iacr.org/2025/068) by Jonas Nick, Liam Eagen, and Robin Linus, building on the zkCoins concept. See [`zk-coins/research`](https://github.com/zk-coins/research) and [docs.zkcoins.app/specification](https://docs.zkcoins.app/specification).
+Based on [Shielded CSV](https://eprint.iacr.org/2025/068) by Jonas Nick, Liam Eagen, and Robin Linus, building on the zkCoins concept. See [`zk-coins/research`](https://github.com/zk-coins/research) and [docs.zkcoins.com/specification](https://docs.zkcoins.com/specification).
 
 ## License
 
