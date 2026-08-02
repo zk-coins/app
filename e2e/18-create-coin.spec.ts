@@ -37,7 +37,7 @@ test.use({ serviceWorkers: 'block' });
 /** Log Alice in and open `/create`. */
 async function aliceGoToCreate(page: Page): Promise<void> {
   await aliceLogin(page);
-  await expect(page.getByTestId('asset-list')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('create-coin-btn').click();
   await expect(page.getByTestId('create-heading')).toBeVisible({ timeout: 10_000 });
 }

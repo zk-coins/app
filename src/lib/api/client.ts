@@ -264,6 +264,21 @@ function mapV1Error(err: unknown): never {
   throw new Error(String(err));
 }
 
+/**
+ * True only for an unambiguously typed "account does not exist yet" signal
+ * (HTTP 404). Network/auth/parse/5xx failures must NOT be treated as a new
+ * account with sendCounter=0 — that would risk a double-spend nonce reuse.
+ */
+export function isAccountNotFoundError(err: unknown): boolean {
+  if (err instanceof V1ApiError) {
+    return err.status === 404;
+  }
+  if (err instanceof ApiError) {
+    return err.status === 404;
+  }
+  return false;
+}
+
 const TERMINAL: ReadonlySet<V1JobStatusValue> = new Set(['completed', 'failed', 'cancelled']);
 
 const POLL_FLOOR_MS = 1_500;
@@ -592,8 +607,13 @@ export const api = {
         });
         const head = await client.getAccountState(pull.session);
         sendCounter = head.send_counter;
-      } catch {
-        // Brand-new account: counter stays 0.
+      } catch (err) {
+        // Only a typed "account does not exist" (404) means counter 0.
+        // Any other failure (network, auth, parse, 5xx) must abort before
+        // /v1/tx — never invent sendCounter=0 for a possibly live account.
+        if (!isAccountNotFoundError(err)) {
+          throw err;
+        }
         sendCounter = 0;
       }
 

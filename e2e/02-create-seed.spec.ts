@@ -41,49 +41,11 @@ test.describe('Create wallet — seed phrase', () => {
     await clearWalletState(page);
   });
 
-  test.describe('generating stage', () => {
-    // The PWA service worker (public/sw.js) serves static assets
-    // cache-first, and requests answered by a worker bypass
-    // `page.route()` entirely — so the WASM hold below would never
-    // fire. Same reasoning as spec 13's file-level block; scoped to
-    // this inner describe because only this capture depends on
-    // intercepting the WASM fetch.
-    test.use({ serviceWorkers: 'block' });
-
-    test('seed-generating', async ({ page }) => {
-      // Hold the WASM fetch so the `generating` stage is still on
-      // screen when the snapshot is taken, on any runner speed. The
-      // previous 800 ms budget raced `snap()`'s own pre-capture work
-      // (fonts.ready, the /v1/info round-trip that builds the default
-      // masks, the stabilizer CSS): on a fast locally-served standalone
-      // build the WASM landed first, the seed grid rendered, and the
-      // (masked) grid no longer matched the text-only baseline. The
-      // 30 s hold cannot slow the test down — the spec ends right after
-      // `snap()` and Playwright aborts the still-pending request when
-      // the page closes; it only pins the UI in `generating` for
-      // however long the snapshot itself takes.
-      //
-      // Glob note: `@zkcoins/wasm` ships `client_bg.wasm`, which Next
-      // emits hashed as `client_bg.<hash>.wasm` under
-      // `/_next/static/media/`. The previous `**/zkcoins_wasm_bg.wasm`
-      // glob matched nothing, so the hold never fired and the captured
-      // frame was pure timing luck — fine on the slower hosted-stack
-      // round-trip, broken on a fast locally-served build where the
-      // grid rendered before the snapshot.
-      await page.route('**/client_bg*.wasm', async (route) => {
-        await new Promise((r) => setTimeout(r, 30_000));
-        await route.continue().catch(() => {});
-      });
-      await page.goto('/');
-      await page.getByTestId('onboarding-create-btn').click();
-      const passkeySkip = page.getByTestId('passkey-other-options-btn');
-      if (await passkeySkip.isVisible({ timeout: 1500 }).catch(() => false)) {
-        await passkeySkip.click();
-      }
-      await expect(page.getByTestId('seed-generating')).toBeVisible({ timeout: 5_000 });
-      await snap(page, '02-seed-generating');
-    });
-  });
+  // seed-generating: pure-TS `@zkcoins/sdk` mnemonic generation is near-
+  // instant, so the generating stage is a transient flash with no network
+  // resource to hold. The unstable visual capture was dropped rather than
+  // faking a missing WASM module. Functional coverage is the reveal stages
+  // below plus the unit suite on account-keys.
 
   test('seed-reveal-hidden', async ({ page }) => {
     await enterSeedFlow(page);
@@ -185,7 +147,7 @@ test.describe('Create wallet — seed phrase', () => {
     // absent while `balance === null` (post-mount loading) — without an
     // explicit wait the assertion races the polling tick.
     await waitForBalanceLoaded(page);
-    await expect(page.getByTestId('wallet-empty-banner')).toBeVisible({ timeout: 5_000 });
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
     await snap(page, '02-wallet-after-create', { fullPage: true });
   });
 

@@ -24,18 +24,12 @@ jobs:
     name: Build and deploy to PRD
     runs-on: ubuntu-24.04-arm
     steps:
-      # Monorepo-shaped checkout: Dockerfile expects app/ + sdk/ siblings
-      # so `file:../sdk` resolves during `npm ci` / Next transpile.
-      - name: Checkout app
+      # App-only checkout. `@zkcoins/sdk` is a git dependency pinned in
+      # package.json (github:zk-coins/sdk#feat/v1-cross-parity) — `npm ci`
+      # inside the Docker build resolves it (lockfile pins the commit SHA).
+      # Flip to published `@zkcoins/sdk@^0.4.0` on the release cutover.
+      - name: Checkout
         uses: actions/checkout@v4
-        with:
-          path: app
-
-      - name: Checkout sdk
-        uses: actions/checkout@v4
-        with:
-          repository: zk-coins/sdk
-          path: sdk
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -50,7 +44,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
-          file: app/Dockerfile
+          file: Dockerfile
           push: true
           tags: ${{ env.DOCKER_TAGS }}
           platforms: linux/arm64

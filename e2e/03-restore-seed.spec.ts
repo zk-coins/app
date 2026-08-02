@@ -158,7 +158,7 @@ test.describe('Restore wallet — seed phrase', () => {
     });
     // Wait for Alice's first balance-poll tick — see comment in
     // 02-create-seed.spec.ts::wallet-after-create.
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
     await snap(page, '03-wallet-after-restore', { fullPage: true });
   });
 

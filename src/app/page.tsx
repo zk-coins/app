@@ -16,10 +16,12 @@ export default function Home() {
     isLocked,
     hasStoredWallet,
     storedAuthMethod,
+    needsSeedReimport,
     checkForStoredWallet,
     unlockWithPassword,
     unlockWithPrf,
     deleteWallet,
+    clearNeedsSeedReimport,
   } = useWalletStore();
   const { hydrate, reset: resetAuth } = useAuthStore();
   const [hydrated, setHydrated] = useState(false);
@@ -50,6 +52,14 @@ export default function Home() {
     resetAuth();
   }, [deleteWallet, resetAuth]);
 
+  // Confirmed discard of an incompatible legacy store (no encrypted v2 blob).
+  const handleDiscardLegacy = useCallback(async () => {
+    await deleteWallet();
+    await deleteCredential();
+    resetAuth();
+    clearNeedsSeedReimport();
+  }, [deleteWallet, resetAuth, clearNeedsSeedReimport]);
+
   if (!hydrated) return null;
 
   if (account && !isLocked) {
@@ -69,6 +79,11 @@ export default function Home() {
         onReset={handleReset}
       />
     );
+  }
+
+  // Legacy / incompatible store: keep data until re-import or confirmed reset.
+  if (needsSeedReimport) {
+    return <Onboarding reimportRequired onDiscardLegacy={handleDiscardLegacy} />;
   }
 
   return <Onboarding />;

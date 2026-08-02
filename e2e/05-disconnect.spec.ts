@@ -52,7 +52,7 @@ test.describe('Disconnect wallet', () => {
     // deterministic — without this the baseline regenerated on a
     // funded view sometimes diffs against a CI run where the tick
     // hasn't landed.
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
     // Hover on the Settings tab so the link colour transition lands.
     const settingsTab = page.getByTestId('nav-settings');
     await settingsTab.hover();

@@ -144,6 +144,15 @@ describe('WalletScreen — transaction list from server history', () => {
     expect(await screen.findByText('Noch keine Transaktionen')).toBeInTheDocument();
   });
 
+  it('shows a history error banner instead of empty copy when the read fails', async () => {
+    historySpy.mockRejectedValue(new Error('network down'));
+
+    render(<WalletScreen />);
+
+    expect(await screen.findByTestId('history-error-banner')).toBeInTheDocument();
+    expect(screen.queryByText('Noch keine Transaktionen')).not.toBeInTheDocument();
+  });
+
   it('holds the empty state back while the first history fetch is in flight', async () => {
     historySpy.mockReturnValue(new Promise<never>(() => {}));
 

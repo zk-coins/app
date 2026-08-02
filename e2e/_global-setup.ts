@@ -75,12 +75,15 @@ async function createCoinWithRetry(
     // poll, which verifies the funding independently. On attempt 1 the
     // rejection is a genuine collision and must stay fatal. Auto-generated
     // names regenerate per attempt and never take this path.
+    // Re-mint rejection is NOT independent proof the fixture funded:
+    // portfolio/balance reads are unavailable in this build, so we cannot
+    // verify funding. Surface the error instead of pretending success.
     if (attempt > 1 && opts.name !== undefined && isReMintRejection(err)) {
-      console.warn(
-        `globalSetup: create-coin retry for "${opts.name}" hit the node's re-mint rejection — ` +
-          `a previous attempt already minted it; deferring to the balance poll for verification`,
+      throw new Error(
+        `globalSetup: create-coin for "${opts.name}" hit re-mint rejection on attempt ${attempt}, ` +
+          `but no independent funding verification is available (read path not wired). ` +
+          `Original error: ${String(err)}`,
       );
-      return (await api.account(mnemonic)).address;
     }
     if (attempt >= maxAttempts) throw err;
     const wait = 1_000 * 2 ** (attempt - 1);
@@ -215,13 +218,13 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     });
     await aliceCtx.close();
 
-    // Optional write-side mint for Alice. Portfolio / balance reads are
-    // not available yet (AccountState decode), so we do not poll for a
-    // funded portfolio and do not invent seededBalance = 0 as truth.
-    // Mint job completion is the success criterion; UI specs must treat
-    // balances as "not available in this build".
+    // Write-side mint for Alice when FAUCET_CALLS > 0. Failures are fatal:
+    // a broken /v1/tx mint path must not silently produce "valid" fixtures.
+    // Portfolio / balance reads remain unavailable (AccountState decode), so
+    // we still record seededBalance as null — UI specs settle on the
+    // unavailable banner, not on a fabricated funded list.
     let mintedAddress = '';
-    try {
+    if (FAUCET_CALLS > 0) {
       for (let i = 0; i < FAUCET_CALLS; i++) {
         const name = multiAsset ? undefined : i === 0 ? 'E2E-FIXTURE' : `E2E-FIXTURE-${i + 1}`;
         mintedAddress = await createCoinWithRetry(
@@ -235,10 +238,6 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
             `(${alice.address}). The app and the e2e helper derive the wallet address differently.`,
         );
       }
-    } catch (err) {
-      console.warn(
-        `globalSetup: fixture mint skipped or failed (non-fatal while read path is unavailable): ${String(err)}`,
-      );
     }
     const seededBalance = await noteFundingUnavailable(mintedAddress || alice.address);
 

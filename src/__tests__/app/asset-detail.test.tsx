@@ -11,7 +11,7 @@ import { screen } from '@testing-library/react';
 import { render } from '@/__tests__/_helpers/intl';
 import AssetDetailPage from '@/app/asset/[id]/page';
 import { useWalletStore } from '@/stores/wallet';
-import { api, type OwnerBalanceResponse } from '@/lib/api/client';
+import { ApiError, api, type OwnerBalanceResponse } from '@/lib/api/client';
 
 const ASSET_ID = 'c'.repeat(64);
 let mockParamId = ASSET_ID;
@@ -104,11 +104,32 @@ describe('AssetDetailPage', () => {
     expect(await screen.findByTestId('asset-detail-name')).toHaveTextContent('Unbekanntes Asset');
   });
 
-  it('shows the not-found state once the portfolio loads without the asset', async () => {
+  it('shows the not-found state only after a successful portfolio read without the asset', async () => {
     ownerSpy.mockResolvedValue(portfolio([]));
 
     render(<AssetDetailPage />);
     expect(await screen.findByTestId('asset-detail-missing')).toBeInTheDocument();
+  });
+
+  it('shows unavailable (not missing) when portfolio is 501', async () => {
+    ownerSpy.mockRejectedValue(
+      new ApiError(
+        501,
+        'portfolio not available in this build — AccountState balances decode is not wired yet',
+      ),
+    );
+
+    render(<AssetDetailPage />);
+    expect(await screen.findByTestId('asset-detail-unavailable')).toBeInTheDocument();
+    expect(screen.queryByTestId('asset-detail-missing')).not.toBeInTheDocument();
+  });
+
+  it('shows error (not missing) when portfolio read fails for other reasons', async () => {
+    ownerSpy.mockRejectedValue(new Error('network down'));
+
+    render(<AssetDetailPage />);
+    expect(await screen.findByTestId('asset-detail-error')).toBeInTheDocument();
+    expect(screen.queryByTestId('asset-detail-missing')).not.toBeInTheDocument();
   });
 
   it('renders the owner history rows under the note', async () => {

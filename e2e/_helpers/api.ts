@@ -180,7 +180,17 @@ export const api = {
       });
       const head = await client.getAccountState(pull.session);
       sendCounter = head.send_counter;
-    } catch {
+    } catch (err) {
+      // Only a typed HTTP 404 means "account does not exist yet".
+      // Network/auth/parse/5xx must abort before /v1/tx (same contract as
+      // the app client) — never invent sendCounter=0 for a live account.
+      const status =
+        err && typeof err === 'object' && 'status' in err
+          ? Number((err as { status: unknown }).status)
+          : NaN;
+      if (status !== 404) {
+        throw err;
+      }
       sendCounter = 0;
     }
 

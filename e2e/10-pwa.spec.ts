@@ -66,7 +66,7 @@ test.describe('PwaPrompt — native mode', () => {
     // PwaPrompt card is funded. Without this the PwaPrompt baselines
     // capture the pre-tick empty-banner state and `pwa-manual-mode`
     // collapses onto `06-balance-zero-empty-banner`.
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
   });
 
   test('pwa-native-mode', async ({ page }) => {
@@ -99,7 +99,7 @@ test.describe('PwaPrompt — iOS Safari', () => {
     // PwaPrompt card is funded. Without this the PwaPrompt baselines
     // capture the pre-tick empty-banner state and `pwa-manual-mode`
     // collapses onto `06-balance-zero-empty-banner`.
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
   });
 
   test('pwa-ios-mode', async ({ page }) => {
@@ -117,7 +117,7 @@ test.describe('PwaPrompt — manual fallback', () => {
     // PwaPrompt card is funded. Without this the PwaPrompt baselines
     // capture the pre-tick empty-banner state and `pwa-manual-mode`
     // collapses onto `06-balance-zero-empty-banner`.
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
   });
 
   test('pwa-manual-mode', async ({ page }) => {

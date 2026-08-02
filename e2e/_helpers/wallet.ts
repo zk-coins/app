@@ -238,16 +238,26 @@ export async function waitForBalanceLoaded(page: Page, timeout = 60_000): Promis
   await expect
     .poll(
       async () => {
+        // Honest "not available in this build" surfaces (current read path).
+        const unavailable = await page
+          .getByTestId('portfolio-unavailable-banner')
+          .or(page.getByTestId('portfolio-error-banner'))
+          .or(page.getByTestId('balance-unavailable-banner'))
+          .isVisible()
+          .catch(() => false);
+        if (unavailable) return true;
+
         // Single-asset hero settled (data-loading attribute gone)?
         const heroCount = await page.getByTestId('balance-amount-usd').count();
         if (heroCount > 0) {
           const loading = await page.getByTestId('balance-amount-usd').getAttribute('data-loading');
           if (loading !== 'true') return true;
         }
-        // Multi-asset portfolio settled (list or empty banner visible)?
+        // Multi-asset portfolio settled (list, empty, or unavailable)?
         const portfolioVisible = await page
           .getByTestId('asset-list')
           .or(page.getByTestId('wallet-empty-banner'))
+          .or(page.getByTestId('portfolio-unavailable-banner'))
           .isVisible()
           .catch(() => false);
         return portfolioVisible;

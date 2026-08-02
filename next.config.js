@@ -6,7 +6,7 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  // Link the local SDK package (file:../sdk) into the Next compile graph.
+  // Compile the SDK package (git dep or published) through Next's graph.
   transpilePackages: ['@zkcoins/sdk'],
   // Serve the static user handbook (public/handbook/index.html) at the
   // clean URL /handbook. The screenshots subfolder is reached normally

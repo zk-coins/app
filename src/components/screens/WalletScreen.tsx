@@ -37,7 +37,13 @@ export function WalletScreen() {
           nkCommit: account.nkCommit,
         }
       : undefined;
-  const { items: history, loaded: historyLoaded } = useHistory(historyAccount);
+  const {
+    items: history,
+    loaded: historyLoaded,
+    available: historyAvailable,
+    error: historyError,
+    stale: historyStale,
+  } = useHistory(historyAccount);
   const features = useFeatures();
   // Runtime multi-asset capability. Portfolio / send still show "not
   // available yet" until AccountState balances + coin inventory decode.
@@ -46,6 +52,9 @@ export function WalletScreen() {
     assets,
     loaded: portfolioLoaded,
     available: portfolioAvailable,
+    error: portfolioError,
+    unavailableReason: portfolioUnavailableReason,
+    stale: portfolioStale,
   } = usePortfolio(multiAsset ? account?.address : undefined);
   const { usernameDomain, infoError, infoLoaded, applyInfo, applyInfoFailure } = useNetworkStore();
   const [hidden, setHidden] = useState(false);
@@ -131,12 +140,18 @@ export function WalletScreen() {
     </>
   );
 
-  const portfolioEmpty = portfolioLoaded && portfolioAvailable && assets.length === 0;
+  // Empty portfolio only after a successful read with zero assets — never
+  // after a load failure or intentional unavailability.
+  const portfolioEmpty =
+    portfolioLoaded && portfolioAvailable && !portfolioError && assets.length === 0;
+  const portfolioBlocked = portfolioLoaded && (!portfolioAvailable || portfolioError !== null);
   // Send needs coin inventory selection from AccountState — not wired yet.
   // Fail closed on BOTH surfaces (never enable a button that leads to an
   // empty-input_coins /v1/tx). The /send route itself also refuses.
   const sendAvailable = false;
   const sendDisabled = !account || !sendAvailable;
+  const historyEmpty = historyLoaded && historyAvailable && !historyError && history.length === 0;
+  const historyBlocked = historyLoaded && (!historyAvailable || historyError !== null);
 
   return (
     <section className="space-y-7">
@@ -214,14 +229,33 @@ export function WalletScreen() {
             <h2 className="mb-2 text-[11px] font-semibold tracking-wider text-ink3 uppercase">
               {t('portfolioTitle')}
             </h2>
-            {!portfolioAvailable && portfolioLoaded ? (
-              <UnavailableBanner
-                testId="portfolio-unavailable-banner"
-                title={t('portfolioUnavailableTitle')}
-                body={t('portfolioUnavailableBody')}
-              />
+            {portfolioBlocked ? (
+              portfolioError ? (
+                <UnavailableBanner
+                  testId="portfolio-error-banner"
+                  title={t('portfolioErrorTitle')}
+                  body={portfolioStale ? t('portfolioStaleBody') : portfolioError}
+                />
+              ) : (
+                <UnavailableBanner
+                  testId="portfolio-unavailable-banner"
+                  title={t('portfolioUnavailableTitle')}
+                  body={portfolioUnavailableReason ?? t('portfolioUnavailableBody')}
+                />
+              )
             ) : assets.length > 0 ? (
-              <AssetList assets={assets} unknownName={t('txMint')} />
+              <>
+                {portfolioStale && (
+                  <p
+                    data-testid="portfolio-stale-note"
+                    className="mb-2 text-[11px] text-ink3"
+                    role="status"
+                  >
+                    {t('portfolioStaleBody')}
+                  </p>
+                )}
+                <AssetList assets={assets} unknownName={t('txMint')} />
+              </>
             ) : !account || portfolioEmpty ? (
               <EmptyPortfolio
                 hasWallet={!!account}
@@ -245,15 +279,32 @@ export function WalletScreen() {
       {/* PWA install prompt */}
       <PwaPrompt />
 
-      {/* Transactions */}
+      {/* Transactions — empty copy only after a successful empty read */}
       <div>
         {history.length > 0 ? (
-          <TransactionsList
-            items={history.slice(0, 10)}
-            multiAsset={multiAsset}
-            labels={{ sent: t('txSent'), received: t('txReceived'), mint: t('txMint') }}
+          <>
+            {historyStale && (
+              <p
+                data-testid="history-stale-note"
+                className="mb-2 text-[11px] text-ink3"
+                role="status"
+              >
+                {t('historyStaleBody')}
+              </p>
+            )}
+            <TransactionsList
+              items={history.slice(0, 10)}
+              multiAsset={multiAsset}
+              labels={{ sent: t('txSent'), received: t('txReceived'), mint: t('txMint') }}
+            />
+          </>
+        ) : historyBlocked ? (
+          <UnavailableBanner
+            testId="history-error-banner"
+            title={t('historyErrorTitle')}
+            body={historyError ?? t('historyErrorBody')}
           />
-        ) : !account || historyLoaded ? (
+        ) : !account || historyEmpty ? (
           <EmptyTransactions
             hasWallet={!!account}
             title={t('noTransactionsTitle')}

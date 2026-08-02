@@ -182,7 +182,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       payloadVersion: WALLET_PAYLOAD_VERSION,
     });
 
+    // Successful v2 write: drop legacy blob + reimport flag.
     clearLegacyStorage();
+    set({ needsSeedReimport: false, error: null, hasStoredWallet: true });
   },
 
   saveWithPrf: async (prfOutput: Uint8Array) => {
@@ -202,6 +204,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     });
 
     clearLegacyStorage();
+    set({ needsSeedReimport: false, error: null, hasStoredWallet: true });
   },
 
   unlockWithPassword: async (password: string) => {
@@ -320,9 +323,20 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       try {
         const legacy = localStorage.getItem('zkcoins_wallet');
         if (legacy) {
-          // Never auto-promote legacy localStorage blobs: they may be
-          // unversioned xpriv-era payloads. Clear and force onboarding.
-          clearLegacyStorage();
+          // Never auto-promote legacy localStorage blobs (unversioned /
+          // xpriv-era). Keep the blob until the user re-imports or
+          // explicitly resets — deleting here would destroy the only copy
+          // before a conscious recovery decision.
+          set({
+            needsSeedReimport: true,
+            hasStoredWallet: false,
+            storedAddress: null,
+            storedAuthMethod: null,
+            isLocked: false,
+            account: null,
+            error:
+              'Stored wallet format is incompatible with this build. Re-import your 12-word seed phrase.',
+          });
         }
       } catch {
         // ignore

@@ -4,9 +4,9 @@
  * The app is a capability-adaptive client: against a `multi_asset:false`
  * node it renders the single-asset wallet (specs 1-17), and against a
  * `multi_asset:true` node it renders the multi-asset surface (specs 18-21).
- * CI runs the single-asset leg (the info-proxy normalises `multi_asset` to
- * false), so the multi-asset specs must SKIP there and only run when pointed
- * at a true node (the local Docker harness, `scripts/e2e-local.sh`).
+ * v1 is multi-asset by construction; the info-proxy reports
+ * `capabilities.multi_asset: true`. Specs that still gate on this helper
+ * run against that surface.
  *
  * `multiAssetEnabled()` reads `GET /v1/info` from `E2E_API_URL` once per
  * worker (the result is cached) so a `test.skip(...)` guard can branch on the

@@ -30,7 +30,13 @@ export default function AssetDetailPage() {
   }, [multiAssetRuntime, router]);
 
   const assetId = params.id;
-  const { assets, loaded } = usePortfolio(account?.address);
+  const {
+    assets,
+    loaded,
+    available: portfolioAvailable,
+    error: portfolioError,
+    unavailableReason,
+  } = usePortfolio(account?.address);
   const historyAccount =
     account && account.mnemonic && account.nkCommit
       ? {
@@ -40,7 +46,9 @@ export default function AssetDetailPage() {
         }
       : undefined;
   const { items: history } = useHistory(historyAccount);
-  const asset = assets.find((a) => a.asset_id === assetId);
+  // not-found only after a successful, available portfolio read without this asset
+  const asset = portfolioAvailable ? assets.find((a) => a.asset_id === assetId) : undefined;
+  const portfolioBlocked = loaded && (!portfolioAvailable || portfolioError !== null);
 
   return (
     <AppShell showNav={false}>
@@ -58,7 +66,29 @@ export default function AssetDetailPage() {
         </span>
       </header>
 
-      {!asset ? (
+      {portfolioBlocked ? (
+        <div
+          data-testid={portfolioError ? 'asset-detail-error' : 'asset-detail-unavailable'}
+          className="flex min-h-[60vh] flex-col items-center justify-center text-center"
+          role="status"
+        >
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-line bg-surface text-ink4">
+            <Info size={22} strokeWidth={1.75} />
+          </div>
+          <p className="mt-4 text-[15px] font-semibold text-ink">
+            {portfolioError ? t('errorTitle') : t('unavailableTitle')}
+          </p>
+          <p className="mt-1 max-w-[280px] text-[13px] leading-relaxed text-ink3">
+            {portfolioError ? portfolioError : (unavailableReason ?? t('unavailableBody'))}
+          </p>
+          <Link
+            href="/"
+            className="mt-6 rounded-md bg-bitcoin px-6 py-2.5 text-[13px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover"
+          >
+            {t('backToWallet')}
+          </Link>
+        </div>
+      ) : !asset ? (
         loaded ? (
           <div
             data-testid="asset-detail-missing"

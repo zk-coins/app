@@ -288,8 +288,9 @@ describe('wallet store — checkForStoredWallet', () => {
     expect(state.isLocked).toBe(true);
   });
 
-  it('clears legacy localStorage blobs without auto-loading them', async () => {
-    // Unversioned plaintext blobs are incompatible — never promote to account.
+  it('keeps legacy localStorage blobs and requires seed re-import', async () => {
+    // Unversioned plaintext blobs are incompatible — never promote to account,
+    // but keep the only copy until re-import or confirmed discard.
     const legacyData = {
       account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 },
     };
@@ -298,7 +299,25 @@ describe('wallet store — checkForStoredWallet', () => {
     await useWalletStore.getState().checkForStoredWallet();
     const state = useWalletStore.getState();
     expect(state.account).toBeNull();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.hasStoredWallet).toBe(false);
+    expect(localStorage.getItem('zkcoins_wallet')).not.toBeNull();
+  });
+
+  it('clears legacy storage only after successful v2 save', async () => {
+    const legacyData = {
+      account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 },
+    };
+    localStorage.setItem('zkcoins_wallet', JSON.stringify(legacyData));
+    useWalletStore.setState({
+      account: testAccount,
+      needsSeedReimport: true,
+    });
+
+    await useWalletStore.getState().saveWithPassword('password123');
+    const state = useWalletStore.getState();
     expect(localStorage.getItem('zkcoins_wallet')).toBeNull();
+    expect(state.needsSeedReimport).toBe(false);
   });
 
   it('does nothing when no wallet stored anywhere', async () => {

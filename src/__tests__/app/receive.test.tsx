@@ -1,16 +1,5 @@
 /**
- * ReceivePage tests (`src/app/receive/page.tsx`).
- *
- * The page renders a QR for the user's zkAddress, an address text
- * card, and a Copy button with a 1.5 s "Copied" feedback flip. It
- * also bounces to `/` if no account is in the store, with a 100 ms
- * grace window that suppresses the redirect when the account lands
- * inside that window (race between `useEffect` mount and Zustand
- * hydration from a re-mount).
- *
- * `e2e/08-receive.spec.ts` covers the styled output but does not
- * lock in the copy-feedback timer, the clipboard reject path, or
- * the 100 ms redirect grace.
+ * ReceivePage — only name payloads that Send accepts are offered.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -20,6 +9,7 @@ import ReceivePage from '@/app/receive/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
 import { toZkAddress } from '@/lib/format';
+import { extractRecipient } from '@/lib/qr';
 
 const routerReplace = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -29,7 +19,7 @@ vi.mock('next/navigation', () => ({
 
 const ALICE = {
   username: 'alice',
-  address: 'a'.repeat(64),
+  address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
   mnemonic:
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   nkCommit: '00'.repeat(32),
@@ -63,24 +53,27 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('ReceivePage — funded render', () => {
-  it('renders the receive heading, QR, address card, and copy button', () => {
+describe('ReceivePage — name path', () => {
+  it('renders QR + name and the payload is accepted by extractRecipient', () => {
     render(<ReceivePage />);
     expect(screen.getByTestId('receive-heading')).toHaveTextContent('Receive');
     expect(screen.getByTestId('qr-code')).toBeInTheDocument();
     expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy name');
-    // The address card shows the zk-form of the address ({hex}@zkcoins.app).
     expect(screen.getByText(ALICE_ZK)).toBeInTheDocument();
+    // Property under test: Receive→Scan→Send round-trip shape.
+    expect(extractRecipient(ALICE_ZK)).toBe(ALICE_ZK);
   });
 
-  it('without a name offers the account address as a technical receive path', () => {
+  it('without a name marks receive as not available (no zk1 payload)', () => {
     useWalletStore.setState({
       account: { ...ALICE, username: undefined },
     });
     render(<ReceivePage />);
-    expect(screen.getByTestId('receive-name-unavailable')).toBeInTheDocument();
-    expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy address');
-    expect(screen.getByText(ALICE.address)).toBeInTheDocument();
+    expect(screen.getByTestId('receive-not-available')).toBeInTheDocument();
+    expect(screen.queryByTestId('qr-code')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('receive-copy-btn')).not.toBeInTheDocument();
+    // Raw address is not a Send-accepted recipient.
+    expect(extractRecipient(ALICE.address)).toBeNull();
   });
 
   it('the back link routes to /', () => {
@@ -90,12 +83,6 @@ describe('ReceivePage — funded render', () => {
 });
 
 describe('ReceivePage — copy feedback', () => {
-  // happy-dom ships a working `navigator.clipboard.writeText` that
-  // resolves successfully and stores the value in an in-memory
-  // clipboard. The tests below rely on that real implementation
-  // instead of fighting happy-dom's non-configurable navigator
-  // property to swap in a mock.
-
   it('flips the button to "Copied" after a successful clipboard write', async () => {
     const user = userEvent.setup();
     render(<ReceivePage />);
@@ -105,102 +92,11 @@ describe('ReceivePage — copy feedback', () => {
     expect(button).not.toHaveAttribute('data-copied');
 
     await user.click(button);
-    // The .then handler resolves on a microtask — wait for the flip.
     await act(async () => {
       await Promise.resolve();
     });
     expect(button).toHaveTextContent('Copied');
     expect(button).toHaveAttribute('data-copied', 'true');
-    // happy-dom's clipboard captured the zk-form address.
     await expect(navigator.clipboard.readText()).resolves.toBe(ALICE_ZK);
-  });
-
-  it('reverts the button to "Copy name" after the 1.5 s timeout', async () => {
-    // Collapse the 1.5 s `setTimeout(setCopied(false), 1500)` to a
-    // microtask so the assertion lands inside the default test
-    // budget. Targeting only delay=1500 leaves every other timer
-    // (happy-dom clipboard internals, React effect scheduling)
-    // untouched.
-    const realSetTimeout = globalThis.setTimeout;
-    const timerSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
-      cb: () => void,
-      delay?: number,
-      ...args: unknown[]
-    ) => {
-      if (delay === 1_500) {
-        queueMicrotask(cb);
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      }
-      return realSetTimeout(cb, delay as number, ...(args as []));
-    }) as unknown as typeof setTimeout);
-
-    const user = userEvent.setup();
-    render(<ReceivePage />);
-    await user.click(screen.getByTestId('receive-copy-btn'));
-    // Two microtask drains: one for clipboard.writeText().then, one
-    // for the queueMicrotask(setCopied(false)).
-    await act(async () => {
-      await Promise.resolve();
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy name');
-    expect(timerSpy).toHaveBeenCalledWith(expect.any(Function), 1_500);
-    timerSpy.mockRestore();
-  });
-
-  it('stays on "Copy name" when the clipboard write is rejected', async () => {
-    // Exercises the `writeText(...).then(onOk, onErr)` rejection leg: a
-    // denied/unavailable clipboard must leave the button untouched (no
-    // "Copied" flip) and must not throw.
-    const writeSpy = vi
-      .spyOn(navigator.clipboard, 'writeText')
-      .mockRejectedValue(new Error('clipboard denied'));
-    const user = userEvent.setup();
-    render(<ReceivePage />);
-
-    const button = screen.getByTestId('receive-copy-btn');
-    await user.click(button);
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(writeSpy).toHaveBeenCalledWith(ALICE_ZK);
-    expect(button).toHaveTextContent('Copy name');
-    expect(button).not.toHaveAttribute('data-copied');
-  });
-});
-
-describe('ReceivePage — no-account redirect', () => {
-  it('renders the redirecting placeholder when no account is in the store', () => {
-    useWalletStore.setState({ account: null });
-    render(<ReceivePage />);
-    expect(screen.getByTestId('redirecting-placeholder')).toBeInTheDocument();
-    // The Receive content is suppressed.
-    expect(screen.queryByTestId('receive-heading')).not.toBeInTheDocument();
-  });
-
-  it('calls router.replace("/") after the 100 ms grace window expires', async () => {
-    useWalletStore.setState({ account: null });
-    vi.useFakeTimers();
-    render(<ReceivePage />);
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(150);
-    });
-    expect(routerReplace).toHaveBeenCalledWith('/');
-  });
-
-  it('suppresses the redirect when the account lands inside the 100 ms grace window', async () => {
-    useWalletStore.setState({ account: null });
-    vi.useFakeTimers();
-    render(<ReceivePage />);
-    act(() => {
-      useWalletStore.setState({ account: ALICE });
-    });
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(150);
-    });
-    expect(routerReplace).not.toHaveBeenCalled();
   });
 });

@@ -145,10 +145,10 @@ File: `e2e/_global-setup.ts`. Runs once before any worker starts. Linked from `p
 
 ```text
 1. Generate two random 12-word BIP-39 mnemonics using the same WASM bridge the app
-   uses (`@zkcoins/wasm::generateMnemonic`). DRY, and any bug in the bridge surfaces
+   uses (`@zkcoins/sdk mnemonic helpers`). DRY, and any bug in the bridge surfaces
    here too. 12 words matches the placeholder text in SeedImportFlow and the
-   length validated by `wasm.validateMnemonic`.
-2. Derive Alice + Bob accounts via `wasm.createAccountFromMnemonic(phrase)` —
+   length validated by `isValidMnemonic`.
+2. Derive Alice + Bob accounts via `accountKeysFromMnemonic(phrase)` —
    returns `{ address, numPubkeys, xpriv }` exactly like the app.
 3. Seed Alice: run the creator-signed two-phase mint (admit POST /v1/jobs/mint
    with the signed mint contract → poll to `awaiting_signature` → commit → poll
@@ -359,18 +359,18 @@ swaps to `WalletScreen` before any DOM screenshot can land — there
 is no stable window for that state. `wallet-after-create` covers the
 transition functionally.
 
-| #   | Step                       | Notes                                                                                                                                                                                             |
-| --- | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | seed-generating            | After clicking through to SeedFlow — `stage='generating'`, "Generating seed phrase…" text. Race the WASM with a small artificial slowdown (`page.route('**/zkcoins_wasm_bg.wasm', delay 800ms)`). |
-| 2   | seed-reveal-hidden         | `stage='reveal'`, `revealed=false`. 12-word grid blurred + "Tap to reveal" overlay button.                                                                                                        |
-| 3   | seed-reveal-shown          | `stage='reveal'`, `revealed=true`. Mnemonic grid revealed (masked), "Important" warning box, "I've written it down" button.                                                                       |
-| 4   | seed-acknowledged          | `stage='confirm'`. Word grid still revealed, warning box + I've-written-it-down gone, "Continue" button alone.                                                                                    |
-| 5   | password-empty             | `stage='password'`. Both inputs empty, "Create wallet" button disabled.                                                                                                                           |
-| 6   | password-filled            | Both inputs filled. Button enabled.                                                                                                                                                               |
-| 7   | password-too-short         | Confirm a < 8 char password — error "Password must be at least 8 characters", `stage` reverts.                                                                                                    |
-| 8   | password-mismatch          | Mismatched confirms — error "Passwords do not match".                                                                                                                                             |
-| 9   | wallet-after-create        | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, no-balance banner shown.                                                                                              |
-| 10  | back-from-reveal (no shot) | At `stage='reveal'`, click StepHeader Back (twice on DEV — passkey-intro is the intermediate, see §8.0(a)) → returns to Welcome. Asserts URL only.                                                |
+| #   | Step                       | Notes                                                                                                                                                                            |
+| --- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | seed-generating            | After clicking through to SeedFlow — `stage='generating'`, "Generating seed phrase…" text. Race the WASM with a small artificial slowdown (`no WASM hold (pure-TS generation)`). |
+| 2   | seed-reveal-hidden         | `stage='reveal'`, `revealed=false`. 12-word grid blurred + "Tap to reveal" overlay button.                                                                                       |
+| 3   | seed-reveal-shown          | `stage='reveal'`, `revealed=true`. Mnemonic grid revealed (masked), "Important" warning box, "I've written it down" button.                                                      |
+| 4   | seed-acknowledged          | `stage='confirm'`. Word grid still revealed, warning box + I've-written-it-down gone, "Continue" button alone.                                                                   |
+| 5   | password-empty             | `stage='password'`. Both inputs empty, "Create wallet" button disabled.                                                                                                          |
+| 6   | password-filled            | Both inputs filled. Button enabled.                                                                                                                                              |
+| 7   | password-too-short         | Confirm a < 8 char password — error "Password must be at least 8 characters", `stage` reverts.                                                                                   |
+| 8   | password-mismatch          | Mismatched confirms — error "Passwords do not match".                                                                                                                            |
+| 9   | wallet-after-create        | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, no-balance banner shown.                                                                             |
+| 10  | back-from-reveal (no shot) | At `stage='reveal'`, click StepHeader Back (twice on DEV — passkey-intro is the intermediate, see §8.0(a)) → returns to Welcome. Asserts URL only.                               |
 
 ### 8.3 `03-restore-seed.spec.ts` (10 tests / 9 shots, 1 no-shot)
 
@@ -634,7 +634,7 @@ context on the `develop` branch-protection rule. Required contexts on
 develop (as of 2026-05-16):
 
 ```
-Lint & Build, Unit Tests, Rust Crypto Tests, E2E Tests
+Lint & Build, Unit Tests, E2E Tests
 ```
 
 A PR cannot merge if any of these are red. Branch-protection still

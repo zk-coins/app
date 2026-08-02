@@ -1,20 +1,20 @@
 FROM node:22-alpine AS base
 
-# Build from the monorepo parent of app/ and sdk/ so `file:../sdk` resolves:
-#   docker build -f app/Dockerfile -t zkcoins-app .
-# Deploy workflows check out both repos into that layout (see deploy-*.yaml).
+# Standalone app image. `@zkcoins/sdk` is resolved as a git dependency
+# (package.json → git+https://github.com/zk-coins/sdk.git#feat/v1-cross-parity;
+# flip to the published `@zkcoins/sdk@^0.4.0` once that release ships). No
+# sibling sdk/ checkout is required — `npm ci` fetches and `prepare` builds dist/.
 
 FROM base AS deps
-WORKDIR /workspace/app
-COPY app/package.json app/package-lock.json ./
-COPY sdk /workspace/sdk
+RUN apk add --no-cache git
+WORKDIR /app
+COPY package.json package-lock.json ./
 RUN npm ci
 
 FROM base AS builder
-WORKDIR /workspace/app
-COPY --from=deps /workspace/app/node_modules ./node_modules
-COPY --from=deps /workspace/sdk /workspace/sdk
-COPY app/ ./
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . ./
 
 # Build-time placeholders — replaced at runtime by entrypoint.sh
 ENV NEXT_PUBLIC_API_URL=NEXT_PUBLIC_API_URL_PLACEHOLDER
@@ -32,11 +32,11 @@ ENV NEXT_TELEMETRY_DISABLED=1
 RUN apk add --no-cache curl && \
     addgroup --system --gid 1001 nodejs && adduser --system --uid 1001 nextjs
 
-COPY --from=builder /workspace/app/public ./public
-COPY --from=builder --chown=nextjs:nodejs /workspace/app/.next/standalone ./
-COPY --from=builder --chown=nextjs:nodejs /workspace/app/.next/static ./.next/static
+COPY --from=builder /app/public ./public
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
 
-COPY app/entrypoint.sh /usr/bin/entrypoint.sh
+COPY entrypoint.sh /usr/bin/entrypoint.sh
 RUN chmod 755 /usr/bin/entrypoint.sh
 
 USER nextjs

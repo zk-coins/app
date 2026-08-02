@@ -6,7 +6,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   ApiError,
   JobFailedError,
+  V1ApiError,
   api,
+  isAccountNotFoundError,
   newIdempotencyKey,
   capabilitiesFromV1Features,
 } from '@/lib/api/client';
@@ -154,6 +156,47 @@ describe('name endpoints refuse closed surface gaps', () => {
       }),
     ).rejects.toMatchObject({ status: 501 });
     expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('isAccountNotFoundError', () => {
+  it('is true only for typed HTTP 404', () => {
+    expect(isAccountNotFoundError(new ApiError(404, 'not_found'))).toBe(true);
+    expect(isAccountNotFoundError(new V1ApiError(404, 'not_found', 'missing'))).toBe(true);
+    expect(isAccountNotFoundError(new ApiError(500, 'boom'))).toBe(false);
+    expect(isAccountNotFoundError(new ApiError(401, 'unauthorized'))).toBe(false);
+    expect(isAccountNotFoundError(new Error('network'))).toBe(false);
+    expect(isAccountNotFoundError(new TypeError('fetch failed'))).toBe(false);
+  });
+});
+
+describe('api.createCoin account-state fail-loud', () => {
+  it('does not POST /v1/tx when account-state read fails non-404', async () => {
+    // openOwnershipPullSession → first fetch returns 500
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      text: () => Promise.resolve(JSON.stringify({ error: 'internal_error', message: 'down' })),
+      headers: new Headers(),
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+        name: 'Test',
+        decimals: 0,
+        amount: 100,
+        mnemonic:
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+        nkCommit: '00'.repeat(32),
+      }),
+    ).rejects.toBeTruthy();
+
+    // No successful transition submit — at most the failed pull, never a mint body.
+    const postTx = mockFetch.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && String(c[0]).includes('/v1/tx'),
+    );
+    expect(postTx).toHaveLength(0);
   });
 });
 

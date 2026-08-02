@@ -46,8 +46,19 @@ function StepHeader({ onBack }: { onBack?: () => void }) {
 
 type Step = 'welcome' | 'seed' | 'passkey' | 'seed-import' | 'passkey-restore';
 
-export function Onboarding() {
-  const [step, setStep] = useState<Step>('welcome');
+export interface OnboardingProps {
+  /**
+   * Legacy / incompatible wallet detected: guide the user to re-import
+   * their seed. Hides "Create wallet" and keeps the legacy blob until
+   * a successful re-import or an explicit discard.
+   */
+  reimportRequired?: boolean;
+  /** Confirmed discard of the incompatible legacy store. */
+  onDiscardLegacy?: () => void | Promise<void>;
+}
+
+export function Onboarding({ reimportRequired = false, onDiscardLegacy }: OnboardingProps = {}) {
+  const [step, setStep] = useState<Step>(reimportRequired ? 'welcome' : 'welcome');
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-bg">
@@ -63,23 +74,31 @@ export function Onboarding() {
       >
         {step === 'welcome' && (
           <Welcome
-            onNext={() => setStep(FEATURES.PASSKEY ? 'passkey' : 'seed')}
+            reimportRequired={reimportRequired}
+            onNext={
+              reimportRequired
+                ? () => setStep('seed-import')
+                : () => setStep(FEATURES.PASSKEY ? 'passkey' : 'seed')
+            }
             onRestore={() => setStep('seed-import')}
+            onDiscardLegacy={onDiscardLegacy}
           />
         )}
-        {FEATURES.PASSKEY && step === 'passkey' && (
+        {FEATURES.PASSKEY && step === 'passkey' && !reimportRequired && (
           <PasskeyFlow onBack={() => setStep('welcome')} onUseSeed={() => setStep('seed')} />
         )}
-        {step === 'seed' && (
+        {step === 'seed' && !reimportRequired && (
           <SeedFlow onBack={() => setStep(FEATURES.PASSKEY ? 'passkey' : 'welcome')} />
         )}
         {step === 'seed-import' && (
           <SeedImportFlow
             onBack={() => setStep('welcome')}
-            onPasskeyRestore={FEATURES.PASSKEY ? () => setStep('passkey-restore') : undefined}
+            onPasskeyRestore={
+              FEATURES.PASSKEY && !reimportRequired ? () => setStep('passkey-restore') : undefined
+            }
           />
         )}
-        {FEATURES.PASSKEY && step === 'passkey-restore' && (
+        {FEATURES.PASSKEY && step === 'passkey-restore' && !reimportRequired && (
           <PasskeyRestoreFlow onBack={() => setStep('seed-import')} />
         )}
       </div>
@@ -87,7 +106,17 @@ export function Onboarding() {
   );
 }
 
-function Welcome({ onNext, onRestore }: { onNext: () => void; onRestore: () => void }) {
+function Welcome({
+  onNext,
+  onRestore,
+  reimportRequired = false,
+  onDiscardLegacy,
+}: {
+  onNext: () => void;
+  onRestore: () => void;
+  reimportRequired?: boolean;
+  onDiscardLegacy?: () => void | Promise<void>;
+}) {
   return (
     <div className="relative -mx-6 -my-12 min-h-screen overflow-hidden lg:-mx-8 lg:-my-14">
       {/* Hero glow */}
@@ -134,48 +163,88 @@ function Welcome({ onNext, onRestore }: { onNext: () => void; onRestore: () => v
           data-testid="welcome-heading"
           className="flex items-center gap-3 text-[26px] font-semibold tracking-tight text-ink"
         >
-          Welcome to zkCoins
+          {reimportRequired ? 'Re-import your wallet' : 'Welcome to zkCoins'}
           <PixelIcon name="ghost" size={26} color="#f7931a" />
         </h1>
 
-        <ul className="mt-8 space-y-5">
-          <Benefit
-            icon={Lock}
-            title="Truly private by default"
-            description="Amounts, sender, receiver, and the transaction graph are hidden. Only a 64-byte nullifier hits the chain — a meaningless blob to anyone but you."
-          />
-          <Benefit
-            icon={Zap}
-            title="Just Bitcoin, not a new blockchain"
-            description="Shielded CSV uses Client-Side Validation + ZK proofs on Bitcoin as it exists today. No soft fork, no new chain, no sidechain to bridge into."
-          />
-          <Benefit
-            icon={Key}
-            title="You hold the keys"
-            description="Self-custodial by construction. Keys are generated locally and encrypted with AES-256-GCM in IndexedDB. They never leave your device."
-          />
-        </ul>
+        {reimportRequired ? (
+          <div
+            data-testid="seed-reimport-required"
+            className="mt-6 rounded-md border border-line2 bg-surface p-4 text-[13px] leading-relaxed text-ink2"
+            role="status"
+          >
+            <p className="font-semibold text-ink">Incompatible wallet data on this device</p>
+            <p className="mt-1">
+              A previous wallet store is still present but cannot be opened by this build. Re-import
+              your 12-word seed phrase to continue. The old data is kept until you re-import or
+              explicitly discard it.
+            </p>
+          </div>
+        ) : (
+          <ul className="mt-8 space-y-5">
+            <Benefit
+              icon={Lock}
+              title="Truly private by default"
+              description="Amounts, sender, receiver, and the transaction graph are hidden. Only a 64-byte nullifier hits the chain — a meaningless blob to anyone but you."
+            />
+            <Benefit
+              icon={Zap}
+              title="Just Bitcoin, not a new blockchain"
+              description="Shielded CSV uses Client-Side Validation + ZK proofs on Bitcoin as it exists today. No soft fork, no new chain, no sidechain to bridge into."
+            />
+            <Benefit
+              icon={Key}
+              title="You hold the keys"
+              description="Self-custodial by construction. Keys are generated locally and encrypted with AES-256-GCM in IndexedDB. They never leave your device."
+            />
+          </ul>
+        )}
 
         <div className="mt-10">
-          <button
-            data-testid="onboarding-create-btn"
-            onClick={onNext}
-            className="flex w-full items-center justify-center gap-2 rounded-md bg-bitcoin py-4 text-[13px] font-semibold tracking-wider text-bg transition-colors hover:bg-bitcoin-hover"
-          >
-            <PixelIcon name="plus" size={12} />
-            CREATE WALLET
-          </button>
+          {reimportRequired ? (
+            <button
+              data-testid="onboarding-restore-btn"
+              onClick={onRestore}
+              className="flex w-full items-center justify-center gap-2 rounded-md bg-bitcoin py-4 text-[13px] font-semibold tracking-wider text-bg transition-colors hover:bg-bitcoin-hover"
+            >
+              <PixelIcon name="key" size={12} />
+              RE-IMPORT SEED PHRASE
+            </button>
+          ) : (
+            <button
+              data-testid="onboarding-create-btn"
+              onClick={onNext}
+              className="flex w-full items-center justify-center gap-2 rounded-md bg-bitcoin py-4 text-[13px] font-semibold tracking-wider text-bg transition-colors hover:bg-bitcoin-hover"
+            >
+              <PixelIcon name="plus" size={12} />
+              CREATE WALLET
+            </button>
+          )}
         </div>
 
-        <div className="mt-6 text-center">
-          <button
-            data-testid="onboarding-restore-btn"
-            onClick={onRestore}
-            className="text-[12px] font-medium text-ink2 transition-colors hover:text-bitcoin"
-          >
-            Restore existing wallet
-          </button>
-        </div>
+        {reimportRequired ? (
+          <div className="mt-6 text-center">
+            <button
+              data-testid="onboarding-discard-legacy-btn"
+              onClick={() => {
+                void onDiscardLegacy?.();
+              }}
+              className="text-[12px] font-medium text-ink2 transition-colors hover:text-bad"
+            >
+              Discard old wallet data
+            </button>
+          </div>
+        ) : (
+          <div className="mt-6 text-center">
+            <button
+              data-testid="onboarding-restore-btn"
+              onClick={onRestore}
+              className="text-[12px] font-medium text-ink2 transition-colors hover:text-bitcoin"
+            >
+              Restore existing wallet
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );

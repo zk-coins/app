@@ -23,7 +23,7 @@
   },
   "dependencies": {
     "@scure/bip32": "^2.2.0",
-    "@zkcoins/sdk": "file:../sdk",
+    "@zkcoins/sdk": "github:zk-coins/sdk#feat/v1-cross-parity",
     "jsqr": "^1.4.0",
     "lucide-react": "^0.460.0",
     "next": "^15.5.18",

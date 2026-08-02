@@ -77,6 +77,7 @@ beforeEach(() => {
     hasStoredWallet: false,
     storedAddress: null,
     storedAuthMethod: null,
+    needsSeedReimport: false,
     error: null,
   });
   useAuthStore.setState({ authMethod: null, credentialId: null, isHydrated: false });
@@ -99,6 +100,22 @@ describe('Home — onboarding branch (no stored wallet, no account)', () => {
     expect(await screen.findByTestId('welcome-heading')).toBeInTheDocument();
     // Neither of the other two top-level surfaces should render.
     expect(screen.queryByTestId('unlock-heading')).not.toBeInTheDocument();
+  });
+});
+
+describe('Home — legacy reimport branch', () => {
+  it('keeps legacy data and shows reimport guidance instead of plain create', async () => {
+    localStorage.setItem(
+      'zkcoins_wallet',
+      JSON.stringify({ account: { address: ALICE.address, xpriv: 'xprv…', numPubkeys: 0 } }),
+    );
+
+    render(<Home />);
+    expect(await screen.findByTestId('seed-reimport-required')).toBeInTheDocument();
+    expect(screen.queryByTestId('onboarding-create-btn')).not.toBeInTheDocument();
+    expect(screen.getByTestId('onboarding-restore-btn')).toBeInTheDocument();
+    // Legacy blob must still be present until re-import or discard.
+    expect(localStorage.getItem('zkcoins_wallet')).not.toBeNull();
   });
 });
 

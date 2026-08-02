@@ -28,7 +28,7 @@ test.describe('Network info + AppShell', () => {
     // than the pre-tick empty-banner state (which is visually identical
     // to Bob's empty wallet).
     await expect(page.getByTestId('nav-wallet')).toBeVisible();
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
     await snap(page, '09-shell-bottomnav-wallet-active', { fullPage: true });
   });
 

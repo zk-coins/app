@@ -1,5 +1,5 @@
 /**
- * `useHistory` — pull-session history hook.
+ * `useHistory` — fail-loud pull-session history hook.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -38,6 +38,8 @@ describe('useHistory', () => {
     const { result } = renderHook(() => useHistory(ACCOUNT));
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(result.current.items).toHaveLength(1);
+    expect(result.current.available).toBe(true);
+    expect(result.current.error).toBeNull();
     expect(spy).toHaveBeenCalledWith(ACCOUNT);
   });
 
@@ -45,14 +47,52 @@ describe('useHistory', () => {
     const { result } = renderHook(() => useHistory(undefined));
     expect(result.current.loaded).toBe(false);
     expect(result.current.items).toEqual([]);
+    expect(result.current.available).toBe(false);
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('marks loaded on error without clearing later successes', async () => {
+  it('first error sets error and does not claim available empty history', async () => {
     spy.mockRejectedValueOnce(new Error('network'));
     const { result } = renderHook(() => useHistory(ACCOUNT));
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(result.current.items).toEqual([]);
+    expect(result.current.available).toBe(false);
+    expect(result.current.error).toMatch(/network/);
+  });
+
+  it('successful empty response is available with no error', async () => {
+    spy.mockResolvedValue(empty);
+    const { result } = renderHook(() => useHistory(ACCOUNT));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.items).toEqual([]);
+    expect(result.current.available).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('keeps last good list as stale when a later poll fails', async () => {
+    spy
+      .mockResolvedValueOnce({
+        items: [{ id: 'r1', kind: 'mint' }],
+        total: 1,
+        limit: 50,
+        offset: 0,
+      })
+      .mockRejectedValue(new Error('down'));
+
+    vi.useFakeTimers();
+    const { result } = renderHook(() => useHistory(ACCOUNT));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.items).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.stale).toBe(true);
+    expect(result.current.available).toBe(false);
+    expect(result.current.error).toMatch(/down/);
   });
 
   it('re-fetches when the account address changes', async () => {

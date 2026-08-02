@@ -38,7 +38,7 @@ const VALUE_TESTIDS = [
 async function openFirstTxDetail(page: Page): Promise<void> {
   await aliceLogin(page);
   // Funded wallet → the empty banner is absent and the history list renders.
-  await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
   await expect(page.getByTestId('tx-row').first()).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('tx-row').first().click();
   await expect(page.getByTestId('tx-detail-body')).toBeVisible({ timeout: 30_000 });

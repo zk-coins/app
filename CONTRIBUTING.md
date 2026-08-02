@@ -27,12 +27,11 @@ npm run dev    # http://localhost:3090
 
 ## Prerequisites
 
-| Tool    | Version                | Purpose                                              |
-| ------- | ---------------------- | ---------------------------------------------------- |
-| Node.js | 20+                    | Runtime                                              |
-| npm     | 10+                    | Package manager                                      |
-| Rust    | 1.81+                  | WASM crypto module (optional, JS fallback available) |
-| LLVM    | 21+ with wasm32 target | secp256k1 C compilation for WASM                     |
+| Tool    | Version | Purpose                             |
+| ------- | ------- | ----------------------------------- |
+| Node.js | 20+     | Runtime                             |
+| npm     | 10+     | Package manager                     |
+| Node    | ≥22     | App + `@zkcoins/sdk` pure-TS crypto |
 
 ## Project Structure
 
@@ -61,11 +60,9 @@ app/
 │       ├── network.ts     # API URL, network name
 │       └── wallet.ts      # Account, encrypted persistence
 ├── packages/
-│   └── zkcoins-wasm/      # TypeScript wrapper for Rust WASM module
 │       └── src/
 │           └── index.ts   # WASM API surface + JS fallback
 ├── rust/
-│   └── client/            # Rust WASM crate (BIP32, Schnorr, secp256k1)
 ├── public/                # Static assets, PWA manifest, service worker
 ├── Dockerfile             # Multi-stage Next.js build
 ├── entrypoint.sh          # Runtime env var injection (DEV/PRD)
@@ -166,7 +163,7 @@ import { useWalletStore } from '@/stores/wallet';
 import { api } from '@/lib/api/client';
 
 // 4. WASM
-import { initWasm } from '@zkcoins/wasm';
+import {} from /* wallet helpers */ '@zkcoins/sdk';
 ```
 
 ### Component Pattern
@@ -236,7 +233,7 @@ Never call `fetch()` directly — always use the `api` object.
 The WASM module provides crypto operations (BIP32, Schnorr). It loads asynchronously with a JS fallback:
 
 ```typescript
-import { initWasm } from '@zkcoins/wasm';
+import {} from /* wallet helpers */ '@zkcoins/sdk';
 
 const wasm = await initWasm();
 const account = await wasm.createAccount();
@@ -250,12 +247,7 @@ const account = await wasm.createAccount();
 Only needed if you change `rust/client/`:
 
 ```bash
-# Requires Rust + LLVM with wasm32 target
-cd rust/client
-CC="/opt/homebrew/opt/llvm/bin/clang" AR="/opt/homebrew/opt/llvm/bin/llvm-ar" \
-  cargo build --target wasm32-unknown-unknown --release
-wasm-bindgen --out-dir ../../packages/zkcoins-wasm/src/pkg --target web \
-  ../target/wasm32-unknown-unknown/release/client.wasm
+# Crypto ships via `@zkcoins/sdk` (pure TypeScript). No WASM build step.
 ```
 
 ## Docker
