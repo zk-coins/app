@@ -54,7 +54,7 @@ test.describe('Create wallet — seed phrase', () => {
       // Hold the WASM fetch so the `generating` stage is still on
       // screen when the snapshot is taken, on any runner speed. The
       // previous 800 ms budget raced `snap()`'s own pre-capture work
-      // (fonts.ready, the /api/info round-trip that builds the default
+      // (fonts.ready, the /v1/info round-trip that builds the default
       // masks, the stabilizer CSS): on a fast locally-served standalone
       // build the WASM landed first, the seed grid rendered, and the
       // (masked) grid no longer matched the text-only baseline. The
@@ -161,7 +161,7 @@ test.describe('Create wallet — seed phrase', () => {
   // `create` callback runs `wasm.createAccountFromMnemonic` and
   // `saveWithPassword` (IDB encrypt) in series, both finish in <50 ms,
   // and `setAuth` swaps `Home` to render `WalletScreen` before the
-  // first `/api/balance` round-trip — there is no stable window to
+  // first `/v1/balance` round-trip — there is no stable window to
   // snapshot the "Creating…" disabled-button state. The transition is
   // covered functionally by `wallet-after-create`. Plan totals
   // updated in e2e/README.md § 8.13.
@@ -175,12 +175,12 @@ test.describe('Create wallet — seed phrase', () => {
     await page.getByTestId('seed-password-confirm-input').fill(PASSWORD);
     await page.getByTestId('seed-create-btn').click();
     // Wait for the wallet screen — the chip is the most reliable marker.
-    // Suffix is server-reported via /api/info.username_domain (per-stage).
+    // Suffix is server-reported via /v1/info.username_domain (per-stage).
     const chip = zkAddressRegex(await getUsernameDomain());
     await expect(page.locator(`text=${chip}`).first()).toBeVisible({
       timeout: 30_000,
     });
-    // Block on the first /api/balance tick so the banner check below is
+    // Block on the first /v1/balance tick so the banner check below is
     // deterministic. The banner renders for `balance === 0` and remains
     // absent while `balance === null` (post-mount loading) — without an
     // explicit wait the assertion races the polling tick.

@@ -42,7 +42,7 @@ export async function clearWalletState(page: Page): Promise<void> {
   });
   // Wait only until the document hydrates. We don't wait for
   // `networkidle` (500 ms of zero traffic) because the boot path now
-  // fires a fire-and-forget `/api/info` capabilities fetch and the
+  // fires a fire-and-forget `/v1/info` capabilities fetch and the
   // service worker (public/sw.js) does stale-while-revalidate for
   // every cached asset — on CI those background fetches can keep the
   // 500 ms window from ever closing, deadlocking globalSetup. The
@@ -58,7 +58,7 @@ export async function clearWalletState(page: Page): Promise<void> {
  *
  * Returns the 12 BIP-39 words and the full 64-hex address read off the
  * copy-address button's `title` attribute (the visible chip is truncated
- * to `{8hex}@<username_domain>` — the domain is read from `/api/info` so
+ * to `{8hex}@<username_domain>` — the domain is read from `/v1/info` so
  * the helper matches whichever stage the suite is pointed at).
  *
  * Assumes a blank-slate state (no wallet in IDB). Caller must `clearWalletState`
@@ -223,7 +223,7 @@ export async function waitForNetworkInfo(page: Page, timeout = 30_000): Promise<
  * Capability-adaptive, matching the dual-mode home screen:
  *
  *   - Single-asset surface (`multi_asset:false`): the USD/BTC hero carries
- *     `data-loading="true"` until the first `/api/balance` tick lands,
+ *     `data-loading="true"` until the first `/v1/balance` tick lands,
  *     regardless of value (funded or zero). Absence of that marker is the
  *     settled signal — `asset-list` / `wallet-empty-banner` are NOT rendered
  *     for a funded single-asset wallet, so they can't gate this leg.

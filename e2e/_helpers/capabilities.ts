@@ -8,7 +8,7 @@
  * false), so the multi-asset specs must SKIP there and only run when pointed
  * at a true node (the local Docker harness, `scripts/e2e-local.sh`).
  *
- * `multiAssetEnabled()` reads `GET /api/info` from `E2E_API_URL` once per
+ * `multiAssetEnabled()` reads `GET /v1/info` from `E2E_API_URL` once per
  * worker (the result is cached) so a `test.skip(...)` guard can branch on the
  * node's real capability without a per-test round-trip.
  */

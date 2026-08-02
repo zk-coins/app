@@ -21,7 +21,6 @@ vi.mock('next/navigation', () => ({
 
 const ALICE = {
   address: 'a'.repeat(64),
-  numPubkeys: 0,
   mnemonic:
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   nkCommit: '00'.repeat(32),
@@ -46,7 +45,6 @@ beforeEach(() => {
   useNetworkStore.setState({ usernameDomain: 'dev.zkcoins.app' });
   useWalletStore.setState({
     account: ALICE,
-    balance: 10_000,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
@@ -193,7 +191,6 @@ describe('TransactionDetailPage — explorer link', () => {
     net.setState({ usernameDomain: 'dev.zkcoins.app' });
     store.setState({
       account: ALICE,
-      balance: 10_000,
       isLoading: false,
       isLocked: false,
       hasStoredWallet: false,

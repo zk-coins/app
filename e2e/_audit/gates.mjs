@@ -20,7 +20,7 @@
  *
  * NOT included (deliberately):
  *   - Runtime *server* capabilities (`username_claim`, …). Those are
- *     reported by `/api/info`, not build flags, and are exempted
+ *     reported by `/v1/info`, not build flags, and are exempted
  *     per-testid in `coverage.mjs` (ground (b)); they gate no route.
  *   - Build flags that exist but gate neither a route nor an audited
  *     element today (`AUTO_LOCK`, `ADDRESS_ROTATION`, `TOR_ROUTING`).

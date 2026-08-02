@@ -11,11 +11,11 @@
  *   - funded   — Alice holds ≥1 self-minted asset → `asset-list` with
  *                rows (desktop + mobile). Per-asset balance/id vary per
  *                run and are masked.
- *   - loading  — the first `/api/balance/:address` tick is held open;
+ *   - loading  — the first `/v1/balance/:address` tick is held open;
  *                the portfolio section renders neither the list nor the
  *                empty banner yet (the rest of the chrome is stable).
  *
- * The error path (`/api/balance` 5xx) is intentionally NOT given its own
+ * The error path (`/v1/balance` 5xx) is intentionally NOT given its own
  * golden: `usePortfolio` swallows a failed fetch, sets `loaded=true` with
  * an empty list, and the UI renders the SAME empty banner as the genuine
  * empty state — a separate baseline would be a pixel-identical duplicate.
@@ -83,7 +83,7 @@ test.describe('Portfolio', () => {
     // neither the list nor the empty banner — the loading frame.
     await aliceLogin(page);
     await expect(page.getByTestId('asset-list')).toBeVisible({ timeout: 30_000 });
-    await page.context().route(/\/api\/balance\/[^/?]+$/, async (route) => {
+    await page.context().route(/\/v1\/balance\/[^/?]+$/, async (route) => {
       await new Promise((r) => setTimeout(r, 20_000));
       await route.abort();
     });

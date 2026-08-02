@@ -5,7 +5,7 @@
  * error branch. 14 tests, 13 linux baselines, 1 no-shot.
  *
  * Alice (funded, 100 000 sats) sends 1 000 sats to Bob. The send
- * goes through real `/api/send` + `/api/commit` against DEV.
+ * goes through real `/v1/send` + `/v1/commit` against DEV.
  *
  * DEV mirrors PRD: username resolve is always-on and always renders the
  * `@user` placeholder; `FEATURES.APPS_DIRECTORY` is off so the DFX
@@ -39,7 +39,7 @@ test.describe('Send Bitcoin', () => {
     await setViewport(page, 'mobile');
     await aliceGoToSend(page);
     // Available balance is loaded (data-loading flips false once the
-    // /api/balance tick lands). Same source as the wallet-screen value;
+    // /v1/balance tick lands). Same source as the wallet-screen value;
     // this is the only spec that asserts the send-page rendering of it.
     await expect(page.getByTestId('send-available')).not.toHaveAttribute('data-loading', 'true', {
       timeout: 10_000,
@@ -169,14 +169,14 @@ test.describe('Send Bitcoin', () => {
   // covered by `send-success`. § 8.13 totals updated.
 
   test('send-success', async ({ page }) => {
-    // The 2-phase Send pipeline does: signed `/api/send` (ZK proof
+    // The 2-phase Send pipeline does: signed `/v1/send` (ZK proof
     // generation server-side, ~10-30 s on a warm DEV) → pre-send
-    // `/api/balance` hydration → commitment build → `/api/commit`
+    // `/v1/balance` hydration → commitment build → `/v1/commit`
     // with up to three retries at 2 s/4 s backoff → success heading.
     // A cold DEV after a fresh deploy can push the proof to 60-90 s;
     // combined with one commit retry the wait for the success
     // heading lands close to 100 s. The post-PR-#127 send-flow
-    // additionally calls `/api/balance` immediately before signing
+    // additionally calls `/v1/balance` immediately before signing
     // to hydrate `num_sends` from the server (the canonical BIP-32
     // child-index source per `CONTRIBUTING.md::Architecture
     // Principle — Thin Client`), and the post-#129/#132 server-side
@@ -245,7 +245,7 @@ test.describe('Send Bitcoin', () => {
   // Dropped: `recovering-banner` — the localStorage in-flight-commit
   // crash-recovery path was removed with the Jobs-API migration. The
   // pre-migration recovery replayed a bare commit payload against the
-  // (now removed) synchronous `/api/commit`; under the async Jobs API a
+  // (now removed) synchronous `/v1/commit`; under the async Jobs API a
   // commit is keyed by a live `awaiting_signature` job id that cannot be
   // reconstructed from a reload, so the feature and its banner were
   // dropped rather than half-rebuilt. § 8.13 totals updated.

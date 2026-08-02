@@ -7,6 +7,23 @@ import {
   clearLegacyStorage,
 } from '@/lib/crypto/storage';
 
+/**
+ * On-disk / in-memory wallet payload version.
+ * v1 (unversioned): legacy `{ account: { xpriv, address, numPubkeys, … } }`
+ * v2: `{ version: 2, account: { address, mnemonic, nkCommit, username? } }`
+ */
+export const WALLET_PAYLOAD_VERSION = 2 as const;
+
+export class IncompatibleWalletError extends Error {
+  constructor(
+    message = 'Stored wallet format is incompatible with this build. Re-import your 12-word seed phrase.',
+  ) {
+    super(message);
+    this.name = 'IncompatibleWalletError';
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
 export interface Account {
   /** Bech32m `zk1…` subject (never shown as primary identity when a name is set). */
   address: string;
@@ -14,33 +31,105 @@ export interface Account {
   mnemonic: string;
   /** 32-byte nk_commit as lowercase hex (bound into the address). */
   nkCommit: string;
-  /** Local mirror of send_counter; server head is the source of truth. */
-  numPubkeys: number;
   /** Display name (normalized email-style) when provisioned. */
   username?: string;
 }
 
+interface WalletPayloadV2 {
+  version: typeof WALLET_PAYLOAD_VERSION;
+  account: {
+    address: string;
+    mnemonic: string;
+    nkCommit: string;
+    username?: string;
+  };
+}
+
+/**
+ * Parse and validate decrypted wallet JSON. Never loads unversioned /
+ * xpriv-era blobs as a live account — that would treat an incompatible
+ * store as a new identity.
+ */
+export function parseWalletPayload(raw: string): Account {
+  let data: unknown;
+  try {
+    data = JSON.parse(raw);
+  } catch {
+    throw new IncompatibleWalletError('Stored wallet payload is not valid JSON.');
+  }
+  if (typeof data !== 'object' || data === null) {
+    throw new IncompatibleWalletError();
+  }
+  const obj = data as Record<string, unknown>;
+
+  // Unversioned or pre-v2 (xpriv era): refuse — require explicit re-import.
+  if (obj.version === undefined || obj.version !== WALLET_PAYLOAD_VERSION) {
+    throw new IncompatibleWalletError();
+  }
+
+  const account = obj.account;
+  if (typeof account !== 'object' || account === null) {
+    throw new IncompatibleWalletError();
+  }
+  const acc = account as Record<string, unknown>;
+
+  // Legacy field still present without mnemonic → incompatible store.
+  if (typeof acc.xpriv === 'string' && typeof acc.mnemonic !== 'string') {
+    throw new IncompatibleWalletError();
+  }
+
+  if (
+    typeof acc.address !== 'string' ||
+    acc.address.length === 0 ||
+    typeof acc.mnemonic !== 'string' ||
+    acc.mnemonic.trim().length === 0 ||
+    typeof acc.nkCommit !== 'string' ||
+    !/^[0-9a-fA-F]{64}$/.test(acc.nkCommit)
+  ) {
+    throw new IncompatibleWalletError(
+      'Stored wallet is missing mnemonic/nkCommit/address. Re-import your 12-word seed phrase.',
+    );
+  }
+
+  return {
+    address: acc.address,
+    mnemonic: acc.mnemonic.trim(),
+    nkCommit: acc.nkCommit.toLowerCase(),
+    ...(typeof acc.username === 'string' && acc.username.length > 0
+      ? { username: acc.username }
+      : {}),
+  };
+}
+
+function serializeWalletPayload(account: Account): string {
+  const payload: WalletPayloadV2 = {
+    version: WALLET_PAYLOAD_VERSION,
+    account: {
+      address: account.address,
+      mnemonic: account.mnemonic,
+      nkCommit: account.nkCommit,
+      ...(account.username !== undefined ? { username: account.username } : {}),
+    },
+  };
+  return JSON.stringify(payload);
+}
+
 interface WalletState {
   account: Account | null;
-  // Server-state, never persisted. `null` = not fetched yet (post-unlock /
-  // post-restore, before the first balance tick). `0` = empty wallet.
-  balance: number | null;
   isLoading: boolean;
   isLocked: boolean;
   hasStoredWallet: boolean;
   storedAddress: string | null;
   storedAuthMethod: 'passkey' | 'seed' | null;
   error: string | null;
+  /**
+   * Set when unlock fails because the on-disk schema is incompatible
+   * (xpriv → mnemonic migration). UI must force re-import, not invent state.
+   */
+  needsSeedReimport: boolean;
 
   setAccount: (account: Account | null) => void;
-  setBalance: (balance: number) => void;
   setUsername: (username: string) => void;
-  /**
-   * Sync the local `numPubkeys` counter from the server's send_counter.
-   * No-op if no account is loaded, or if the local counter already matches.
-   */
-  syncNumPubkeys: (numSends: number) => void;
-  incrementPubkeys: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 
@@ -51,21 +140,20 @@ interface WalletState {
   lock: () => void;
   checkForStoredWallet: () => Promise<void>;
   deleteWallet: () => Promise<void>;
+  clearNeedsSeedReimport: () => void;
 }
 
 export const useWalletStore = create<WalletState>((set, get) => ({
   account: null,
-  balance: null,
   isLoading: false,
   isLocked: false,
   hasStoredWallet: false,
   storedAddress: null,
   storedAuthMethod: null,
   error: null,
+  needsSeedReimport: false,
 
   setAccount: (account) => set({ account }),
-
-  setBalance: (balance) => set({ balance }),
 
   setUsername: (username) => {
     const { account } = get();
@@ -74,28 +162,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     }
   },
 
-  syncNumPubkeys: (numSends: number) => {
-    const { account } = get();
-    if (!account) return;
-    if (account.numPubkeys === numSends) return;
-    set({ account: { ...account, numPubkeys: numSends } });
-  },
-
-  incrementPubkeys: () => {
-    const { account } = get();
-    if (account) {
-      set({ account: { ...account, numPubkeys: account.numPubkeys + 1 } });
-    }
-  },
-
   setLoading: (isLoading) => set({ isLoading }),
   setError: (error) => set({ error }),
+  clearNeedsSeedReimport: () => set({ needsSeedReimport: false }),
 
   saveWithPassword: async (password: string) => {
     const { account } = get();
     if (!account) return;
 
-    const walletData = JSON.stringify({ account });
+    const walletData = serializeWalletPayload(account);
     const { key, salt } = await deriveKeyFromPassword(password);
     const encrypted = await encrypt(walletData, key, salt);
 
@@ -104,6 +179,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       authMethod: 'seed',
       address: account.address,
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
 
     clearLegacyStorage();
@@ -113,7 +189,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const { account } = get();
     if (!account) return;
 
-    const walletData = JSON.stringify({ account });
+    const walletData = serializeWalletPayload(account);
     const key = await deriveKeyFromPrf(prfOutput);
     const encrypted = await encrypt(walletData, key);
 
@@ -122,6 +198,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       authMethod: 'passkey',
       address: account.address,
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
 
     clearLegacyStorage();
@@ -146,13 +223,26 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     const { key } = await deriveKeyFromPassword(password, salt);
     const decrypted = await decrypt(stored.encrypted, key);
-    const data = JSON.parse(decrypted);
 
-    set({
-      account: data.account,
-      balance: null,
-      isLocked: false,
-    });
+    try {
+      const account = parseWalletPayload(decrypted);
+      set({
+        account,
+        isLocked: false,
+        needsSeedReimport: false,
+        error: null,
+      });
+    } catch (err) {
+      if (err instanceof IncompatibleWalletError) {
+        set({
+          account: null,
+          isLocked: true,
+          needsSeedReimport: true,
+          error: err.message,
+        });
+      }
+      throw err;
+    }
   },
 
   unlockWithPrf: async (prfOutput: Uint8Array) => {
@@ -161,20 +251,32 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     const key = await deriveKeyFromPrf(prfOutput);
     const decrypted = await decrypt(stored.encrypted, key);
-    const data = JSON.parse(decrypted);
 
-    set({
-      account: data.account,
-      balance: null,
-      isLocked: false,
-    });
+    try {
+      const account = parseWalletPayload(decrypted);
+      set({
+        account,
+        isLocked: false,
+        needsSeedReimport: false,
+        error: null,
+      });
+    } catch (err) {
+      if (err instanceof IncompatibleWalletError) {
+        set({
+          account: null,
+          isLocked: true,
+          needsSeedReimport: true,
+          error: err.message,
+        });
+      }
+      throw err;
+    }
   },
 
   lock: () => {
     const { account } = get();
     set({
       account: null,
-      balance: null,
       isLocked: true,
       storedAddress: account?.address ?? get().storedAddress,
     });
@@ -218,15 +320,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       try {
         const legacy = localStorage.getItem('zkcoins_wallet');
         if (legacy) {
-          const data = JSON.parse(legacy);
-          if (data.account) {
-            set({
-              account: data.account,
-              balance: null,
-              isLocked: false,
-              hasStoredWallet: false,
-            });
-          }
+          // Never auto-promote legacy localStorage blobs: they may be
+          // unversioned xpriv-era payloads. Clear and force onboarding.
+          clearLegacyStorage();
         }
       } catch {
         // ignore
@@ -239,11 +335,12 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     clearLegacyStorage();
     set({
       account: null,
-      balance: null,
       isLocked: false,
       hasStoredWallet: false,
       storedAddress: null,
       storedAuthMethod: null,
+      needsSeedReimport: false,
+      error: null,
     });
   },
 }));

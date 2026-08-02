@@ -10,6 +10,14 @@ import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
 import { toZkAddress } from '@/lib/format';
 
+/**
+ * Receive surface.
+ *
+ * Preferred path: name (when provisioned). Name claim / NIP-05 setup is
+ * not wired on the closed /v1 surface yet, so without a name we offer the
+ * Bech32m subject as a technical receive payload and label it honestly —
+ * never pretend a name exists.
+ */
 export default function ReceivePage() {
   const router = useRouter();
   const { account } = useWalletStore();
@@ -25,12 +33,16 @@ export default function ReceivePage() {
     }
   }, [account, router]);
 
-  // Identity rule: receive QR encodes the name, never a raw zk1/hex key.
+  const hasName = Boolean(account?.username);
   const displayName = account?.username ? toZkAddress(account.username, usernameDomain) : '';
+  // Usable receive payload: name when set, otherwise the account subject.
+  const receivePayload = hasName ? displayName : (account?.address ?? '');
+  const receiveLabel = hasName ? 'Your name' : 'Your account address';
+  const copyLabel = hasName ? 'Copy name' : 'Copy address';
 
   const copy = useCallback(() => {
-    if (!account || !displayName) return;
-    navigator.clipboard.writeText(displayName).then(
+    if (!account || !receivePayload) return;
+    navigator.clipboard.writeText(receivePayload).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
@@ -39,7 +51,7 @@ export default function ReceivePage() {
         /* clipboard not available */
       },
     );
-  }, [account, displayName]);
+  }, [account, receivePayload]);
 
   if (!account) {
     return (
@@ -74,51 +86,62 @@ export default function ReceivePage() {
             data-testid="receive-heading"
             className="text-[26px] font-bold tracking-tight text-ink"
           >
-            Receive Bitcoin
+            Receive
           </h1>
           <p className="mt-1 text-[13px] text-ink2">
-            Share your name. Senders see only what they send to you — nothing else.
+            {hasName
+              ? 'Share your name. Senders see only what they send to you — nothing else.'
+              : 'Name setup is not available yet in this build. Share your account address to receive.'}
           </p>
         </div>
 
-        {/* QR Code — encodes the name only (mandate: names everywhere). */}
+        {!hasName && (
+          <div
+            data-testid="receive-name-unavailable"
+            className="rounded-md border border-line2 bg-surface p-3 text-[12px] leading-relaxed text-ink2"
+            role="status"
+          >
+            Name-based receive is not available yet — NIP-05 / name claim is not wired. Sharing the
+            Bech32m account address below is a technical fallback, not a finished identity UX.
+          </div>
+        )}
+
         <div className="flex justify-center">
           <div data-testid="qr-code" className="rounded-md border border-line2 bg-white p-4">
-            {displayName ? (
+            {receivePayload ? (
               <QRCodeSVG
-                value={displayName}
+                value={receivePayload}
                 size={208}
                 bgColor="#ffffff"
                 fgColor="#000000"
                 level="M"
-                title="Receive name QR code"
+                title={hasName ? 'Receive name QR code' : 'Receive address QR code'}
               />
             ) : (
               <p
                 className="w-[208px] p-4 text-center text-[12px] text-ink3"
-                data-testid="receive-name-required"
+                data-testid="receive-not-available"
               >
-                Set a name on the wallet screen before sharing a receive QR.
+                Receive is not available yet.
               </p>
             )}
           </div>
         </div>
 
-        {/* Name */}
         <div>
-          <label className="mb-1.5 block text-[12px] font-medium text-ink2">Your name</label>
-          <div className="rounded-md border border-line2 bg-surface px-4 py-3 mono text-center text-[14px] text-ink">
-            {displayName || '—'}
+          <label className="mb-1.5 block text-[12px] font-medium text-ink2">{receiveLabel}</label>
+          <div className="rounded-md border border-line2 bg-surface px-4 py-3 mono text-center text-[14px] text-ink break-all">
+            {receivePayload || '—'}
           </div>
           <button
             data-testid="receive-copy-btn"
             data-copied={copied || undefined}
             onClick={copy}
-            disabled={!displayName}
+            disabled={!receivePayload}
             className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-line2 py-3 text-[13px] font-semibold tracking-tight text-ink transition-colors hover:border-bitcoin hover:text-bitcoin disabled:opacity-50"
           >
             {copied ? <Check size={15} strokeWidth={2.5} /> : <Copy size={15} strokeWidth={2} />}
-            {copied ? 'Copied' : 'Copy name'}
+            {copied ? 'Copied' : copyLabel}
           </button>
         </div>
       </div>

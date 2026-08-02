@@ -27,8 +27,18 @@ jobs:
     name: Build and deploy to DEV
     runs-on: ubuntu-24.04-arm
     steps:
-      - name: Checkout
+      # Monorepo-shaped checkout: Dockerfile expects app/ + sdk/ siblings
+      # so `file:../sdk` resolves during `npm ci` / Next transpile.
+      - name: Checkout app
         uses: actions/checkout@v4
+        with:
+          path: app
+
+      - name: Checkout sdk
+        uses: actions/checkout@v4
+        with:
+          repository: zk-coins/sdk
+          path: sdk
 
       - name: Log in to Docker Hub
         uses: docker/login-action@v3
@@ -42,13 +52,13 @@ jobs:
       - name: Build and push Docker image
         # DEV mirrors PRD — no feature-flag build-args. Build-time
         # client gates (`NEXT_PUBLIC_ENABLE_*`) default to false and
-        # DCE strips them from the bundle. Server-gated UI
-        # (faucet, usernames) is driven by `/api/info.capabilities` at
-        # runtime, so the same image works against any DEV / PRD server
-        # without rebuilding. See issues #30 and #97.
+        # DCE strips them from the bundle. Server-gated UI is driven
+        # by GET /v1/info.features at runtime, so the same image works
+        # against any DEV / PRD server without rebuilding.
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: app/Dockerfile
           push: true
           tags: ${{ env.DOCKER_TAGS }}
           platforms: linux/arm64

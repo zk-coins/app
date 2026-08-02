@@ -52,7 +52,7 @@ describe('useFeatures (build-time + runtime merged)', () => {
     ]);
   });
 
-  it('MULTI_ASSET reflects the runtime capability from /api/info', () => {
+  it('MULTI_ASSET reflects the runtime capability from /v1/info', () => {
     const { result, rerender } = renderHook(() => useFeatures());
     expect(result.current.MULTI_ASSET).toBe(false);
 
@@ -69,7 +69,7 @@ describe('useFeatures (build-time + runtime merged)', () => {
     expect(result.current.MULTI_ASSET).toBe(true);
   });
 
-  it('USERNAME_CLAIM is false from the fail-closed default and reflects /api/info', () => {
+  it('USERNAME_CLAIM is false from the fail-closed default and reflects /v1/info', () => {
     const { result, rerender } = renderHook(() => useFeatures());
     expect(result.current.USERNAME_CLAIM).toBe(false);
 

@@ -3,7 +3,7 @@
  *
  * The neutral multi-asset model has no faucet: a wallet funds itself by
  * minting its own asset through this form (creator-signed two-phase mint —
- * `POST /api/jobs/mint` → poll `awaiting_signature` → commit → poll
+ * `POST /v1/jobs/mint` → poll `awaiting_signature` → commit → poll
  * `completed`, see `src/lib/api/client.ts::createCoin`). This spec
  * baselines every form state the user can reach:
  *
@@ -29,7 +29,7 @@ import { clearWalletState, createSeedWallet } from './_helpers/wallet';
 import { snap, setViewport } from './_helpers/screenshot';
 import { multiAssetEnabled } from './_helpers/capabilities';
 
-// The zkCoins PWA service worker can pass `/api/jobs/*` traffic before
+// The zkCoins PWA service worker can pass `/v1/jobs/*` traffic before
 // `page.route()` sees it — block it so the route mocks are the only
 // handlers for the admit route (same rationale as spec 13).
 test.use({ serviceWorkers: 'block' });
@@ -87,7 +87,7 @@ test.describe('Create coin', () => {
     // Delay the admit route so the button parks in its "Creating coin…"
     // disabled state long enough to capture (it never resolves within the
     // shot window — the snapshot is taken while the request is in flight).
-    await page.context().route(/\/api\/jobs\/mint$/, async (route) => {
+    await page.context().route(/\/v1\/jobs\/mint$/, async (route) => {
       await new Promise((r) => setTimeout(r, 5_000));
       await route.fulfill({
         status: 202,
@@ -109,7 +109,7 @@ test.describe('Create coin', () => {
     await setViewport(page, 'mobile');
     // Admit route rejects with a structured 4xx `{error}` — exactly the
     // envelope the node emits when it refuses a mint before enqueueing.
-    await page.context().route(/\/api\/jobs\/mint$/, (route) =>
+    await page.context().route(/\/v1\/jobs\/mint$/, (route) =>
       route.fulfill({
         status: 422,
         contentType: 'application/json',

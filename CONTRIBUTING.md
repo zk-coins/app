@@ -78,22 +78,24 @@ app/
 
 The App's only responsibilities are:
 
-1. **Private key custody** — generate / restore the BIP-32 master xpriv, store it encrypted on the device, sign messages locally with WASM crypto helpers. The xpriv never leaves the device.
-2. **UI rendering** — present what the node returns.
+1. **Private key custody** — generate / restore the BIP-39 mnemonic, store it encrypted on the device, sign messages locally via `@zkcoins/sdk`. The mnemonic never leaves the device unencrypted.
+2. **UI rendering** — present what the node returns. Where a read path is not yet wired (AccountState balances / coin inventory decode), show an honest **"not available in this build"** state — never invent `0` or an empty portfolio as wallet truth.
 
-Every other piece of state — balance, send-counter (`num_sends`), transaction history, server capabilities, account proofs, commitment lookups — is owned by [`zk-coins/node`](https://github.com/zk-coins/node). The App **MUST** fetch the authoritative value from the node before any operation that depends on it, and **MUST NOT** maintain a parallel local source of truth that can drift.
+Every other piece of state — balance, send-counter, transaction history, server capabilities, account proofs — is owned by [`zk-coins/node`](https://github.com/zk-coins/node). The App **MUST** fetch the authoritative value from the node before any operation that depends on it, and **MUST NOT** maintain a parallel local source of truth that can drift.
 
 ### Concrete rules
 
-- **Before any signed request** (`/api/send`, `/api/commit`, `/api/username/claim`): call `api.balance(address)` first and use the response's `num_sends` to drive BIP-32 derivation. Reading `account.numPubkeys` from the Zustand store is a bug — the store resets to 0 on every fresh tab, page reload, and Playwright retry; the node's counter is the only value that survives.
-- **The Zustand wallet store** holds the cryptographic identity (`xpriv`, `address`) and transient UI state only. It must **NOT** hold a copy of balance-truth, send-counter-truth, transaction-history-truth, or feature-capability-truth. Those come from `/api/balance` (balance, `num_sends`), `/api/info` (capabilities), and (when persistence is needed) the node's `request_log` / `account_history` tables surfaced through dedicated endpoints.
-- **New features go server-side first.** If a UI flow needs information the node doesn't already expose, the correct sequence is: add the endpoint to `zk-coins/node`, deploy it to DEV, then consume it in the App. Implementing the logic in the App and "syncing later" is what produced the [`prove_account_update failed`](https://github.com/zk-coins/app/pull/127) class of bugs.
-- **Validation, derivation, formatting** that affect protocol-level decisions belong in the WASM crypto layer (`rust/client`) or the node, not in React components. Components are render-only.
+- **Before any signed transition** (`POST /v1/tx`): hydrate `send_counter` from an ownership pull (`getAccountState`) immediately before signing. Never keep a local send-counter mirror in the Zustand store.
+- **Send without input coins is forbidden.** Until AccountState coin-inventory decode ships, refuse send (UI + `api.send`) rather than POST empty `input_coins`.
+- **The Zustand wallet store** holds the cryptographic identity (`mnemonic`, `nkCommit`, `address`) and transient UI state only. It must **NOT** hold balance, send-counter, history, or capability truth. Capabilities come from `GET /v1/info.features`; account head from ownership pull.
+- **Persistence is versioned.** Encrypted wallet payloads carry `version: 2` with `mnemonic` + `nkCommit`. Unversioned / xpriv-era blobs must force seed re-import — never load them as a live account.
+- **New features go server-side first.** If a UI flow needs information the node doesn't already expose, the correct sequence is: add the endpoint to `zk-coins/node`, deploy it to DEV, then consume it in the App.
+- **Validation, derivation, formatting** that affect protocol-level decisions belong in `@zkcoins/sdk` or the node, not in React components. Components are render-only.
 - **Drift between App and node:** the node always wins. The App syncs on the next operation.
 
 ### Why
 
-The May 2026 `07-send-success` E2E failure is the canonical incident. The App used a local `numPubkeys` counter from the Zustand store; that counter resets to 0 on every fresh page load. After a successful first send (server-side `num_sends → 1`), every Playwright retry / fresh-tab session signed the next send with `pubkey(0)` instead of `pubkey(1)`, violating the in-circuit account-update continuity constraint at [`program-plonky2/src/circuit/main.rs:615-623`](https://github.com/zk-coins/node/blob/develop/program-plonky2/src/circuit/main.rs). Three server-side fixes (`Account.num_sends` counter, server-owned `commitment_public_key`, canonical 64-byte SMT value) all shipped before anyone noticed that the App was still signing with the wrong index. The thin-client rule exists so this class of bug cannot recur: if every signed operation hydrates `num_sends` from `/api/balance` immediately before signing, the local store can never drift far enough to matter.
+The May 2026 `07-send-success` E2E failure is the canonical incident. The App used a local `numPubkeys` counter from the Zustand store; that counter resets to 0 on every fresh page load. After a successful first send (server-side `num_sends → 1`), every Playwright retry / fresh-tab session signed the next send with `pubkey(0)` instead of `pubkey(1)`, violating the in-circuit account-update continuity constraint at [`program-plonky2/src/circuit/main.rs:615-623`](https://github.com/zk-coins/node/blob/develop/program-plonky2/src/circuit/main.rs). Three server-side fixes (`Account.num_sends` counter, server-owned `commitment_public_key`, canonical 64-byte SMT value) all shipped before anyone noticed that the App was still signing with the wrong index. The thin-client rule exists so this class of bug cannot recur: if every signed operation hydrates the send counter from the node head immediately before signing, the local store can never drift far enough to matter.
 
 The api_remote suite (`zk-coins/node/node/tests/api_remote.rs::TestWallet`) threads the BIP-32 index explicitly into every signed request and is therefore immune to the bug — that pattern is the reference implementation for any App-side signed flow.
 

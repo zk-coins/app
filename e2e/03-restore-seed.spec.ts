@@ -139,7 +139,7 @@ test.describe('Restore wallet — seed phrase', () => {
 
   test('wallet-after-restore', async ({ page }) => {
     // Give the test 60 s — the restore flow itself takes 20-25 s on
-    // the DEV server (WASM derivation + IDB encrypt + first /api/balance
+    // the DEV server (WASM derivation + IDB encrypt + first /v1/balance
     // round-trip) and the snap helper's networkidle wait races against
     // the 5 s wallet balance-polling tick, so the default 30 s budget
     // is tight even on a quiet day.
@@ -151,7 +151,7 @@ test.describe('Restore wallet — seed phrase', () => {
     await page.getByTestId('seed-import-password-input').fill(PASSWORD);
     await page.getByTestId('seed-import-password-confirm-input').fill(PASSWORD);
     await page.getByTestId('seed-import-submit-btn').click();
-    // Suffix is server-reported via /api/info.username_domain (per-stage).
+    // Suffix is server-reported via /v1/info.username_domain (per-stage).
     const chip = zkAddressRegex(await getUsernameDomain());
     await expect(page.locator(`text=${chip}`).first()).toBeVisible({
       timeout: 30_000,

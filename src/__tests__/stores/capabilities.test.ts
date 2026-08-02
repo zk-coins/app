@@ -66,7 +66,7 @@ describe('useCapabilities.fetch — server response handling', () => {
     expect(useCapabilities.getState().loaded).toBe(true);
   });
 
-  it('falls back to fail-closed when /api/info is unreachable', async () => {
+  it('falls back to fail-closed when /v1/info is unreachable', async () => {
     vi.spyOn(api, 'info').mockRejectedValue(new Error('network down'));
 
     await useCapabilities.getState().fetch();

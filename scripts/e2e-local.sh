@@ -18,7 +18,7 @@
 #   2. next build with the same-origin proxy config baked in:
 #        NEXT_PUBLIC_API_URL=http://127.0.0.1:<APP_PORT>   (browser → own origin)
 #        LOCAL_NODE_PROXY_TARGET=http://127.0.0.1:<PROXY_PORT> (Next rewrite → proxy)
-#   3. start the test-only /api/info capability-normalisation proxy
+#   3. start the test-only /v1/info capability-normalisation proxy
 #      (scripts/e2e-info-proxy.mjs) → upstream local node
 #   4. start the Next standalone server (node .next/standalone/server.js)
 #   5. Playwright, two legs:
@@ -27,9 +27,9 @@
 #   6. tear everything down
 #
 # ── TOPOLOGY ──────────────────────────────────────────────────────────
-#   browser ─(same-origin /api/*)→ Next standalone ─(rewrite)→ proxy ─→ node
+#   browser ─(same-origin /v1/*)→ Next standalone ─(rewrite)→ proxy ─→ node
 #   e2e helpers (Node, E2E_API_URL) ─────────────────────────────────→ proxy ─→ node
-#   Both observe the DEV-normalised /api/info; everything else hits the node 1:1.
+#   Both observe the DEV-normalised /v1/info; everything else hits the node 1:1.
 #
 # ── CONFIG (env overrides) ────────────────────────────────────────────
 #   E2E_NODE_URL        upstream node, as seen FROM the container
@@ -121,7 +121,7 @@ if [[ "${1:-}" == "__in_container" ]]; then
   # failure in the readiness wait can never leak the proxy / app servers.
   trap 'publish_artifacts; cleanup' EXIT
 
-  echo "▶ [container] starting /api/info normalisation proxy :${PROXY_PORT} → ${NODE_URL} (multi_asset=${E2E_MULTI_ASSET:-false})"
+  echo "▶ [container] starting /v1/info normalisation proxy :${PROXY_PORT} → ${NODE_URL} (multi_asset=${E2E_MULTI_ASSET:-false})"
   E2E_INFO_PROXY_PORT="$PROXY_PORT" \
   E2E_NODE_URL="$NODE_URL" \
   E2E_INFO_USERNAME_DOMAIN="dev.zkcoins.app" \
@@ -136,13 +136,13 @@ if [[ "${1:-}" == "__in_container" ]]; then
   # Wait for both to answer before handing off to Playwright.
   echo "▶ [container] waiting for proxy + app to come up"
   for i in $(seq 1 60); do
-    if curl -sf "http://127.0.0.1:${PROXY_PORT}/api/info" >/dev/null 2>&1 &&
+    if curl -sf "http://127.0.0.1:${PROXY_PORT}/v1/info" >/dev/null 2>&1 &&
       curl -sf "http://127.0.0.1:${APP_PORT}/" >/dev/null 2>&1; then
       break
     fi
     if [[ "$i" == "60" ]]; then
       echo "✗ proxy or app did not come up within 60s" >&2
-      curl -s "http://127.0.0.1:${PROXY_PORT}/api/info" || true
+      curl -s "http://127.0.0.1:${PROXY_PORT}/v1/info" || true
       exit 1
     fi
     sleep 1
@@ -150,8 +150,8 @@ if [[ "${1:-}" == "__in_container" ]]; then
 
   # Sanity: the proxy must report the DEV surface (caps OFF). A mismatch
   # here would silently break ~16 baselines, so fail loud instead.
-  PROXY_INFO="$(curl -s "http://127.0.0.1:${PROXY_PORT}/api/info")"
-  echo "▶ [container] proxied /api/info → ${PROXY_INFO}"
+  PROXY_INFO="$(curl -s "http://127.0.0.1:${PROXY_PORT}/v1/info")"
+  echo "▶ [container] proxied /v1/info → ${PROXY_INFO}"
   case "$PROXY_INFO" in
     *'"username_claim":true'*)
       echo "✗ proxy did not normalise username_claim to false — baselines would break" >&2

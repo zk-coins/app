@@ -67,7 +67,7 @@ describe('capabilitiesFromV1Features', () => {
 });
 
 describe('api.info', () => {
-  it('GETs /v1/info (not /api/info)', async () => {
+  it('GETs /v1/info (not /v1/info)', async () => {
     mockJsonResponse({
       network: 'regtest',
       protocol_version: 'v1',
@@ -139,18 +139,68 @@ describe('ApiError / JobFailedError shape', () => {
 });
 
 describe('name endpoints refuse closed surface gaps', () => {
-  it('resolveUsername is not a legacy /api route — 501', async () => {
+  it('resolveUsername is not a legacy route — 501', async () => {
     await expect(api.resolveUsername('alice')).rejects.toMatchObject({ status: 501 });
     expect(mockFetch).not.toHaveBeenCalled();
   });
 
-  it('claimUsername is not a legacy /api route — 501', async () => {
+  it('claimUsername is not a legacy route — 501', async () => {
     await expect(
       api.claimUsername({
         username: 'alice',
         address: 'zk1test',
         mnemonic:
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+      }),
+    ).rejects.toMatchObject({ status: 501 });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('read paths refuse invented empty wallets', () => {
+  it('ownerBalances is 501 not an empty assets list', async () => {
+    await expect(api.ownerBalances('zk1test')).rejects.toMatchObject({ status: 501 });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('walletBalance is 501 not balance:0', async () => {
+    await expect(
+      api.walletBalance({
+        address: 'zk1test',
+        mnemonic:
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+        nkCommit: '00'.repeat(32),
+      }),
+    ).rejects.toMatchObject({ status: 501 });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('send with empty input_coins is 501 (no network hop)', async () => {
+    await expect(
+      api.send({
+        account_address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+        recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+        amount: 1,
+        asset_id: 'aa'.repeat(32),
+        mnemonic:
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+        nkCommit: '00'.repeat(32),
+        delivery: {
+          type: 'invoice',
+          invoice: {
+            amount: '1',
+            recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+            asset_id: 'aa'.repeat(32),
+            pk0: 'bb'.repeat(32),
+            nk_commit: 'cc'.repeat(32),
+            ivpk: 'dd'.repeat(32),
+            op_pubkey: 'ee'.repeat(32),
+            relays: ['wss://r.example'],
+            addr_sig: '11'.repeat(64),
+            sig: '22'.repeat(64),
+          },
+        },
+        input_coins: [],
       }),
     ).rejects.toMatchObject({ status: 501 });
     expect(mockFetch).not.toHaveBeenCalled();

@@ -13,6 +13,10 @@
     "portfolioTitle": "Assets",
     "portfolioEmptyTitle": "No assets yet",
     "portfolioEmptyBody": "Create your own asset, or have someone send you one.",
+    "portfolioUnavailableTitle": "Portfolio not available yet",
+    "portfolioUnavailableBody": "Asset balances are not available in this build. Coin inventory decoding ships in a follow-up.",
+    "balanceUnavailableTitle": "Balance not available in this build",
+    "balanceUnavailableBody": "Wallet balances cannot be decoded yet. This is not an empty wallet.",
     "createCoin": "Create coin",
     "noTransactionsTitle": "No transactions yet",
     "noTransactionsHasWallet": "Once you send or receive privately, it will show up here.",
@@ -25,7 +29,8 @@
     "emptyDfxBody": "Buy private BTC through <dfx>DFX</dfx>, or share your address via <receive>Receive</receive>.",
     "emptyReceiveBody": "Share your address via <receive>Receive</receive>.",
     "faucet": "Faucet",
-    "minting": "Minting…"
+    "minting": "Minting…",
+    "nameClaimUnavailable": "Name claim is not available yet in this build."
   },
   "createCoin": {
     "back": "Back",
@@ -55,6 +60,8 @@
     "subtitle": "Privately. The chain never sees the amount or the recipient.",
     "assetLabel": "Asset",
     "assetEmpty": "No assets to send. Create a coin first.",
+    "unavailableTitle": "Send not available yet",
+    "unavailableBody": "Sending requires input-coin selection from the AccountState inventory, which is not wired in this build. No transaction is submitted.",
     "available": "Available ",
     "noFundsTitle": "No funds to send.",
     "recipient": "Recipient",

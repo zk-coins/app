@@ -75,10 +75,10 @@ test.describe('Network info + AppShell', () => {
       )
       .not.toBe('');
 
-    // Block any further /api/info call from racing past us. The store
+    // Block any further /v1/info call from racing past us. The store
     // is exposed on `window.__useNetworkStore` in `src/stores/network.ts`
     // for this purpose.
-    await page.route('**/api/info', async (route) => {
+    await page.route('**/v1/info', async (route) => {
       await new Promise((r) => setTimeout(r, 8_000));
       await route.continue();
     });

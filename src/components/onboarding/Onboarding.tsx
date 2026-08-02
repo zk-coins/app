@@ -7,7 +7,6 @@ import { PixelLogo } from '../icons/PixelLogo';
 import { Logo } from '../icons/Logo';
 import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
-import { api } from '@/lib/api/client';
 import {
   accountKeysFromMnemonic,
   createMnemonic,
@@ -207,7 +206,7 @@ function Benefit({
 /* ---------- Seed Flow ---------- */
 
 function SeedFlow({ onBack }: { onBack: () => void }) {
-  const { setAccount, setBalance, saveWithPassword } = useWalletStore();
+  const { setAccount, saveWithPassword } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'generating' | 'reveal' | 'confirm' | 'password' | 'creating'>(
     'generating',
@@ -256,7 +255,6 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       const ad = accountKeysFromMnemonic(phrase);
       setAccount({
         address: ad.address,
-        numPubkeys: ad.numPubkeys,
         mnemonic: ad.mnemonic,
         nkCommit: ad.nkCommit,
       });
@@ -264,23 +262,13 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       // Encrypt and persist to IndexedDB.
       await saveWithPassword(password);
       setAuth('seed');
-
-      // Best-effort balance fetch (ownership pull may fail on a fresh account).
-      try {
-        const bal = await api.walletBalance({
-          address: ad.address,
-          mnemonic: ad.mnemonic,
-          nkCommit: ad.nkCommit,
-        });
-        setBalance(bal.balance);
-      } catch {
-        // Non-fatal — WalletScreen will keep its loading placeholder.
-      }
+      // Balance is node-owned and not readable without AccountState decode —
+      // do not invent 0 or cache a store balance (thin-client rule).
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create wallet');
       setStage('password');
     }
-  }, [mnemonic, password, passwordConfirm, setAccount, setBalance, saveWithPassword, setAuth]);
+  }, [mnemonic, password, passwordConfirm, setAccount, saveWithPassword, setAuth]);
 
   return (
     <div className="space-y-6 py-2">
@@ -433,7 +421,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
 /* ---------- Passkey Flow ---------- */
 
 function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () => void }) {
-  const { setAccount, setBalance, saveWithPrf } = useWalletStore();
+  const { setAccount, saveWithPrf } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'intro' | 'registering' | 'creating'>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -459,7 +447,6 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
 
       setAccount({
         address: ad.address,
-        numPubkeys: ad.numPubkeys,
         mnemonic: ad.mnemonic,
         nkCommit: ad.nkCommit,
       });
@@ -474,18 +461,6 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
       // Encrypt wallet with PRF output and save to IndexedDB.
       await saveWithPrf(result.prfOutput);
       setAuth('passkey', result.credentialId);
-
-      // Best-effort balance fetch.
-      try {
-        const bal = await api.walletBalance({
-          address: ad.address,
-          mnemonic: ad.mnemonic,
-          nkCommit: ad.nkCommit,
-        });
-        setBalance(bal.balance);
-      } catch {
-        // Non-fatal — WalletScreen will keep its loading placeholder.
-      }
     } catch (err) {
       if (err instanceof PasskeyPrfUnsupportedError) {
         setError(
@@ -504,7 +479,7 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
       }
       setStage('intro');
     }
-  }, [setAccount, setBalance, saveWithPrf, setAuth]);
+  }, [setAccount, saveWithPrf, setAuth]);
 
   return (
     <div className="space-y-6 py-2">
@@ -586,7 +561,7 @@ function SeedImportFlow({
   onBack: () => void;
   onPasskeyRestore?: () => void;
 }) {
-  const { setAccount, setBalance, syncNumPubkeys, saveWithPassword } = useWalletStore();
+  const { setAccount, saveWithPassword } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'input' | 'password' | 'restoring'>('input');
   const [phrase, setPhrase] = useState('');
@@ -630,38 +605,17 @@ function SeedImportFlow({
       const ad = accountKeysFromMnemonic(trimmed);
       setAccount({
         address: ad.address,
-        numPubkeys: ad.numPubkeys,
         mnemonic: ad.mnemonic,
         nkCommit: ad.nkCommit,
       });
       await saveWithPassword(password);
       setAuth('seed');
-
-      try {
-        const res = await api.walletBalance({
-          address: ad.address,
-          mnemonic: ad.mnemonic,
-          nkCommit: ad.nkCommit,
-        });
-        setBalance(res.balance);
-        syncNumPubkeys(res.num_sends);
-      } catch {
-        // Non-fatal.
-      }
+      // No balance hydration — thin client; balances not available yet.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to restore wallet');
       setStage('password');
     }
-  }, [
-    phrase,
-    password,
-    passwordConfirm,
-    setAccount,
-    setBalance,
-    syncNumPubkeys,
-    saveWithPassword,
-    setAuth,
-  ]);
+  }, [phrase, password, passwordConfirm, setAccount, saveWithPassword, setAuth]);
 
   return (
     <div className="space-y-6 py-2">
@@ -784,7 +738,7 @@ function SeedImportFlow({
 /* ---------- Passkey Restore Flow ---------- */
 
 function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
-  const { setAccount, setBalance, syncNumPubkeys, saveWithPrf } = useWalletStore();
+  const { setAccount, saveWithPrf } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'intro' | 'authenticating' | 'restoring'>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -808,7 +762,6 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
 
       setAccount({
         address: ad.address,
-        numPubkeys: ad.numPubkeys,
         mnemonic: ad.mnemonic,
         nkCommit: ad.nkCommit,
       });
@@ -821,18 +774,6 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
 
       await saveWithPrf(result.prfOutput);
       setAuth('passkey', result.credentialId);
-
-      try {
-        const res = await api.walletBalance({
-          address: ad.address,
-          mnemonic: ad.mnemonic,
-          nkCommit: ad.nkCommit,
-        });
-        setBalance(res.balance);
-        syncNumPubkeys(res.num_sends);
-      } catch {
-        // Non-fatal.
-      }
     } catch (err) {
       if (err instanceof PasskeyPrfUnsupportedError) {
         setError(
@@ -851,7 +792,7 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
       }
       setStage('intro');
     }
-  }, [setAccount, setBalance, syncNumPubkeys, saveWithPrf, setAuth]);
+  }, [setAccount, saveWithPrf, setAuth]);
 
   return (
     <div className="space-y-6 py-2">

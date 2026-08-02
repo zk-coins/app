@@ -100,7 +100,7 @@ test.describe('Unlock wallet — password', () => {
     await arriveAtUnlock(page);
     await page.getByTestId('unlock-password-input').fill(PASSWORD);
     await page.getByTestId('unlock-submit-btn').click();
-    // Suffix is server-reported via /api/info.username_domain (per-stage).
+    // Suffix is server-reported via /v1/info.username_domain (per-stage).
     const chip = zkAddressRegex(await getUsernameDomain());
     await expect(page.locator(`text=${chip}`).first()).toBeVisible({
       timeout: 30_000,

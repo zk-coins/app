@@ -2,6 +2,9 @@
   "name": "zkcoins-app",
   "version": "0.9.0",
   "private": true,
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "predev": "node scripts/sync-handbook-baselines.mjs",
     "dev": "next dev --port 3090",

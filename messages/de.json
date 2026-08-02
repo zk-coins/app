@@ -13,6 +13,10 @@
     "portfolioTitle": "Assets",
     "portfolioEmptyTitle": "Noch keine Assets",
     "portfolioEmptyBody": "Erstelle ein eigenes Asset oder lass dir eines schicken.",
+    "portfolioUnavailableTitle": "Portfolio noch nicht verfügbar",
+    "portfolioUnavailableBody": "Asset-Guthaben sind in diesem Build noch nicht verfügbar. Coin-Inventar-Decoding folgt.",
+    "balanceUnavailableTitle": "Guthaben in diesem Build nicht verfügbar",
+    "balanceUnavailableBody": "Wallet-Guthaben können noch nicht dekodiert werden. Das ist kein leeres Wallet.",
     "createCoin": "Coin erstellen",
     "noTransactionsTitle": "Noch keine Transaktionen",
     "noTransactionsHasWallet": "Sobald du privat sendest oder empfängst, erscheint es hier.",
@@ -25,7 +29,8 @@
     "emptyDfxBody": "Kaufe privates BTC über <dfx>DFX</dfx> oder teile deine Adresse über <receive>Empfangen</receive>.",
     "emptyReceiveBody": "Teile deine Adresse über <receive>Empfangen</receive>.",
     "faucet": "Faucet",
-    "minting": "Wird gemintet…"
+    "minting": "Wird gemintet…",
+    "nameClaimUnavailable": "Namens-Claim ist in diesem Build noch nicht verfügbar."
   },
   "createCoin": {
     "back": "Zurück",
@@ -55,6 +60,8 @@
     "subtitle": "Privat. Die Chain sieht weder Betrag noch Empfänger.",
     "assetLabel": "Asset",
     "assetEmpty": "Keine Assets zum Senden. Erstelle zuerst einen Coin.",
+    "unavailableTitle": "Senden noch nicht verfügbar",
+    "unavailableBody": "Senden braucht Input-Coin-Auswahl aus dem AccountState-Inventar, das in diesem Build noch fehlt. Es wird keine Transaktion gesendet.",
     "available": "Verfügbar ",
     "noFundsTitle": "Keine Mittel zum Senden.",
     "recipient": "Empfänger",

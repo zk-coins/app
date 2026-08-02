@@ -11,7 +11,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { usePortfolio } from '@/hooks/usePortfolio';
-import { api, type OwnerBalanceResponse } from '@/lib/api/client';
+import { ApiError, api, type OwnerBalanceResponse } from '@/lib/api/client';
 
 const ADDR_A = 'a'.repeat(64);
 const ADDR_B = 'b'.repeat(64);
@@ -121,6 +121,20 @@ describe('usePortfolio', () => {
     const { result } = renderHook(() => usePortfolio(ADDR_A));
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(result.current.assets).toEqual([]);
+  });
+
+  it('surfaces available:false on 501 (not an empty wallet)', async () => {
+    ownerSpy.mockRejectedValue(
+      new ApiError(
+        501,
+        'portfolio not available in this build — AccountState balances decode is not wired yet',
+      ),
+    );
+    const { result } = renderHook(() => usePortfolio(ADDR_A));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.available).toBe(false);
+    expect(result.current.assets).toEqual([]);
+    expect(result.current.unavailableReason).toMatch(/not available/i);
   });
 
   it('does not write state when the fetch resolves after unmount', async () => {

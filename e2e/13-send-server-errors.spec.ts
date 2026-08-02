@@ -1,7 +1,7 @@
 /**
  * Spec 13 — Send Bitcoin: server `ApiError` → localised toast (issue #99).
  *
- * The Jobs API (node PR #161) admits a send at `POST /api/jobs/send` and
+ * The Jobs API (node PR #161) admits a send at `POST /v1/jobs/send` and
  * verifies the signed request synchronously before enqueueing: a bad
  * request (unknown account, insufficient funds, bad signature) 4xx/5xxs
  * at admit with the `{error: "<string>"}` envelope (`JobErrorResponse`).
@@ -10,7 +10,7 @@
  *
  * These specs assert the end-to-end pipeline (fetch → `ApiError` →
  * `userMessageFor` → `send-error` toast) by intercepting the admit route
- * `/api/jobs/send` with a `page.route()` mock that returns a
+ * `/v1/jobs/send` with a `page.route()` mock that returns a
  * deterministic structured failure — so they do NOT depend on the
  * `awaiting_signature` proof path (and therefore not on node #195).
  *
@@ -35,7 +35,7 @@ async function aliceGoToSend(page: Page): Promise<void> {
 }
 
 /**
- * Install a `/api/jobs/send` admit-route handler that returns a
+ * Install a `/v1/jobs/send` admit-route handler that returns a
  * structured `4xx|5xx + {error}` body, exactly as the node's Jobs API
  * emits when it rejects a send before enqueueing.
  *
@@ -44,7 +44,7 @@ async function aliceGoToSend(page: Page): Promise<void> {
  * any future SW-pass-through edge case.
  */
 async function mockSendError(page: Page, status: number, error: string): Promise<void> {
-  await page.context().route(/\/api\/jobs\/send$/, (route) =>
+  await page.context().route(/\/v1\/jobs\/send$/, (route) =>
     route.fulfill({
       status,
       contentType: 'application/json',
@@ -64,7 +64,7 @@ async function aliceSubmitSend(page: Page): Promise<void> {
 }
 
 // Block service-worker registration for this file. The zkCoins PWA worker
-// caches/passes-through `/api/jobs/send` traffic before `page.route()`
+// caches/passes-through `/v1/jobs/send` traffic before `page.route()`
 // gets a chance — without this the real DEV response can leak past the
 // mock. Blocking SW takes the worker out of the request path entirely so
 // the mock is the only response handler.

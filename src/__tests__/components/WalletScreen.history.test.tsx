@@ -1,5 +1,5 @@
 /**
- * Transaction-list rendering in `WalletScreen` from server `/api/history`
+ * Transaction-list rendering in `WalletScreen` from server `/v1/history`
  * truth (issue #175). Complements `WalletScreen.polling.test.tsx`
  * (portfolio cadence) by exercising the list/empty-state gating and the
  * per-row mapping of the node's `HistoryItem` shape (kind → label,
@@ -33,7 +33,6 @@ vi.mock('@/lib/features', () => ({
 
 const ALICE = {
   address: 'a'.repeat(64),
-  numPubkeys: 0,
   mnemonic:
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   nkCommit: '00'.repeat(32),
@@ -68,7 +67,6 @@ beforeEach(() => {
   });
   useWalletStore.setState({
     account: ALICE,
-    balance: 10_000,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
@@ -157,7 +155,7 @@ describe('WalletScreen — transaction list from server history', () => {
   });
 
   it('prompts to create a wallet when there is no account', async () => {
-    useWalletStore.setState({ account: null, balance: null });
+    useWalletStore.setState({ account: null });
     historySpy.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
 
     render(<WalletScreen />);

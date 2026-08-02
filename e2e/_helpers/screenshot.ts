@@ -97,7 +97,7 @@ async function applyStabilizer(page: Page): Promise<void> {
  *   - waits for web fonts (`document.fonts.ready`)
  *   - applies the default mask set, then any spec-specific masks
  *
- * **Why not `networkidle`**: WalletScreen polls `/api/balance` every 5 s
+ * **Why not `networkidle`**: WalletScreen polls `/v1/balance` every 5 s
  * and we have other periodic fetches too. `waitForLoadState('networkidle')`
  * requires 500 ms of network silence and can deadlock under sustained
  * polling. `domcontentloaded` is enough for visual stability once the

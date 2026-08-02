@@ -13,7 +13,7 @@ import { defineConfig, devices } from '@playwright/test';
 //                        a local zkCoins node (default host.docker.internal:4242).
 //                        Orchestrated by `scripts/e2e-local.sh`, which builds the
 //                        app with the same-origin proxy config, starts the
-//                        standalone server + the test-only `/api/info`
+//                        standalone server + the test-only `/v1/info`
 //                        capability-normalisation proxy, then invokes Playwright.
 //                        See e2e/README.md § 4.2.
 const E2E_TARGET = process.env.E2E_TARGET === 'local' ? 'local' : 'dev';

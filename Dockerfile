@@ -1,8 +1,8 @@
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
 
-# Build from the monorepo root (parent of app/ and sdk/):
+# Build from the monorepo parent of app/ and sdk/ so `file:../sdk` resolves:
 #   docker build -f app/Dockerfile -t zkcoins-app .
-# Context includes both app and sdk so `file:../sdk` resolves.
+# Deploy workflows check out both repos into that layout (see deploy-*.yaml).
 
 FROM base AS deps
 WORKDIR /workspace/app

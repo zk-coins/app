@@ -21,7 +21,6 @@ describe('account-keys (SDK pure-TS)', () => {
     expect(keys.address.startsWith('zk1')).toBe(true);
     expect(keys.nkCommit).toMatch(/^[0-9a-f]{64}$/);
     expect(keys.pk0).toMatch(/^[0-9a-f]{64}$/);
-    expect(keys.numPubkeys).toBe(0);
     expect(keys.mnemonic).toBe(FIXTURE);
   });
 

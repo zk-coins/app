@@ -81,31 +81,6 @@ jobs:
       - name: Run unit tests with coverage
         run: npm run test:coverage
 
-  rust-tests:
-    name: Rust Crypto Tests
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Cache cargo
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            rust/target
-          key: ${{ runner.os }}-cargo-rust-${{ hashFiles('rust/Cargo.lock') }}
-          restore-keys: |
-            ${{ runner.os }}-cargo-rust-
-
-      - name: Run shared crate tests
-        working-directory: rust
-        run: cargo test -p shared
-
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
@@ -115,7 +90,7 @@ jobs:
     # This job builds the PR's standalone bundle, serves it on the
     # runner, and drives the Playwright suite against it. The upstream
     # node is the project's CI node at ci.zkcoins.app, fronted by the
-    # test-only /api/info normalisation proxy (scripts/e2e-info-proxy.mjs)
+    # test-only /v1/info normalisation proxy (scripts/e2e-info-proxy.mjs)
     # so the capability surface matches the committed baselines.
     #
     # Why ci.zkcoins.app and not dev-api.zkcoins.app? The hosted DEV +
@@ -126,7 +101,7 @@ jobs:
     # Why not the previous shape (navigate to https://dev.zkcoins.app)?
     # That tested whatever frontend was DEPLOYED — i.e. `develop` —
     # not the PR's code. During the Jobs-API migration that gap became
-    # load-bearing: the node dropped /api/mint + /api/send while the
+    # load-bearing: the node dropped legacy mint/send while the
     # deployed frontend still called them, so every frontend-behaviour
     # spec was red for reasons unrelated to the PR under test
     # (deployment lag). Serving the PR's own build removes the lag
@@ -170,7 +145,7 @@ jobs:
       #   NEXT_PUBLIC_API_URL      → the app's own origin, so browser
       #                              SDK calls stay same-origin (no
       #                              Idempotency-Key CORS preflight)
-      #   LOCAL_NODE_PROXY_TARGET  → the /api/info normalisation proxy
+      #   LOCAL_NODE_PROXY_TARGET  → the /v1/info normalisation proxy
       - name: Build standalone bundle (same-origin proxy baked in)
         run: npm run build
         env:
@@ -213,26 +188,26 @@ jobs:
 
           echo "waiting for info-proxy :4243 and app :3090"
           for i in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:4243/api/info >/dev/null 2>&1 &&
+            if curl -sf http://127.0.0.1:4243/v1/info >/dev/null 2>&1 &&
               curl -sf http://127.0.0.1:3090/ >/dev/null 2>&1; then
               break
             fi
             if [ "$i" = "60" ]; then
               echo "::error::info-proxy or standalone app did not come up within 60s"
-              curl -s http://127.0.0.1:4243/api/info || true
+              curl -s http://127.0.0.1:4243/v1/info || true
               exit 1
             fi
             sleep 1
           done
 
           # Sanity: the proxy must report the DEV capability surface
-          # (caps OFF). A mismatch would silently shift ~16 baselines,
+          # (wallet feature OFF). A mismatch would silently shift baselines,
           # so fail loud here instead of in a wall of visual diffs.
-          PROXY_INFO="$(curl -s http://127.0.0.1:4243/api/info)"
-          echo "proxied /api/info → ${PROXY_INFO}"
+          PROXY_INFO="$(curl -s http://127.0.0.1:4243/v1/info)"
+          echo "proxied /v1/info → ${PROXY_INFO}"
           case "$PROXY_INFO" in
-            *'"username_claim":true'*)
-              echo "::error::proxy did not normalise username_claim to false"
+            *'"wallet"'*)
+              echo "::error::proxy did not normalise features away from wallet (username claim)"
               exit 1
               ;;
           esac

@@ -1,59 +1,98 @@
 /**
- * SDK-backed API client used by the E2E global setup and test helpers.
+ * SDK-backed v1 API client used by the E2E global setup and test helpers.
  *
- * The app consumes `@zkcoins/sdk` for node traffic; the harness does the
- * same so the test-side and app-side wire contracts cannot drift. The
- * helpers touch the unsigned read endpoints directly (info, per-asset
- * balance, portfolio) and drive the creator-signed **create-coin** flow to
- * seed fixtures.
+ * All node traffic goes through `/v1/*` via `ZkCoinsV1Client`. Key material
+ * is derived with the pure-TS v1 helpers (see `./keys.ts`) — the in-tree
+ * WASM package is gone.
  *
- * ## Create-coin / mint (neutral multi-asset model)
+ * ## Fixture mint
  *
- * There is no faucet under the neutral multi-asset model — funding a
- * fixture wallet means that wallet creating its own asset. So the harness
- * runs the same two-phase, creator-signed mint the app's `createCoin`
- * runs, using the app's own `@zkcoins/wasm` crypto primitives (BIP-32
- * derivation, Schnorr signing, commitment build) plus a local
- * `buildMintMessage` (the installed SDK predates the multi-asset message
- * layout):
+ * Uses the same creator-signed mint handshake the app's `api.createCoin`
+ * runs (`POST /v1/tx` kind=mint → await signature → ownership pull → sign).
  *
- * Crypto MUST go through the wasm, not `@zkcoins/sdk`: the node credits the
- * mint to `owner = Poseidon(creator_pubkey)` and serves the portfolio under
- * that Poseidon address — which is exactly the wallet address the wasm
- * derives (`H(pubkey_0)`). Deriving the fixture account through the wasm is
- * what makes `ownerBalances(account.address)` observe the mint; the SDK's
- * `sha256(pubkey_0)` address is a different, unobserved value (see
- * `_helpers/wasm.ts`).
+ * ## Portfolio / balance reads
  *
- *   1. Derive the creator identity key (index 0) from the mnemonic; sign
- *      `SHA256(creator_pubkey ‖ name ‖ [decimals] ‖ amount_le ‖ ts_le)`.
- *   2. `POST /api/jobs/mint` (mandatory `Idempotency-Key`); poll to
- *      `awaiting_signature`.
- *   3. Build the commitment over `account_state_hash ‖ output_coins_root`
- *      with the SAME creator key (index 0); `POST /api/jobs/:id/commit`.
- *   4. Poll to `completed`.
- *
- * Targets `process.env.E2E_API_URL` (default: dev-api.zkcoins.app).
+ * AccountState balances decode is not on the thin surface yet. Read
+ * helpers refuse with a clear error rather than inventing an empty wallet.
  */
 
-import { createHash } from 'node:crypto';
 import {
-  ZkCoinsClient,
-  newIdempotencyKey,
-  type BalanceResponse,
-  type InfoResponse,
+  ZkCoinsV1Client,
+  encodeHexLower,
+  freshNpkRand,
+  type Network,
+  type TransitionRequest,
+  type V1Info,
+  type V1Job,
+  type V1JobStatusValue,
 } from '@zkcoins/sdk';
-import { loadWasm } from './wasm';
+import { accountFromMnemonic } from './keys';
+import { deriveSpendKey, seedFromMnemonicV1 } from '@zkcoins/sdk';
 
 const API_URL = (process.env.E2E_API_URL ?? 'https://dev-api.zkcoins.app').replace(/\/+$/, '');
-
-/** A `ZkCoinsClient` pointed at the configured E2E API URL. */
-const sdkClient = new ZkCoinsClient({ apiUrl: API_URL });
 
 /** Default supply minted into a fixture wallet's own asset. */
 const MINT_AMOUNT = 100_000;
 /** Decimals for the fixture asset (0 = whole units). */
 const FIXTURE_DECIMALS = 0;
+
+const POLL_FLOOR_MS = 2_000;
+const WAIT_TIMEOUT_MS = 240_000;
+const TERMINAL: ReadonlySet<V1JobStatusValue> = new Set(['completed', 'failed', 'cancelled']);
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function hexToBytesExact(hex: string, len: number, label: string): Uint8Array {
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length !== len * 2) {
+    throw new Error(`${label}: expected ${len} bytes hex, got length ${hex.length}`);
+  }
+  const out = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+function v1Client(network: Network): ZkCoinsV1Client {
+  return new ZkCoinsV1Client({ apiUrl: API_URL, network });
+}
+
+/** Resolve network from /v1/info (required before signed calls). */
+async function resolveNetwork(): Promise<Network> {
+  const info = await api.info();
+  const network = info.network as Network;
+  if (network !== 'mainnet' && network !== 'testnet' && network !== 'regtest') {
+    // Fail closed rather than inventing a network tag.
+    // Note: CI nodes may report "signet" as a bitcoin network — v1 tags
+    // are mainnet|testnet|regtest only; map signet → testnet is forbidden
+    // here (no silent coercion). Surface the raw value so operators fix
+    // the node advertisement.
+    throw new Error(`e2e api: unsupported network from /v1/info: ${String(info.network)}`);
+  }
+  return network;
+}
+
+async function waitForJob(client: ZkCoinsV1Client, jobId: string): Promise<V1Job> {
+  const deadline = Date.now() + WAIT_TIMEOUT_MS;
+  for (;;) {
+    const { job, retryAfterMs } = await client.getJob(jobId);
+    if (job.status === 'failed' || job.status === 'cancelled') {
+      throw new Error(
+        `job ${jobId} ${job.status}: ${job.error?.message ?? job.error?.error ?? ''}`,
+      );
+    }
+    if (TERMINAL.has(job.status)) return job;
+    if (Date.now() >= deadline) {
+      throw new Error(`job ${jobId} stuck at ${job.status}`);
+    }
+    if (retryAfterMs === null) {
+      throw new Error(`job ${jobId} non-terminal ${job.status} without Retry-After`);
+    }
+    await delay(Math.max(POLL_FLOOR_MS, retryAfterMs));
+  }
+}
 
 /** Per-`(owner, asset)` balance shape (multi-asset; mirrors the node). */
 export interface AssetBalanceEntry {
@@ -70,41 +109,52 @@ export interface OwnerBalance {
 }
 
 export const api = {
-  info: (): Promise<InfoResponse> => sdkClient.info(),
-
-  /** The owner's cross-asset portfolio — `GET /api/balance/:address`. */
-  ownerBalances: (address: string): Promise<OwnerBalance> =>
-    getJson<OwnerBalance>(`/api/balance/${encodeURIComponent(address)}`),
-
-  /**
-   * Per-asset balance — `GET /api/balance?address=&asset_id=`.
-   * Both params are required under the neutral multi-asset model (no native
-   * asset). Callers that only need "is funded?" should use {@link ownerBalances}
-   * and sum `assets[].balance` instead of inventing an asset id.
-   */
-  walletBalance: (
-    address: string,
-    assetId: string,
-    signal?: AbortSignal,
-  ): Promise<BalanceResponse> => sdkClient.balance(address, assetId, signal),
-
-  /**
-   * Derive the fixture account from `mnemonic` via the app's `@zkcoins/wasm`
-   * module — the SAME path the app's onboarding uses. The returned `address`
-   * is `H(pubkey_0)` (Poseidon), which is the owner the node credits and the
-   * address the live wallet polls. Use THIS for `ownerBalances`, never the
-   * SDK's `sha256(pubkey_0)` address.
-   */
-  account: async (mnemonic: string): Promise<{ address: string; xpriv: string }> => {
-    const wasm = await loadWasm();
-    const acct = wasm.account(mnemonic);
-    return { address: acct.address, xpriv: acct.xpriv };
+  info: async (): Promise<
+    V1Info & { capabilities?: { multi_asset?: boolean; username_claim?: boolean } }
+  > => {
+    // Construction placeholder network — info is network-agnostic.
+    const client = new ZkCoinsV1Client({ apiUrl: API_URL, network: 'regtest' });
+    const info = await client.info();
+    const features = new Set(info.features ?? []);
+    return {
+      ...info,
+      capabilities: {
+        multi_asset: true,
+        username_claim: features.has('wallet'),
+      },
+    };
   },
 
   /**
-   * Create / mint an asset into the wallet derived from `mnemonic`. Returns
-   * the minted `amount` plus the wallet `address` (Poseidon owner) so the
-   * caller can poll the portfolio for it.
+   * Portfolio read — not available without AccountState balances decode.
+   * Throws rather than inventing an empty wallet.
+   */
+  ownerBalances: async (_address: string): Promise<OwnerBalance> => {
+    throw new Error(
+      'e2e api: portfolio not available in this build — AccountState balances decode is not wired yet',
+    );
+  },
+
+  /** Per-asset balance — same unavailability as portfolio. */
+  walletBalance: async (
+    _address: string,
+    _assetId: string,
+  ): Promise<{ balance: number; num_sends: number }> => {
+    throw new Error(
+      'e2e api: wallet balance not available in this build — AccountState balances decode is not wired yet',
+    );
+  },
+
+  /** Derive the fixture account via pure-TS v1 keys (same as app onboarding). */
+  account: async (mnemonic: string): Promise<{ address: string; nkCommit: string }> => {
+    const keys = accountFromMnemonic(mnemonic);
+    return { address: keys.address, nkCommit: keys.nkCommit };
+  },
+
+  /**
+   * Creator-signed mint via `POST /v1/tx` kind=mint. Returns the minted
+   * amount plus the wallet address so callers can track the fixture.
+   * Does NOT poll portfolio (read path unavailable).
    */
   createCoin: async (
     mnemonic: string,
@@ -114,176 +164,89 @@ export const api = {
     const decimals = opts.decimals ?? FIXTURE_DECIMALS;
     const amount = opts.amount ?? MINT_AMOUNT;
 
-    const wasm = await loadWasm();
-    const { address, xpriv } = wasm.account(mnemonic);
-    const { publicKey, nextPublicKey } = wasm.publicKeys(xpriv, 0);
-    const timestamp = Math.floor(Date.now() / 1000);
+    const keys = accountFromMnemonic(mnemonic);
+    const network = await resolveNetwork();
+    const client = v1Client(network);
+    const seed = seedFromMnemonicV1(mnemonic);
+    const npkRand = freshNpkRand();
 
-    const messageBytes = buildMintMessage({
-      creatorPubkey: publicKey,
-      name,
-      decimals,
-      amount,
-      timestamp,
-    });
-    const digestHex = sha256Hex(messageBytes);
-    const signingKey = wasm.signingKey(xpriv, 0);
-    const signature = wasm.sign(signingKey, digestHex);
+    let sendCounter = 0;
+    try {
+      const sk0 = deriveSpendKey(seed, 0, 0);
+      const pull = await client.openOwnershipPullSession({
+        subject: keys.address,
+        sk0: sk0.secretKey,
+        nkCommit: hexToBytesExact(keys.nkCommit, 32, 'nkCommit'),
+      });
+      const head = await client.getAccountState(pull.session);
+      sendCounter = head.send_counter;
+    } catch {
+      sendCounter = 0;
+    }
 
-    const accepted = await postJson<{ job_id: string }>(
-      '/api/jobs/mint',
-      {
-        creator_pubkey: publicKey,
+    const next = deriveSpendKey(seed, 0, sendCounter + 1);
+    const amountStr = String(amount);
+    const body: TransitionRequest = {
+      kind: 'mint',
+      subject: keys.address,
+      next_pubkey: encodeHexLower(next.publicKey),
+      npk_rand: encodeHexLower(npkRand),
+      output_templates: [
+        {
+          recipient: keys.address,
+          asset_id: '00'.repeat(32),
+          amount: amountStr,
+        },
+      ],
+      issuance: {
         name,
         decimals,
-        amount,
-        next_public_key: nextPublicKey,
-        signature,
-        timestamp,
+        issuance_version: 1,
+        amount: amountStr,
       },
-      { 'Idempotency-Key': newIdempotencyKey() },
-    );
+    };
+
+    const accepted = await client.submitTransition(body, {
+      idempotencyKey: crypto.randomUUID(),
+    });
     const jobId = accepted.job_id;
 
-    const awaiting = await pollToAwaitingSignature(jobId);
-    const ash = awaiting.result?.account_state_hash;
-    const ocr = awaiting.result?.output_coins_root;
-    if (typeof ash !== 'string' || typeof ocr !== 'string') {
-      throw new Error(`createCoin: awaiting_signature job ${jobId} did not carry ash/ocr`);
-    }
-    const commitment = wasm.commitment(xpriv, 0, ash, ocr);
-    await sdkClient.commitJob(jobId, {
-      proof_id: awaiting.proof_id as number,
-      public_key: commitment.publicKey,
-      signature: commitment.signature,
-      message: commitment.message,
+    const awaiting = await client.waitForAwaitingSignature(jobId, {
+      sleep: (ms) => delay(Math.max(POLL_FLOOR_MS, ms)),
     });
-    await pollToCompleted(jobId);
+    if (awaiting.status !== 'awaiting_signature' || !awaiting.awaiting_signature) {
+      throw new Error(`createCoin: job ${jobId} ended in ${awaiting.status} before signature`);
+    }
 
-    return { name, decimals, amount, address };
+    const sk0 = deriveSpendKey(seed, 0, 0);
+    const pull = await client.openOwnershipPullSession({
+      subject: keys.address,
+      sk0: sk0.secretKey,
+      nkCommit: hexToBytesExact(keys.nkCommit, 32, 'nkCommit'),
+    });
+    const accountState = await client.getAccountState(pull.session);
+    const sendCounterFromAwaiting = awaiting.awaiting_signature.send_counter;
+    const spend = deriveSpendKey(seed, 0, sendCounterFromAwaiting);
+    const nextAfter = deriveSpendKey(seed, 0, sendCounterFromAwaiting + 1);
+
+    await client.refuseOrSignAndSubmit({
+      jobId,
+      localPubkey: spend.publicKey,
+      secretKey: spend.secretKey,
+      accountState: {
+        current_pubkey: accountState.current_pubkey,
+        send_counter: accountState.send_counter,
+      },
+      awaiting: awaiting.awaiting_signature,
+      nextPubkey: nextAfter.publicKey,
+      npkRand,
+      nodeNetwork: client.network,
+    });
+
+    await waitForJob(client, jobId);
+    return { name, decimals, amount, address: keys.address };
   },
 };
-
-// 4 minutes: the local multi-asset node's prover can sit a mint in `queued`
-// for a while under back-to-back fixture mints before it reaches
-// `awaiting_signature` (Mutinynet proof gen + scanner). 120 s occasionally
-// timed out the globalSetup seed under that congestion; 240 s absorbs it
-// without masking a genuinely wedged job.
-const POLL_TIMEOUT_MS = 240_000;
-const POLL_FLOOR_MS = 2_000;
-
-interface PolledJob {
-  status: string;
-  proof_id?: number | null;
-  result?: { account_state_hash?: string; output_coins_root?: string } | null;
-  error?: string | null;
-}
-
-async function pollToAwaitingSignature(jobId: string): Promise<PolledJob> {
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
-  for (;;) {
-    const job = (await sdkClient.getJob(jobId)) as unknown as PolledJob;
-    if (job.status === 'awaiting_signature') return job;
-    if (job.status === 'failed' || job.status === 'cancelled') {
-      throw new Error(`mint job ${jobId} ${job.status}: ${job.error ?? 'unknown'}`);
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(`mint job ${jobId} stuck at ${job.status} (awaiting_signature)`);
-    }
-    await new Promise((r) => setTimeout(r, POLL_FLOOR_MS));
-  }
-}
-
-async function pollToCompleted(jobId: string): Promise<void> {
-  const deadline = Date.now() + POLL_TIMEOUT_MS;
-  for (;;) {
-    const job = (await sdkClient.getJob(jobId)) as unknown as PolledJob;
-    if (job.status === 'completed') return;
-    if (job.status === 'failed' || job.status === 'cancelled') {
-      throw new Error(`mint job ${jobId} ${job.status}: ${job.error ?? 'unknown'}`);
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(`mint job ${jobId} did not complete in ${POLL_TIMEOUT_MS}ms (${job.status})`);
-    }
-    await new Promise((r) => setTimeout(r, POLL_FLOOR_MS));
-  }
-}
-
-// ---- Wire helpers (Node fetch) --------------------------------------------
-
-async function getJson<T>(path: string): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`);
-  const text = await res.text();
-  if (!res.ok) throw new Error(`GET ${path} ${res.status}: ${text}`);
-  return JSON.parse(text) as T;
-}
-
-async function postJson<T>(
-  path: string,
-  body: unknown,
-  headers: Record<string, string> = {},
-): Promise<T> {
-  const res = await fetch(`${API_URL}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  });
-  const text = await res.text();
-  if (!res.ok) throw new Error(`POST ${path} ${res.status}: ${text}`);
-  return JSON.parse(text) as T;
-}
-
-// ---- Mint-message byte layout (mirror of the SDK `buildMintMessage`) -------
-
-function sha256Hex(bytes: Uint8Array): string {
-  return createHash('sha256').update(bytes).digest('hex');
-}
-
-function hexToBytes(hex: string): Uint8Array {
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-  }
-  return out;
-}
-
-function uint64LE(value: number): Uint8Array {
-  const out = new Uint8Array(8);
-  new DataView(out.buffer).setBigUint64(0, BigInt(value), true);
-  return out;
-}
-
-function buildMintMessage(params: {
-  creatorPubkey: string;
-  name: string;
-  decimals: number;
-  amount: number;
-  timestamp: number;
-}): Uint8Array {
-  const creatorBytes = hexToBytes(params.creatorPubkey);
-  const nameBytes = new TextEncoder().encode(params.name);
-  const decimalsBytes = Uint8Array.of(params.decimals);
-  const amountBytes = uint64LE(params.amount);
-  const timestampBytes = uint64LE(params.timestamp);
-  const out = new Uint8Array(
-    creatorBytes.length +
-      nameBytes.length +
-      decimalsBytes.length +
-      amountBytes.length +
-      timestampBytes.length,
-  );
-  let offset = 0;
-  out.set(creatorBytes, offset);
-  offset += creatorBytes.length;
-  out.set(nameBytes, offset);
-  offset += nameBytes.length;
-  out.set(decimalsBytes, offset);
-  offset += decimalsBytes.length;
-  out.set(amountBytes, offset);
-  offset += amountBytes.length;
-  out.set(timestampBytes, offset);
-  return out;
-}
 
 /**
  * Session-scoped cache for the server-reported `username_domain`.
@@ -293,13 +256,12 @@ let cachedUsernameDomain: string | null = null;
 export async function getUsernameDomain(): Promise<string> {
   if (cachedUsernameDomain !== null) return cachedUsernameDomain;
   const info = await api.info();
-  const domain = info.username_domain;
+  const domain = (info as { username_domain?: string }).username_domain;
   if (!domain) {
     throw new Error(
-      `api helper: /api/info (${API_URL}) did not return \`username_domain\`. ` +
-        'The frontend renders address chips as `{8hex}@<username_domain>` and the e2e ' +
-        'helpers derive their locators from it — a missing field means the server ' +
-        'is older than PR #98 or the API URL is wrong.',
+      `api helper: /v1/info (${API_URL}) did not return username_domain. ` +
+        'The frontend renders address chips as {8hex}@<username_domain> and the e2e ' +
+        'helpers derive their locators from it.',
     );
   }
   cachedUsernameDomain = domain;

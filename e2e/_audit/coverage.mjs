@@ -51,7 +51,7 @@ const EXEMPT_TESTIDS = new Set([
   'passkey-restore-btn',
   'unlock-passkey-btn',
   // Gated on the runtime `username_claim` capability reported by
-  // /api/info — hosted DEV + PRD images report `false` (Cargo feature
+  // /v1/info — hosted DEV + PRD images report `false` (Cargo feature
   // off on the node), so the button does not render against either.
   // Self-hosters who flip the server-side feature ship their own E2E.
   'username-claim-btn',
@@ -65,7 +65,7 @@ const EXEMPT_TESTIDS = new Set([
   // reliably catch; the phase transitions are covered by the client
   // lifecycle unit tests' `onPhase` assertions instead.
   'send-phase',
-  // Faucet error toast (issue #99) -- only fires when /api/jobs/mint
+  // Faucet error toast (issue #99) -- only fires when /v1/jobs/mint
   // returns an ApiError; covered by the unit-level mapping tests, not
   // reachable in the happy-path E2E flow.
   'wallet-mint-error',

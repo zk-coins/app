@@ -21,7 +21,7 @@ export default defineConfig({
         'src/hooks/**',
         'src/components/**',
         'src/app/**',
-        // E2E-only `/api/info` proxy. Not app code, but it is security-
+        // E2E-only `/v1/info` proxy. Not app code, but it is security-
         // sensitive (it handles upstream errors + logs), so its pure
         // logic is unit-tested and pinned at 100 % below. The standalone
         // entry that binds a port is `c8 ignore`d (E2E-exercised only).

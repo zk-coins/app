@@ -94,7 +94,7 @@ test.describe('Asset detail', () => {
     // `usePortfolio` tick then resolves `loaded=true` with the asset absent →
     // the `asset-detail-missing` surface. (Rewriting the Link's DOM `href`
     // doesn't work: Next routes from the React `href` prop, not the attribute.)
-    await page.context().route(/\/api\/balance\/[^/?]+$/, (route) =>
+    await page.context().route(/\/v1\/balance\/[^/?]+$/, (route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',
@@ -115,7 +115,7 @@ test.describe('Asset detail', () => {
     // account — a hard `goto` would drop it). With the fetch in flight the
     // detail page renders only its header: `usePortfolio` keeps `loaded`
     // false, so neither the body nor the missing surface shows yet.
-    await page.context().route(/\/api\/balance\/[^/?]+$/, async (route) => {
+    await page.context().route(/\/v1\/balance\/[^/?]+$/, async (route) => {
       await new Promise((r) => setTimeout(r, 20_000));
       await route.abort();
     });

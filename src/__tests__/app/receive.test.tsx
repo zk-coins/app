@@ -30,7 +30,6 @@ vi.mock('next/navigation', () => ({
 const ALICE = {
   username: 'alice',
   address: 'a'.repeat(64),
-  numPubkeys: 0,
   mnemonic:
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   nkCommit: '00'.repeat(32),
@@ -48,7 +47,6 @@ beforeEach(() => {
   });
   useWalletStore.setState({
     account: ALICE,
-    balance: 0,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: true,
@@ -68,11 +66,21 @@ afterEach(() => {
 describe('ReceivePage — funded render', () => {
   it('renders the receive heading, QR, address card, and copy button', () => {
     render(<ReceivePage />);
-    expect(screen.getByTestId('receive-heading')).toHaveTextContent('Receive Bitcoin');
+    expect(screen.getByTestId('receive-heading')).toHaveTextContent('Receive');
     expect(screen.getByTestId('qr-code')).toBeInTheDocument();
     expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy name');
     // The address card shows the zk-form of the address ({hex}@zkcoins.app).
     expect(screen.getByText(ALICE_ZK)).toBeInTheDocument();
+  });
+
+  it('without a name offers the account address as a technical receive path', () => {
+    useWalletStore.setState({
+      account: { ...ALICE, username: undefined },
+    });
+    render(<ReceivePage />);
+    expect(screen.getByTestId('receive-name-unavailable')).toBeInTheDocument();
+    expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy address');
+    expect(screen.getByText(ALICE.address)).toBeInTheDocument();
   });
 
   it('the back link routes to /', () => {

@@ -29,7 +29,6 @@ vi.mock('@/lib/features', () => ({
 
 const ALICE = {
   address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
-  numPubkeys: 0,
   mnemonic:
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   nkCommit: '00'.repeat(32),
@@ -47,7 +46,6 @@ beforeEach(() => {
   });
   useWalletStore.setState({
     account: ALICE,
-    balance: 0,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
@@ -70,8 +68,6 @@ describe('WalletScreen — info error is visible', () => {
       limit: 50,
       offset: 0,
     });
-    vi.spyOn(api, 'walletBalance').mockResolvedValue({ balance: 0, num_sends: 0 });
-
     const { findByTestId } = render(<WalletScreen />);
 
     const el = await findByTestId('network-info-error');
@@ -100,8 +96,6 @@ describe('WalletScreen — info error is visible', () => {
       limit: 50,
       offset: 0,
     });
-    vi.spyOn(api, 'walletBalance').mockResolvedValue({ balance: 0, num_sends: 0 });
-
     render(<WalletScreen />);
 
     await waitFor(() => {

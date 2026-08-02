@@ -43,7 +43,6 @@ vi.mock('@/lib/features', () => ({
 
 const ALICE = {
   address: 'a'.repeat(64),
-  numPubkeys: 0,
   mnemonic:
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   nkCommit: '00'.repeat(32),
@@ -56,7 +55,6 @@ beforeEach(() => {
   routerPush.mockClear();
   useWalletStore.setState({
     account: ALICE,
-    balance: null,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: true,

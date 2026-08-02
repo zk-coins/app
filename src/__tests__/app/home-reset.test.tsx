@@ -61,7 +61,6 @@ const ALICE_ADDRESS = 'a'.repeat(64);
 beforeEach(() => {
   useWalletStore.setState({
     account: null,
-    balance: null,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,

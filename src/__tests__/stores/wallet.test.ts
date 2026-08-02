@@ -1,28 +1,30 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { useWalletStore } from '@/stores/wallet';
+import {
+  useWalletStore,
+  parseWalletPayload,
+  IncompatibleWalletError,
+  WALLET_PAYLOAD_VERSION,
+} from '@/stores/wallet';
 import type { Account } from '@/stores/wallet';
 
 const testAccount: Account = {
   address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
-  numPubkeys: 0,
   mnemonic:
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   nkCommit: '00'.repeat(32),
 };
 
 beforeEach(() => {
-  // Reset store
   useWalletStore.setState({
     account: null,
-    balance: null,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
     storedAddress: null,
     storedAuthMethod: null,
     error: null,
+    needsSeedReimport: false,
   });
-  // IndexedDB is reset in setup.ts via fresh IDBFactory per test
   localStorage.clear();
 });
 
@@ -30,11 +32,11 @@ describe('wallet store — basic state', () => {
   it('has correct initial state', () => {
     const state = useWalletStore.getState();
     expect(state.account).toBeNull();
-    expect(state.balance).toBeNull();
     expect(state.isLoading).toBe(false);
     expect(state.isLocked).toBe(false);
     expect(state.hasStoredWallet).toBe(false);
     expect(state.error).toBeNull();
+    expect(state.needsSeedReimport).toBe(false);
   });
 
   it('sets account', () => {
@@ -61,66 +63,6 @@ describe('wallet store — basic state', () => {
     useWalletStore.getState().setError(null);
     expect(useWalletStore.getState().error).toBeNull();
   });
-});
-
-describe('wallet store — balance and pubkeys', () => {
-  it('sets balance as a top-level value, independent of account', () => {
-    useWalletStore.getState().setBalance(42000);
-    expect(useWalletStore.getState().balance).toBe(42000);
-    expect(useWalletStore.getState().account).toBeNull();
-  });
-
-  it('keeps balance separate from account identity', () => {
-    useWalletStore.getState().setAccount(testAccount);
-    useWalletStore.getState().setBalance(7777);
-    const state = useWalletStore.getState();
-    expect(state.balance).toBe(7777);
-    expect(state.account).toEqual(testAccount);
-  });
-
-  it('increments pubkeys', () => {
-    useWalletStore.getState().setAccount(testAccount);
-    useWalletStore.getState().incrementPubkeys();
-    expect(useWalletStore.getState().account?.numPubkeys).toBe(1);
-    useWalletStore.getState().incrementPubkeys();
-    expect(useWalletStore.getState().account?.numPubkeys).toBe(2);
-  });
-
-  it('does nothing when incrementing without account', () => {
-    useWalletStore.getState().incrementPubkeys();
-    expect(useWalletStore.getState().account).toBeNull();
-  });
-
-  it('syncs numPubkeys from the server (replaces local counter)', () => {
-    // Regression for the seed-restore desync: a freshly restored wallet
-    // has `numPubkeys = 0` even when the server holds N > 0 sends for
-    // the same address. `syncNumPubkeys(N)` is the authoritative path
-    // that heals the desync — replaces, doesn't increment.
-    useWalletStore.getState().setAccount({ ...testAccount, numPubkeys: 0 });
-    useWalletStore.getState().syncNumPubkeys(5);
-    expect(useWalletStore.getState().account?.numPubkeys).toBe(5);
-    // Subsequent ticks emit the same value — must be a no-op so React
-    // doesn't re-render every 5-s balance poll.
-    const before = useWalletStore.getState().account;
-    useWalletStore.getState().syncNumPubkeys(5);
-    expect(useWalletStore.getState().account).toBe(before);
-  });
-
-  it('syncNumPubkeys is a no-op when no account is loaded', () => {
-    // Defensive: pre-account ticks must not throw and must not
-    // spuriously create an account object.
-    useWalletStore.getState().syncNumPubkeys(3);
-    expect(useWalletStore.getState().account).toBeNull();
-  });
-
-  it('syncNumPubkeys can move the counter both up and down', () => {
-    // Down-counts are not expected in production (server is monotonic),
-    // but the store must not reject them — a desync diagnostic step is
-    // valuable if the server is ever reset/wiped.
-    useWalletStore.getState().setAccount({ ...testAccount, numPubkeys: 7 });
-    useWalletStore.getState().syncNumPubkeys(2);
-    expect(useWalletStore.getState().account?.numPubkeys).toBe(2);
-  });
 
   it('sets username on existing account', () => {
     useWalletStore.getState().setAccount(testAccount);
@@ -138,14 +80,46 @@ describe('wallet store — balance and pubkeys', () => {
     useWalletStore.getState().setUsername('alice');
     const account = useWalletStore.getState().account;
     expect(account?.address).toBe(testAccount.address);
-    expect(account?.numPubkeys).toBe(testAccount.numPubkeys);
+    expect(account?.mnemonic).toBe(testAccount.mnemonic);
+    expect(account?.nkCommit).toBe(testAccount.nkCommit);
     expect(account?.username).toBe('alice');
+  });
+});
+
+describe('parseWalletPayload — versioned persistence', () => {
+  it('accepts a v2 payload with mnemonic + nkCommit', () => {
+    const raw = JSON.stringify({
+      version: WALLET_PAYLOAD_VERSION,
+      account: testAccount,
+    });
+    expect(parseWalletPayload(raw)).toEqual(testAccount);
+  });
+
+  it('refuses unversioned legacy xpriv payloads', () => {
+    const raw = JSON.stringify({
+      account: {
+        address: testAccount.address,
+        xpriv: 'xprv-legacy',
+      },
+    });
+    expect(() => parseWalletPayload(raw)).toThrow(IncompatibleWalletError);
+  });
+
+  it('refuses payload missing mnemonic/nkCommit', () => {
+    const raw = JSON.stringify({
+      version: 2,
+      account: { address: testAccount.address },
+    });
+    expect(() => parseWalletPayload(raw)).toThrow(IncompatibleWalletError);
+  });
+
+  it('refuses invalid JSON', () => {
+    expect(() => parseWalletPayload('not-json')).toThrow(IncompatibleWalletError);
   });
 });
 
 describe('wallet store — defensive returns when no account', () => {
   it('saveWithPassword silently returns when no account is set', async () => {
-    // Should not throw, should not write anything.
     await expect(useWalletStore.getState().saveWithPassword('pw12345678')).resolves.toBeUndefined();
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     expect(await loadEncryptedWallet()).toBeNull();
@@ -163,7 +137,6 @@ describe('wallet store — unlock edge cases', () => {
   it('unlockWithPassword throws on a stored wallet that has no salt', async () => {
     const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
     await saveEncryptedWallet({
-      // Missing salt — represents a corrupted or legacy-format blob.
       encrypted: { ciphertext: 'ct', iv: 'iv' },
       authMethod: 'seed',
       address: 'c'.repeat(64),
@@ -173,31 +146,60 @@ describe('wallet store — unlock edge cases', () => {
       'No salt found in stored wallet',
     );
   });
+
+  it('marks needsSeedReimport when decrypting an incompatible payload', async () => {
+    useWalletStore.getState().setAccount(testAccount);
+    await useWalletStore.getState().saveWithPassword('testpassword123');
+
+    // Overwrite ciphertext with a valid-password encrypt of a legacy blob
+    // by re-saving via low-level encrypt of unversioned JSON.
+    const { encrypt, deriveKeyFromPassword } = await import('@/lib/crypto/encryption');
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    const stored = await loadEncryptedWallet();
+    expect(stored).not.toBeNull();
+    const saltBin = atob(stored!.encrypted.salt!);
+    const salt = new Uint8Array(saltBin.length);
+    for (let i = 0; i < saltBin.length; i++) salt[i] = saltBin.charCodeAt(i);
+    const { key } = await deriveKeyFromPassword('testpassword123', salt);
+    const legacy = JSON.stringify({
+      account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 },
+    });
+    const encrypted = await encrypt(legacy, key, salt);
+    await saveEncryptedWallet({
+      encrypted,
+      authMethod: 'seed',
+      address: testAccount.address,
+      createdAt: Date.now(),
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
+  });
 });
 
 describe('wallet store — password encryption', () => {
-  it('saves and unlocks with password', async () => {
-    // Set up account
+  it('saves and unlocks with password (v2 payload)', async () => {
     useWalletStore.getState().setAccount(testAccount);
-
-    // Save encrypted
     await useWalletStore.getState().saveWithPassword('testpassword123');
 
-    // Verify wallet is stored in IndexedDB
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     const stored = await loadEncryptedWallet();
     expect(stored).not.toBeNull();
     expect(stored?.authMethod).toBe('seed');
     expect(stored?.address).toBe(testAccount.address);
+    expect(stored?.payloadVersion).toBe(WALLET_PAYLOAD_VERSION);
 
-    // Clear state to simulate page reload
     useWalletStore.setState({ account: null });
 
-    // Unlock
     await useWalletStore.getState().unlockWithPassword('testpassword123');
     const state = useWalletStore.getState();
     expect(state.account).toEqual(testAccount);
     expect(state.isLocked).toBe(false);
+    expect(state.needsSeedReimport).toBe(false);
   });
 
   it('fails to unlock with wrong password', async () => {
@@ -221,15 +223,13 @@ describe('wallet store — PRF encryption', () => {
     useWalletStore.getState().setAccount(testAccount);
     await useWalletStore.getState().saveWithPrf(prfOutput);
 
-    // Verify stored
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     const stored = await loadEncryptedWallet();
     expect(stored?.authMethod).toBe('passkey');
+    expect(stored?.payloadVersion).toBe(WALLET_PAYLOAD_VERSION);
 
-    // Simulate reload
     useWalletStore.setState({ account: null });
 
-    // Unlock with same PRF
     await useWalletStore.getState().unlockWithPrf(prfOutput);
     expect(useWalletStore.getState().account).toEqual(testAccount);
   });
@@ -254,13 +254,11 @@ describe('wallet store — PRF encryption', () => {
 });
 
 describe('wallet store — lock', () => {
-  it('clears account, resets balance to null, and sets isLocked', () => {
+  it('clears account and sets isLocked (no balance field)', () => {
     useWalletStore.getState().setAccount(testAccount);
-    useWalletStore.getState().setBalance(50000);
     useWalletStore.getState().lock();
     const state = useWalletStore.getState();
     expect(state.account).toBeNull();
-    expect(state.balance).toBeNull();
     expect(state.isLocked).toBe(true);
     expect(state.storedAddress).toBe(testAccount.address);
   });
@@ -290,21 +288,17 @@ describe('wallet store — checkForStoredWallet', () => {
     expect(state.isLocked).toBe(true);
   });
 
-  it('loads legacy localStorage wallet directly', async () => {
-    // Older bundles persisted `{ account, transactions }` in plaintext.
-    // The store now ignores any `transactions` field and loads only the
-    // account — verify the account still hydrates from the legacy blob.
+  it('clears legacy localStorage blobs without auto-loading them', async () => {
+    // Unversioned plaintext blobs are incompatible — never promote to account.
     const legacyData = {
-      account: testAccount,
-      transactions: [{ id: 'tx-1', type: 'mint', amount: 10000, timestamp: 1700000000000 }],
+      account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 },
     };
     localStorage.setItem('zkcoins_wallet', JSON.stringify(legacyData));
 
     await useWalletStore.getState().checkForStoredWallet();
     const state = useWalletStore.getState();
-    expect(state.account).toEqual(testAccount);
-    expect(state.isLocked).toBe(false);
-    expect(state.hasStoredWallet).toBe(false);
+    expect(state.account).toBeNull();
+    expect(localStorage.getItem('zkcoins_wallet')).toBeNull();
   });
 
   it('does nothing when no wallet stored anywhere', async () => {
@@ -315,10 +309,6 @@ describe('wallet store — checkForStoredWallet', () => {
   });
 
   it('refreshes stored flags without re-locking on re-mount', async () => {
-    // Simulate a re-mount: the account is already unlocked in memory
-    // (e.g. user navigated away and back) and the encrypted blob still
-    // exists in IndexedDB. checkForStoredWallet should refresh the
-    // hasStoredWallet flag without touching isLocked.
     const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
     await saveEncryptedWallet({
       encrypted: { ciphertext: 'ct', iv: 'iv' },
@@ -345,8 +335,6 @@ describe('wallet store — checkForStoredWallet', () => {
   });
 
   it('returns early without setting flags when the unlocked account has no stored blob', async () => {
-    // Re-mount path but IndexedDB is empty — the function should still
-    // return early and leave the existing in-memory state intact.
     useWalletStore.setState({
       account: testAccount,
       isLocked: false,
@@ -365,7 +353,6 @@ describe('wallet store — deleteWallet', () => {
   it('clears IndexedDB, localStorage, and state', async () => {
     useWalletStore.getState().setAccount(testAccount);
     await useWalletStore.getState().saveWithPassword('pw12345678');
-    // A stale history cache from an older bundle must be swept on delete.
     localStorage.setItem('zkcoins_transactions', JSON.stringify([{ id: 'x' }]));
 
     await useWalletStore.getState().deleteWallet();
@@ -376,13 +363,12 @@ describe('wallet store — deleteWallet', () => {
     expect(state.hasStoredWallet).toBe(false);
     expect(state.storedAddress).toBeNull();
     expect(state.storedAuthMethod).toBeNull();
+    expect(state.needsSeedReimport).toBe(false);
 
-    // IndexedDB should be empty
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     const stored = await loadEncryptedWallet();
     expect(stored).toBeNull();
 
-    // Legacy localStorage history cache should be removed
     expect(localStorage.getItem('zkcoins_transactions')).toBeNull();
   });
 });

@@ -31,8 +31,6 @@ export interface V1AccountKeys {
   mnemonic: string;
   /** 32-byte `nk_commit` as lowercase hex (bound into the address). */
   nkCommit: string;
-  /** Local send-counter mirror; starts at 0. */
-  numPubkeys: number;
   /** sk₀ public key (x-only), lowercase hex — identity key. */
   pk0: string;
 }
@@ -71,7 +69,6 @@ export function accountKeysFromSeed(
   return {
     address: encodeZkAddress(addressRaw),
     nkCommit: encodeHexLower(nkCommitBytes),
-    numPubkeys: 0,
     pk0: encodeHexLower(sk0.publicKey),
   };
 }

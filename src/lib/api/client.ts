@@ -475,11 +475,21 @@ export const api = {
   /**
    * Send with §7.5 delivery credential at output position 0 (and optional
    * change self-output without delivery). Signs via the custody handshake.
+   *
+   * Fail-closed when `input_coins` is empty: coin inventory selection is
+   * not available on the thin app surface until AccountState coin decoding
+   * ships. Never POST /v1/tx with an empty input list.
    */
   send: async (
     params: SendParams,
     opts: { onPhase?: (status: V1Job) => void } = {},
   ): Promise<V1Job> => {
+    if (!Array.isArray(params.input_coins) || params.input_coins.length === 0) {
+      throw new ApiError(
+        501,
+        'send not available yet — input coin selection requires AccountState coin inventory decode',
+      );
+    }
     try {
       const client = v1Client();
       const accountIndex = params.accountIndex ?? 0;
@@ -661,24 +671,22 @@ export const api = {
     ),
 
   /**
-   * Portfolio via ownership pull + account state. The v1 wire does not
-   * expose a legacy portfolio route; balances live
-   * inside `serialize(AccountState)`. Until a full AccountState decoder
-   * ships in the app, this returns the head metadata with an empty asset
-   * list when balances cannot be decoded — fail-closed for amounts (0),
-   * never invents balances.
+   * Portfolio via ownership pull + account state. Balances live inside
+   * `serialize(AccountState)`. Until a full AccountState balances decoder
+   * ships in the app, refuse rather than inventing an empty wallet.
+   * Empty `assets: []` would look like a funded wallet with nothing in it
+   * — that is a silent falsehood and is not returned here.
    */
-  ownerBalances: async (address: string): Promise<OwnerBalanceResponse> => {
-    // Without mnemonic/nkCommit the app cannot open a pull session.
-    // Callers that only have an address get an empty portfolio rather than
-    // a fabricated balance. Screens that need live balances pass through
-    // accountState after unlock.
-    void address;
-    return { address, assets: [] };
+  ownerBalances: async (_address: string): Promise<OwnerBalanceResponse> => {
+    throw new ApiError(
+      501,
+      'portfolio not available in this build — AccountState balances decode is not wired yet',
+    );
   },
 
   /**
    * Authoritative account head (ownership pull). Requires signing material.
+   * Exposes send_counter / current_pubkey only — not coin balances.
    */
   accountState: async (params: {
     address: string;
@@ -702,31 +710,26 @@ export const api = {
 
   /**
    * Single-asset balance helper. Without a full AccountState balances
-   * decoder this returns `num_sends` from the head and balance `0` when
-   * the head is available but balances are not decoded — never a silent
-   * non-zero guess.
+   * decoder this refuses rather than returning balance `0` (which would
+   * look like an empty wallet). Callers that only need `send_counter`
+   * must use {@link api.accountState}.
    */
-  walletBalance: async (params: {
+  walletBalance: async (_params: {
     address: string;
     mnemonic: string;
     nkCommit: string;
   }): Promise<BalanceResponse> => {
-    try {
-      const head = await api.accountState(params);
-      return {
-        balance: 0,
-        num_sends: head.send_counter,
-      };
-    } catch (err) {
-      mapV1Error(err);
-    }
+    throw new ApiError(
+      501,
+      'wallet balance not available in this build — AccountState balances decode is not wired yet',
+    );
   },
 
   /** Per-asset balance — not available without AccountState decode; fail closed. */
   balance: async (_address: string, _assetId: string): Promise<BalanceResponse> => {
     throw new ApiError(
       501,
-      'per-asset balance requires AccountState balances decode (not yet on the thin app surface)',
+      'per-asset balance not available in this build — AccountState balances decode is not wired yet',
     );
   },
 

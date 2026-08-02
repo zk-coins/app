@@ -128,7 +128,7 @@ test.describe('Send asset', () => {
     // `href` prop, not the attribute.)
     await aliceLogin(page);
     await expect(page.getByTestId('asset-list')).toBeVisible({ timeout: 30_000 });
-    await page.context().route(/\/api\/balance\/[^/?]+$/, (route) =>
+    await page.context().route(/\/v1\/balance\/[^/?]+$/, (route) =>
       route.fulfill({
         status: 200,
         contentType: 'application/json',

@@ -66,8 +66,14 @@ export function UnlockScreen({
     setError(null);
     try {
       await onUnlockPassword(password);
-    } catch {
-      setError('Incorrect password');
+    } catch (err) {
+      if (err instanceof Error && err.name === 'IncompatibleWalletError') {
+        setError(
+          `${err.message} Use “Forgot password? Reset wallet”, then restore with your 12-word seed.`,
+        );
+      } else {
+        setError('Incorrect password');
+      }
     } finally {
       setUnlocking(false);
     }
@@ -80,6 +86,12 @@ export function UnlockScreen({
       const result = await authenticatePasskey(credentialId ?? undefined);
       await onUnlockPrf(result.prfOutput);
     } catch (err) {
+      if (err instanceof Error && err.name === 'IncompatibleWalletError') {
+        setError(
+          `${err.message} Use “Forgot password? Reset wallet”, then restore with your 12-word seed.`,
+        );
+        return;
+      }
       const cancelled =
         err instanceof Error && (err.name === 'NotAllowedError' || err.name === 'AbortError');
       setError(cancelled ? 'Authentication cancelled.' : 'Failed to unlock wallet');

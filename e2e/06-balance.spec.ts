@@ -30,7 +30,7 @@ test.describe('View balance', () => {
     // funded wallet's primary chrome — assert it before baselining.
     await expect(page.getByTestId('balance-value')).toBeVisible({ timeout: 30_000 });
     // issue #175: a funded wallet renders its server-owned history
-    // (`GET /api/history`) — at least the faucet mint — NOT the empty
+    // (`GET /v1/history`) — at least the faucet mint — NOT the empty
     // state. Alice is seeded by globalSetup, so the mint row must appear
     // without any local action. The amount/time are masked in the golden;
     // the row's presence is the regression guard the previous baseline lacked.

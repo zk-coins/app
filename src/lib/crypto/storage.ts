@@ -28,6 +28,13 @@ export interface StoredWallet {
   authMethod: 'passkey' | 'seed';
   address: string; // stored unencrypted for display while locked
   createdAt: number;
+  /**
+   * Outer envelope version for the encrypted payload schema
+   * (`{ version, account: { mnemonic, nkCommit, … } }`). Absent on
+   * pre-migration records (xpriv era) — callers must treat missing
+   * version as incompatible and force seed re-import.
+   */
+  payloadVersion?: number;
 }
 
 function openDb(): Promise<IDBDatabase> {
