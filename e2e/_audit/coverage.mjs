@@ -255,9 +255,7 @@ function isFeatureGatedExempt(entry) {
 
 const fails = {
   uncoveredTestids: sectionA.filter((e) => !e.exempt),
-  unlabeledButtons: sectionC.filter(
-    (e) => !EXEMPT_FILES.has(e.file) && !isFeatureGatedExempt(e),
-  ),
+  unlabeledButtons: sectionC.filter((e) => !EXEMPT_FILES.has(e.file) && !isFeatureGatedExempt(e)),
 };
 
 const passed = fails.uncoveredTestids.length === 0 && fails.unlabeledButtons.length === 0;

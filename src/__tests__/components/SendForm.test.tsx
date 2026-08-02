@@ -22,7 +22,13 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  numPubkeys: 0,
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 const ASSET_ID = 'c'.repeat(64);
 
 // 8-decimal asset so a typed "1" maps to 100_000_000 atomic units, like BTC.

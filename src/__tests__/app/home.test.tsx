@@ -54,7 +54,9 @@ vi.mock('next/navigation', () => ({
 const ALICE = {
   address: 'a'.repeat(64),
   numPubkeys: 0,
-  xpriv: 'xprv9s21ZrQH143K3GJpoapnV8SFfuZcECe',
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
 };
 
 beforeEach(() => {
@@ -84,7 +86,11 @@ beforeEach(() => {
   // WalletScreen + UnlockScreen both fire api.info / api.balance on mount;
   // WalletScreen's useHistory additionally fires api.getHistory.
   // Stub them so the routing assertions don't race the network layer.
-  vi.spyOn(api, 'info').mockResolvedValue({ network: 'signet' });
+  vi.spyOn(api, 'info').mockResolvedValue({
+    network: 'testnet',
+    protocol_version: 'v1',
+    features: ['wallet'],
+  });
   vi.spyOn(api, 'ownerBalances').mockResolvedValue({ address: ALICE.address, assets: [] });
   vi.spyOn(api, 'getHistory').mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
 });

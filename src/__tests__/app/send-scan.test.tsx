@@ -62,7 +62,9 @@ const stubCloseBtn = () => screen.findByRole('button', { name: 'stub scan close'
 const ALICE = {
   address: 'a'.repeat(64),
   numPubkeys: 0,
-  xpriv: 'xprv-alice',
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
 };
 
 beforeEach(() => {

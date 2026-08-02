@@ -38,7 +38,13 @@ vi.mock('@/lib/features', () => ({
   useFeatures: () => FEATURES_STATE,
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  numPubkeys: 0,
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 
 let balanceSpy: ReturnType<typeof vi.spyOn>;
 let infoSpy: ReturnType<typeof vi.spyOn>;
@@ -53,8 +59,9 @@ beforeEach(() => {
   });
   useNetworkStore.setState({
     apiUrl: 'https://test.api',
-    networkName: 'Mutinynet',
-    bitcoinNetwork: 'mutinynet',
+    network: 'regtest',
+    infoError: null,
+    infoLoaded: true,
   });
   useWalletStore.setState({
     account: ALICE,
@@ -66,9 +73,12 @@ beforeEach(() => {
     storedAuthMethod: null,
     error: null,
   });
-  infoSpy = vi
-    .spyOn(api, 'info')
-    .mockResolvedValue({ network: 'Mutinynet', username_domain: 'local.zkcoins.test' });
+  infoSpy = vi.spyOn(api, 'info').mockResolvedValue({
+    network: 'regtest',
+    features: ['wallet'],
+    protocol_version: 'v1',
+    username_domain: 'local.zkcoins.test',
+  });
   balanceSpy = vi.spyOn(api, 'walletBalance');
   historySpy = vi
     .spyOn(api, 'getHistory')
@@ -93,7 +103,8 @@ describe('WalletScreen — single-asset balance hero', () => {
     await waitFor(() => {
       expect(usd).not.toHaveAttribute('data-loading', 'true');
     });
-    expect(balanceSpy).toHaveBeenCalledWith(ALICE.address);
+    // v1 balance fetch carries the account context object, not a bare address.
+    expect(balanceSpy).toHaveBeenCalledWith(expect.objectContaining({ address: ALICE.address }));
     // The portfolio / create-coin entry must NOT render on the single-asset surface.
     expect(document.querySelector('[data-testid="asset-list"]')).toBeNull();
     expect(document.querySelector('[data-testid="create-coin-btn"]')).toBeNull();
@@ -116,9 +127,11 @@ describe('WalletScreen — single-asset balance hero', () => {
       .mockResolvedValue({ balance: 10_000, num_sends: 0 });
     mintSpy.mockResolvedValue({
       job_id: 'mint-1',
+      kind: 'mint',
       status: 'completed',
       phase: 'completed',
-      result: { success: true },
+      progress: 1,
+      result: { output_coin_ids: ['01'.repeat(32)] },
     });
     const user = userEvent.setup();
     const { findByTestId } = render(<WalletScreen />);
@@ -131,7 +144,8 @@ describe('WalletScreen — single-asset balance hero', () => {
     // key instead of posting the old server-mediated `{account_address}`.
     expect(mintSpy).toHaveBeenCalledWith({
       account_address: ALICE.address,
-      xpriv: ALICE.xpriv,
+      mnemonic: ALICE.mnemonic,
+      nkCommit: ALICE.nkCommit,
     });
     await waitFor(() => {
       expect(balanceSpy.mock.calls.length).toBeGreaterThanOrEqual(2);

@@ -41,7 +41,13 @@ vi.mock('@/lib/features', () => ({
   useFeatures: () => FEATURES_STATE,
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  numPubkeys: 0,
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 
 let createSpy: ReturnType<typeof vi.spyOn>;
 
@@ -68,9 +74,11 @@ afterEach(() => {
 
 const completed: JobStatus = {
   job_id: 'mint-1',
+  kind: 'mint',
   status: 'completed',
   phase: 'completed',
-  result: { success: true, proof_id: 1 },
+  progress: 1,
+  result: { output_coin_ids: ['01'.repeat(32)] },
 };
 
 describe('CreateCoinPage — validation', () => {
@@ -132,7 +140,8 @@ describe('CreateCoinPage — happy path', () => {
         name: 'MyCoin',
         decimals: 2,
         amount: 1000,
-        xpriv: ALICE.xpriv,
+        mnemonic: ALICE.mnemonic,
+        nkCommit: ALICE.nkCommit,
       }),
       expect.any(Object),
     );
@@ -148,7 +157,13 @@ describe('CreateCoinPage — happy path', () => {
       _req: unknown,
       opts: { onPhase?: (s: JobStatus) => void },
     ) => {
-      opts.onPhase?.({ job_id: 'mint-1', status: 'proving', phase: 'proving' } as JobStatus);
+      opts.onPhase?.({
+        job_id: 'mint-1',
+        kind: 'mint',
+        status: 'proving',
+        phase: 'proving',
+        progress: 0.4,
+      });
       return completed;
     }) as unknown as typeof api.createCoin);
     const user = userEvent.setup();

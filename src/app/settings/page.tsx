@@ -83,7 +83,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 export default function SettingsPage() {
   const router = useRouter();
-  const { networkName, apiUrl } = useNetworkStore();
+  const { network, apiUrl } = useNetworkStore();
   const { account, deleteWallet } = useWalletStore();
   const { reset: resetAuth } = useAuthStore();
   const nodeHost = apiUrl.replace(/^https?:\/\//, '');
@@ -148,10 +148,10 @@ export default function SettingsPage() {
             <p className="text-[13px] font-medium text-ink">Version</p>
             <p className="mono text-[12px] text-ink2">v{APP_VERSION}</p>
           </div>
-          {networkName && (
+          {network && (
             <div className="flex items-start justify-between gap-6 py-4">
               <p className="text-[13px] font-medium text-ink">Network</p>
-              <p className="mono text-[12px] text-ink2 lowercase">{networkName}</p>
+              <p className="mono text-[12px] text-ink2 lowercase">{network}</p>
             </div>
           )}
           <div className="flex items-start justify-between gap-6 py-4">

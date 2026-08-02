@@ -5,21 +5,25 @@ import {
   loadEncryptedWallet,
   deleteEncryptedWallet,
   clearLegacyStorage,
-  type StoredWallet,
 } from '@/lib/crypto/storage';
 
 export interface Account {
+  /** Bech32m `zk1…` subject (never shown as primary identity when a name is set). */
   address: string;
+  /** BIP-39 mnemonic — signing material; never leaves the device unencrypted. */
+  mnemonic: string;
+  /** 32-byte nk_commit as lowercase hex (bound into the address). */
+  nkCommit: string;
+  /** Local mirror of send_counter; server head is the source of truth. */
   numPubkeys: number;
-  xpriv: string;
+  /** Display name (normalized email-style) when provisioned. */
   username?: string;
 }
 
 interface WalletState {
   account: Account | null;
   // Server-state, never persisted. `null` = not fetched yet (post-unlock /
-  // post-restore, before the first /api/balance tick). `0` = empty wallet.
-  // Components must distinguish the two to avoid a "Wallet is empty" flash.
+  // post-restore, before the first balance tick). `0` = empty wallet.
   balance: number | null;
   isLoading: boolean;
   isLocked: boolean;
@@ -32,23 +36,14 @@ interface WalletState {
   setBalance: (balance: number) => void;
   setUsername: (username: string) => void;
   /**
-   * Sync the local `numPubkeys` counter from the server's
-   * `BalanceResponse.num_sends`. The server is the source of truth
-   * for the BIP-32 child-index counter — see the field doc on
-   * `BalanceResponseSchema`. Callers (WalletScreen, SendPage) pass
-   * the value through from every balance tick so a seed-restored
-   * wallet auto-heals to the correct index without local
-   * bookkeeping.
-   *
-   * No-op if no account is loaded, or if the local counter already
-   * matches the server (avoids an unnecessary React re-render).
+   * Sync the local `numPubkeys` counter from the server's send_counter.
+   * No-op if no account is loaded, or if the local counter already matches.
    */
   syncNumPubkeys: (numSends: number) => void;
   incrementPubkeys: () => void;
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 
-  // Encrypted storage operations
   saveWithPassword: (password: string) => Promise<void>;
   saveWithPrf: (prfOutput: Uint8Array) => Promise<void>;
   unlockWithPassword: (password: string) => Promise<void>;
@@ -57,11 +52,6 @@ interface WalletState {
   checkForStoredWallet: () => Promise<void>;
   deleteWallet: () => Promise<void>;
 }
-
-// NOTE: transaction history is deliberately NOT stored here. It is
-// server-owned truth, fetched from `GET /api/history` via `useHistory`
-// (issue #175) — a local copy would drift on every fresh tab, cleared
-// storage, or second device. See CONTRIBUTING.md § Thin Client.
 
 export const useWalletStore = create<WalletState>((set, get) => ({
   account: null,
@@ -191,9 +181,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   checkForStoredWallet: async () => {
-    // If we already have an unlocked account in memory, this is a re-mount
-    // (e.g., navigating /apps -> /). Don't re-lock — just refresh the
-    // hasStoredWallet flag without touching isLocked.
     const current = get();
     if (current.account && !current.isLocked) {
       try {
@@ -211,7 +198,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       return;
     }
 
-    // Check IndexedDB for encrypted wallet
     try {
       const stored = await loadEncryptedWallet();
       if (stored) {
@@ -227,7 +213,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       // IndexedDB not available
     }
 
-    // Check legacy localStorage
     /* c8 ignore next — SSR guard, unreachable in the browser test env */
     if (typeof window !== 'undefined') {
       try {
@@ -235,7 +220,6 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         if (legacy) {
           const data = JSON.parse(legacy);
           if (data.account) {
-            // Load legacy data directly (will be migrated on next save)
             set({
               account: data.account,
               balance: null,

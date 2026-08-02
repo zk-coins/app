@@ -31,7 +31,15 @@ export default function AssetDetailPage() {
 
   const assetId = params.id;
   const { assets, loaded } = usePortfolio(account?.address);
-  const { items: history } = useHistory(account?.address);
+  const historyAccount =
+    account && account.mnemonic && account.nkCommit
+      ? {
+          address: account.address,
+          mnemonic: account.mnemonic,
+          nkCommit: account.nkCommit,
+        }
+      : undefined;
+  const { items: history } = useHistory(historyAccount);
   const asset = assets.find((a) => a.asset_id === assetId);
 
   return (
@@ -189,15 +197,12 @@ function AssetHistory({
   return (
     <ul className="space-y-2">
       {items.map((tx) => {
-        const positive = tx.direction !== 'send';
+        const kind = tx.kind;
+        const positive = kind !== 'send';
         const label =
-          tx.direction === 'mint'
-            ? labels.mint
-            : tx.direction === 'send'
-              ? labels.sent
-              : labels.received;
-        const Icon =
-          tx.direction === 'send' ? ArrowUpRight : tx.direction === 'mint' ? Plus : ArrowDownLeft;
+          kind === 'mint' ? labels.mint : kind === 'send' ? labels.sent : labels.received;
+        const Icon = kind === 'send' ? ArrowUpRight : kind === 'mint' ? Plus : ArrowDownLeft;
+        const amountText = typeof tx.amount === 'number' ? tx.amount.toLocaleString('en-US') : '—';
         return (
           <li key={tx.id}>
             <Link
@@ -216,7 +221,7 @@ function AssetHistory({
                 <p className="text-[13px] font-medium text-ink">{label}</p>
               </div>
               <span className="mono text-[13px] font-medium tabular-nums text-ink2">
-                {tx.amount.toLocaleString('en-US')}
+                {amountText}
               </span>
             </Link>
           </li>

@@ -11,14 +11,14 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import SendPage from '@/app/send/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
 import { useCapabilities } from '@/stores/capabilities';
-import { api, type JobStatus, type OwnerBalanceResponse } from '@/lib/api/client';
+import { api, type OwnerBalanceResponse } from '@/lib/api/client';
 
 // Mutable router + searchParams holder so individual tests can assert
 // `push('/')` and vary the `?asset=` deep-link.
@@ -32,9 +32,33 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => nav.search,
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  numPubkeys: 0,
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 const ASSET1 = 'c'.repeat(64);
 const ASSET2 = 'd'.repeat(64);
+
+/** §7.5 Invoice JSON — raw hex recipients are rejected on the v1 send path. */
+const BOB_INVOICE = JSON.stringify({
+  amount: '100000',
+  recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+  asset_id: ASSET1,
+  pk0: 'cc'.repeat(32),
+  nk_commit: 'dd'.repeat(32),
+  ivpk: 'ee'.repeat(32),
+  op_pubkey: 'ff'.repeat(32),
+  relays: ['wss://relay.example'],
+  addr_sig: '11'.repeat(64),
+  sig: '22'.repeat(64),
+});
+
+function setRecipient(value: string) {
+  fireEvent.change(screen.getByTestId('send-recipient-input'), { target: { value } });
+}
 
 function portfolio(): OwnerBalanceResponse {
   return {
@@ -113,16 +137,18 @@ describe('SendPage (multi-asset) — success Done button', () => {
   it('routes home when Done is clicked on the success screen', async () => {
     vi.spyOn(api, 'send').mockResolvedValue({
       job_id: 'send-1',
+      kind: 'send',
       status: 'completed',
       phase: 'completed',
-      result: { success: true, proof_id: 9 },
-    } as JobStatus);
+      progress: 1,
+      result: { output_coin_ids: ['09'.repeat(32)] },
+    });
 
     const user = userEvent.setup();
     render(<SendPage />);
     await screen.findByTestId('send-asset-select');
 
-    await user.type(screen.getByTestId('send-recipient-input'), 'b'.repeat(64));
+    setRecipient(BOB_INVOICE);
     await user.type(screen.getByTestId('send-amount-input'), '0.001');
     await user.click(screen.getByTestId('send-submit-btn'));
     await user.click(screen.getByTestId('send-confirm-btn'));

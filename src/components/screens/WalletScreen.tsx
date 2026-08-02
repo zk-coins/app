@@ -18,7 +18,13 @@ import { Logo } from '../icons/Logo';
 import { PwaPrompt } from '../PwaPrompt';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { ApiError, api, type HistoryItem, type AssetBalance } from '@/lib/api/client';
+import {
+  ApiError,
+  api,
+  historyItemDate,
+  type HistoryItem,
+  type AssetBalance,
+} from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { formatAssetAmount, formatBtc, formatUsd, shortAssetId, toZkAddress } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
@@ -31,27 +37,25 @@ export function WalletScreen() {
   const t = useTranslations('wallet');
   const tErrors = useTranslations('errors');
   const { account, balance, setBalance, setUsername, syncNumPubkeys } = useWalletStore();
-  const { items: history, loaded: historyLoaded } = useHistory(account?.address);
+  const historyAccount =
+    account && account.mnemonic && account.nkCommit
+      ? {
+          address: account.address,
+          mnemonic: account.mnemonic,
+          nkCommit: account.nkCommit,
+        }
+      : undefined;
+  const { items: history, loaded: historyLoaded } = useHistory(historyAccount);
   const features = useFeatures();
   // `MULTI_ASSET` here is the *runtime* node capability (see lib/features):
   // false → render the single-asset balance hero + faucet, true → the
-  // per-asset portfolio + create-coin entry. The dedicated multi-asset
-  // routes (/create, /asset/[id]) are additionally build-time gated.
+  // per-asset portfolio + create-coin entry.
   const multiAsset = features.MULTI_ASSET;
-  // Only the multi-asset surface renders the portfolio; gate the hook input
-  // so a single-asset node is not polled on `GET /api/balance/:address`
-  // (which 404s there) every 5 s. `usePortfolio` parks on `undefined`.
   const { assets, loaded: portfolioLoaded } = usePortfolio(
     multiAsset ? account?.address : undefined,
   );
-  const {
-    networkName,
-    bitcoinNetwork,
-    usernameDomain,
-    setNetworkName,
-    setBitcoinNetwork,
-    setUsernameDomain,
-  } = useNetworkStore();
+  const { network, usernameDomain, infoError, infoLoaded, applyInfo, applyInfoFailure } =
+    useNetworkStore();
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
   const [minting, setMinting] = useState(false);
@@ -60,45 +64,46 @@ export function WalletScreen() {
   const [claiming, setClaiming] = useState(false);
   const [claimError, setClaimError] = useState<string | null>(null);
 
-  // Faucet visibility (single-asset surface only): the faucet is a
-  // creator-signed self-mint (`api.mint` → `createCoin` — the node's
-  // neutral permissionless model has no server-mediated mint), so it works
-  // on every node; the only gate is defence-in-depth against minting on
-  // mainnet. `bitcoin_network` is the normalised enum (node#193); fall back
-  // to a lower-cased free-text compare when a pre-#193 node omits it.
-  const isMainnet =
-    bitcoinNetwork === 'mainnet' ||
-    (bitcoinNetwork === '' && networkName.toLowerCase() === 'mainnet');
-  const networkResolved = bitcoinNetwork !== '' || networkName !== '';
-  const showFaucet = networkResolved && !isMainnet;
+  // Faucet visibility (single-asset surface only). Only after a successful
+  // info load, and never on mainnet — no silent local network assumption.
+  const isMainnet = network === 'mainnet';
+  const networkResolved = network !== '';
+  const showFaucet = infoLoaded && !infoError && networkResolved && !isMainnet;
 
-  // Fetch network info once. The server is the source of truth for the
-  // username domain — see `useNetworkStore` for the rationale.
+  // Fetch network info once. Failure is a visible error — never a silent
+  // fallback to a guessed network (v1 migration / no-fallback contract).
   useEffect(() => {
     api
       .info()
       .then((info) => {
-        setNetworkName(info.network);
-        setBitcoinNetwork(info.bitcoin_network ?? '');
-        setUsernameDomain(info.username_domain ?? '');
+        applyInfo({
+          network: info.network,
+          features: info.features,
+          username_domain: info.username_domain,
+        });
       })
-      .catch(() => {});
-  }, [setNetworkName, setBitcoinNetwork, setUsernameDomain]);
+      .catch((err: unknown) => {
+        applyInfoFailure(err instanceof Error ? err.message : 'failed to load /v1/info');
+      });
+  }, [applyInfo, applyInfoFailure]);
 
-  // Single-asset balance polling. Only runs on the single-asset surface —
-  // the multi-asset surface uses `usePortfolio` instead.
+  // Single-asset balance polling. Only runs on the single-asset surface.
   useEffect(() => {
-    if (multiAsset || !account) return;
+    if (multiAsset || !account?.mnemonic || !account.nkCommit) return;
     const tick = async () => {
       try {
-        const res = await api.walletBalance(account.address);
+        const res = await api.walletBalance({
+          address: account.address,
+          mnemonic: account.mnemonic,
+          nkCommit: account.nkCommit,
+        });
         setBalance(res.balance);
         syncNumPubkeys(res.num_sends);
         if (res.username && !account.username) {
           setUsername(res.username);
         }
       } catch {
-        /* silent */
+        /* keep last good balance; next tick retries */
       }
     };
     tick();
@@ -106,17 +111,22 @@ export function WalletScreen() {
     return () => clearInterval(interval);
   }, [multiAsset, account, setBalance, setUsername, syncNumPubkeys]);
 
-  const zkAddress = account ? toZkAddress(account.address, usernameDomain) : '';
+  // Receive identity is the name when set — never a raw address as identity.
+  const displayName = account
+    ? account.username
+      ? toZkAddress(account.username, usernameDomain)
+      : ''
+    : '';
 
   const claimUsername = useCallback(async () => {
-    if (!account || !claimInput || !account.xpriv) return;
+    if (!account || !claimInput || !account.mnemonic) return;
     setClaiming(true);
     setClaimError(null);
     try {
       const res = await api.claimUsername({
         username: claimInput,
         address: account.address,
-        xpriv: account.xpriv,
+        mnemonic: account.mnemonic,
       });
       setUsername(res.username);
       setClaimInput('');
@@ -128,8 +138,8 @@ export function WalletScreen() {
   }, [account, claimInput, setUsername, t]);
 
   const copyAddress = useCallback(() => {
-    if (!account) return;
-    navigator.clipboard.writeText(zkAddress).then(
+    if (!account || !displayName) return;
+    navigator.clipboard.writeText(displayName).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
@@ -138,14 +148,21 @@ export function WalletScreen() {
         /* clipboard not available */
       },
     );
-  }, [account, zkAddress]);
+  }, [account, displayName]);
 
   const claimRow = account && (
     <>
-      {account.username && usernameDomain && (
-        <p className="mono text-[12px] text-ink2">{`${account.username}@${usernameDomain}`}</p>
+      {infoLoaded && infoError && (
+        <p data-testid="network-info-error" className="text-[12px] text-bad" role="alert">
+          Could not load node info: {infoError}
+        </p>
       )}
-      {features.USERNAME_CLAIM && !account.username && (
+      {displayName && (
+        <p className="mono text-[12px] text-ink2" data-testid="account-display-name">
+          {displayName}
+        </p>
+      )}
+      {!account.username && (
         <form
           className="flex items-center gap-2"
           onSubmit={(e) => {
@@ -162,6 +179,7 @@ export function WalletScreen() {
             }}
             placeholder={t('claimUsernamePlaceholder')}
             className="flex-1 rounded-md border border-line2 bg-surface px-2.5 py-1.5 mono text-[11px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
+            data-testid="name-setup-input"
           />
           <button
             type="submit"
@@ -173,28 +191,28 @@ export function WalletScreen() {
           </button>
         </form>
       )}
-      {features.USERNAME_CLAIM && claimError && (
-        <p className="text-[11px] text-bad">{claimError}</p>
+      {claimError && <p className="text-[11px] text-bad">{claimError}</p>}
+      {displayName && (
+        <button
+          data-testid="address-copy-btn"
+          data-copied={copied || undefined}
+          onClick={copyAddress}
+          className="inline-flex items-center gap-1.5 mono text-[11px] text-ink3 transition-colors hover:text-ink"
+          title={displayName}
+        >
+          {copied ? (
+            <Check size={11} strokeWidth={2.5} className="text-bitcoin" />
+          ) : (
+            <Copy size={11} strokeWidth={2} />
+          )}
+          <span>{displayName}</span>
+          {copied && (
+            <span data-testid="address-copied-feedback" className="text-bitcoin">
+              {t('copied')}
+            </span>
+          )}
+        </button>
       )}
-      <button
-        data-testid="address-copy-btn"
-        data-copied={copied || undefined}
-        onClick={copyAddress}
-        className="inline-flex items-center gap-1.5 mono text-[11px] text-ink3 transition-colors hover:text-ink"
-        title={account.address}
-      >
-        {copied ? (
-          <Check size={11} strokeWidth={2.5} className="text-bitcoin" />
-        ) : (
-          <Copy size={11} strokeWidth={2} />
-        )}
-        <span>{zkAddress}</span>
-        {copied && (
-          <span data-testid="address-copied-feedback" className="text-bitcoin">
-            {t('copied')}
-          </span>
-        )}
-      </button>
     </>
   );
 
@@ -333,14 +351,20 @@ export function WalletScreen() {
                   data-testid="faucet-btn"
                   data-minting={minting || undefined}
                   onClick={async () => {
-                    // The creator-signed self-mint needs the wallet key —
-                    // same guard as the username claim above.
-                    if (!account || !account.xpriv || minting) return;
+                    if (!account || !account.mnemonic || !account.nkCommit || minting) return;
                     setMinting(true);
                     setMintError(null);
                     try {
-                      await api.mint({ account_address: account.address, xpriv: account.xpriv });
-                      const res = await api.walletBalance(account.address);
+                      await api.mint({
+                        account_address: account.address,
+                        mnemonic: account.mnemonic,
+                        nkCommit: account.nkCommit,
+                      });
+                      const res = await api.walletBalance({
+                        address: account.address,
+                        mnemonic: account.mnemonic,
+                        nkCommit: account.nkCommit,
+                      });
                       setBalance(res.balance);
                       syncNumPubkeys(res.num_sends);
                     } catch (err) {
@@ -526,20 +550,27 @@ function TransactionsList({
   return (
     <ul className="space-y-2">
       {items.map((tx) => {
-        const positive = tx.direction !== 'send';
+        const kind = tx.kind;
+        const positive = kind !== 'send';
         const label =
-          tx.direction === 'mint'
-            ? labels.mint
-            : tx.direction === 'send'
-              ? labels.sent
-              : labels.received;
-        const Icon =
-          tx.direction === 'send' ? ArrowUpRight : tx.direction === 'mint' ? Plus : ArrowDownLeft;
+          kind === 'mint' ? labels.mint : kind === 'send' ? labels.sent : labels.received;
+        const Icon = kind === 'send' ? ArrowUpRight : kind === 'mint' ? Plus : ArrowDownLeft;
         // Single-asset history renders BTC-denominated amounts; multi-asset
         // history renders raw atomic counts (per-asset decimals differ, so a
-        // single unit suffix would be wrong).
-        const signed = positive ? tx.amount : -tx.amount;
-        const amountText = multiAsset ? signed.toLocaleString('en-US') : `${formatBtc(signed)} BTC`;
+        // single unit suffix would be wrong). Amount is optional on thin
+        // pull-session locators.
+        const amount = typeof tx.amount === 'number' ? tx.amount : undefined;
+        const signed = amount === undefined ? undefined : positive ? amount : -amount;
+        const amountText =
+          signed === undefined
+            ? '—'
+            : multiAsset
+              ? signed.toLocaleString('en-US')
+              : `${formatBtc(signed)} BTC`;
+        const when = historyItemDate(tx);
+        const timeText = Number.isNaN(when.getTime())
+          ? '—'
+          : when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         return (
           <li key={tx.id}>
             <Link
@@ -558,10 +589,7 @@ function TransactionsList({
                 <div>
                   <p className="text-[13px] font-medium text-ink">{label}</p>
                   <p data-testid="tx-row-time" className="mono text-[11px] text-ink3 tabular-nums">
-                    {new Date(tx.timestamp * 1000).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {timeText}
                   </p>
                 </div>
               </div>

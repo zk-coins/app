@@ -3,9 +3,9 @@
  *
  * Stores:
  * - Passkey metadata (credential ID, derivation version)
- * - Encrypted wallet data (xpriv + account info encrypted with AES-GCM)
+ * - Encrypted wallet data (mnemonic + account info encrypted with AES-GCM)
  *
- * The xpriv is NEVER stored in plaintext.
+ * The mnemonic is NEVER stored in plaintext.
  */
 
 import type { EncryptedData } from './encryption';
@@ -132,6 +132,6 @@ export function clearLegacyStorage(): void {
   localStorage.removeItem('zkcoins_wallet');
   localStorage.removeItem('zkcoins_auth');
   // Retired in issue #175 — transaction history is now server-owned
-  // (`GET /api/history`). Sweep any stale cache left by an older bundle.
+  // (pull-session history). Sweep any stale cache left by an older bundle.
   localStorage.removeItem('zkcoins_transactions');
 }

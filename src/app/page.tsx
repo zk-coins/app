@@ -29,7 +29,7 @@ export default function Home() {
       await checkForStoredWallet();
       await hydrate();
       // Opt-in server features (address_list, username_claim, lnurl)
-      // are reported by `/api/info`. Fire-and-forget — the store
+      // are reported by GET /v1/info. Fire-and-forget — the store
       // fail-closes on error so an unreachable server hides gated UI
       // rather than crashing the boot path.
       useCapabilities.getState().fetch();

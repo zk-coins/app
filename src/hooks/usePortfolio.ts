@@ -3,33 +3,20 @@
 import { useEffect, useState } from 'react';
 import { api, type AssetBalance } from '@/lib/api/client';
 
-/**
- * Poll cadence for `GET /api/balance/:address`. Matched to the history
- * tick in `useHistory` so balance and history advance in lock-step.
- */
 const PORTFOLIO_POLL_MS = 5_000;
 
 export interface UsePortfolioResult {
-  /** One entry per asset the owner holds, in the node's order. */
   assets: AssetBalance[];
-  /**
-   * `false` until the first `/api/balance/:address` round-trip settles
-   * (success *or* failure). Lets the caller hold the empty state back
-   * during the initial fetch instead of flashing "No assets yet".
-   */
   loaded: boolean;
 }
 
 /**
- * Server-truth multi-asset portfolio for `address`.
+ * Multi-asset portfolio for `address`.
  *
- * Fetches `GET /api/balance/:address` on mount and re-polls on a 5 s
- * cadence so a fresh create-coin mint, an inbound receive, or a send from
- * any tab/device surfaces without local bookkeeping (thin-client). A
- * failed fetch is swallowed and never clears already-rendered rows —
- * drift always resolves toward server truth on the next poll. Passing
- * `undefined` (no account yet) parks the hook: no fetch, empty list,
- * `loaded` stays `false`.
+ * v1 does not expose the legacy portfolio REST route; without an
+ * AccountState balances decoder this returns an empty list fail-closed
+ * (never invents balances). The hook keeps the same contract so screens
+ * continue to mount and the empty state is honest.
  */
 export function usePortfolio(address: string | undefined): UsePortfolioResult {
   const [assets, setAssets] = useState<AssetBalance[]>([]);

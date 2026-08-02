@@ -25,11 +25,12 @@ export default function ReceivePage() {
     }
   }, [account, router]);
 
-  const zkAddress = account ? toZkAddress(account.address, usernameDomain) : '';
+  // Identity rule: receive QR encodes the name, never a raw zk1/hex key.
+  const displayName = account?.username ? toZkAddress(account.username, usernameDomain) : '';
 
   const copy = useCallback(() => {
-    if (!account) return;
-    navigator.clipboard.writeText(zkAddress).then(
+    if (!account || !displayName) return;
+    navigator.clipboard.writeText(displayName).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
@@ -38,7 +39,7 @@ export default function ReceivePage() {
         /* clipboard not available */
       },
     );
-  }, [account, zkAddress]);
+  }, [account, displayName]);
 
   if (!account) {
     return (
@@ -76,38 +77,48 @@ export default function ReceivePage() {
             Receive Bitcoin
           </h1>
           <p className="mt-1 text-[13px] text-ink2">
-            Share this address. Senders see only what they send to you — nothing else.
+            Share your name. Senders see only what they send to you — nothing else.
           </p>
         </div>
 
-        {/* QR Code */}
+        {/* QR Code — encodes the name only (mandate: names everywhere). */}
         <div className="flex justify-center">
           <div data-testid="qr-code" className="rounded-md border border-line2 bg-white p-4">
-            <QRCodeSVG
-              value={zkAddress}
-              size={208}
-              bgColor="#ffffff"
-              fgColor="#000000"
-              level="M"
-              title="Receive address QR code"
-            />
+            {displayName ? (
+              <QRCodeSVG
+                value={displayName}
+                size={208}
+                bgColor="#ffffff"
+                fgColor="#000000"
+                level="M"
+                title="Receive name QR code"
+              />
+            ) : (
+              <p
+                className="w-[208px] p-4 text-center text-[12px] text-ink3"
+                data-testid="receive-name-required"
+              >
+                Set a name on the wallet screen before sharing a receive QR.
+              </p>
+            )}
           </div>
         </div>
 
-        {/* Address */}
+        {/* Name */}
         <div>
-          <label className="mb-1.5 block text-[12px] font-medium text-ink2">Your address</label>
+          <label className="mb-1.5 block text-[12px] font-medium text-ink2">Your name</label>
           <div className="rounded-md border border-line2 bg-surface px-4 py-3 mono text-center text-[14px] text-ink">
-            {zkAddress}
+            {displayName || '—'}
           </div>
           <button
             data-testid="receive-copy-btn"
             data-copied={copied || undefined}
             onClick={copy}
-            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-line2 py-3 text-[13px] font-semibold tracking-tight text-ink transition-colors hover:border-bitcoin hover:text-bitcoin"
+            disabled={!displayName}
+            className="mt-3 inline-flex w-full items-center justify-center gap-2 rounded-md border border-line2 py-3 text-[13px] font-semibold tracking-tight text-ink transition-colors hover:border-bitcoin hover:text-bitcoin disabled:opacity-50"
           >
             {copied ? <Check size={15} strokeWidth={2.5} /> : <Copy size={15} strokeWidth={2} />}
-            {copied ? 'Copied' : 'Copy address'}
+            {copied ? 'Copied' : 'Copy name'}
           </button>
         </div>
       </div>

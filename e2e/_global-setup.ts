@@ -64,7 +64,10 @@ async function pollBalanceFunded(address: string): Promise<number> {
   const deadline = Date.now() + BALANCE_POLL_TIMEOUT_MS;
   while (Date.now() < deadline) {
     try {
-      const { balance } = await api.walletBalance(address);
+      // `balance(address, assetId)` needs a known asset id; after a fixture
+      // mint the portfolio is the source of truth (no native/default asset).
+      const portfolio = await api.ownerBalances(address);
+      const balance = portfolio.assets.reduce((sum, a) => sum + a.balance, 0);
       if (balance > 0) return balance;
     } catch {
       /* transient — keep polling */

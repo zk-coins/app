@@ -19,7 +19,8 @@
     "test:e2e:local": "bash scripts/e2e-local.sh"
   },
   "dependencies": {
-    "@zkcoins/sdk": "file:vendor/zkcoins-sdk-0.4.0.tgz",
+    "@scure/bip32": "^2.2.0",
+    "@zkcoins/sdk": "file:../sdk",
     "jsqr": "^1.4.0",
     "lucide-react": "^0.460.0",
     "next": "^15.5.18",
@@ -47,6 +48,7 @@
     "eslint-config-next": "^15.5.18",
     "fake-indexeddb": "^6.2.5",
     "happy-dom": "^20.9.0",
+    "msw": "^2.14.6",
     "postcss": "^8.5.14",
     "prettier": "^3.4.2",
     "qrcode": "^1.5.4",

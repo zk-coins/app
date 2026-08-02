@@ -8,7 +8,11 @@ import { Logo } from '../icons/Logo';
 import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api/client';
-import { initWasm } from '@zkcoins/wasm';
+import {
+  accountKeysFromMnemonic,
+  createMnemonic,
+  isValidMnemonic,
+} from '@/lib/crypto/account-keys';
 import {
   createPasskey,
   authenticatePasskey,
@@ -219,8 +223,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
     let cancelled = false;
     (async () => {
       try {
-        const wasm = await initWasm();
-        const phrase = wasm.generateMnemonic();
+        const phrase = await createMnemonic();
         if (!cancelled) {
           setMnemonic(phrase.split(' '));
           setStage('reveal');
@@ -249,23 +252,27 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
     setStage('creating');
     setError(null);
     try {
-      const wasm = await initWasm();
       const phrase = mnemonic.join(' ');
-      const ad = await wasm.createAccountFromMnemonic(phrase);
+      const ad = accountKeysFromMnemonic(phrase);
       setAccount({
         address: ad.address,
         numPubkeys: ad.numPubkeys,
-        xpriv: ad.xpriv,
+        mnemonic: ad.mnemonic,
+        nkCommit: ad.nkCommit,
       });
 
       // Encrypt and persist to IndexedDB.
       await saveWithPassword(password);
       setAuth('seed');
 
-      // Best-effort balance fetch.
+      // Best-effort balance fetch (ownership pull may fail on a fresh account).
       try {
-        const { assets } = await api.ownerBalances(ad.address);
-        setBalance(assets.reduce((sum, a) => sum + a.balance, 0));
+        const bal = await api.walletBalance({
+          address: ad.address,
+          mnemonic: ad.mnemonic,
+          nkCommit: ad.nkCommit,
+        });
+        setBalance(bal.balance);
       } catch {
         // Non-fatal — WalletScreen will keep its loading placeholder.
       }
@@ -448,13 +455,13 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
       // Phase 2 — derive mnemonic from PRF output and create wallet deterministically.
       setStage('creating');
       const mnemonic = await deriveMnemonicFromPrf(result.prfOutput);
-      const wasm = await initWasm();
-      const ad = await wasm.createAccountFromMnemonic(mnemonic);
+      const ad = accountKeysFromMnemonic(mnemonic);
 
       setAccount({
         address: ad.address,
         numPubkeys: ad.numPubkeys,
-        xpriv: ad.xpriv,
+        mnemonic: ad.mnemonic,
+        nkCommit: ad.nkCommit,
       });
 
       // Persist passkey credential metadata to IndexedDB.
@@ -470,8 +477,12 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
 
       // Best-effort balance fetch.
       try {
-        const { assets } = await api.ownerBalances(ad.address);
-        setBalance(assets.reduce((sum, a) => sum + a.balance, 0));
+        const bal = await api.walletBalance({
+          address: ad.address,
+          mnemonic: ad.mnemonic,
+          nkCommit: ad.nkCommit,
+        });
+        setBalance(bal.balance);
       } catch {
         // Non-fatal — WalletScreen will keep its loading placeholder.
       }
@@ -592,8 +603,7 @@ function SeedImportFlow({
       return;
     }
     try {
-      const wasm = await initWasm();
-      if (!wasm.validateMnemonic(trimmed)) {
+      if (!(await isValidMnemonic(trimmed))) {
         setError('Invalid seed phrase — check your words and try again');
         return;
       }
@@ -616,29 +626,27 @@ function SeedImportFlow({
     setStage('restoring');
     setError(null);
     try {
-      const wasm = await initWasm();
       const trimmed = phrase.trim().toLowerCase();
-      const ad = await wasm.createAccountFromMnemonic(trimmed);
+      const ad = accountKeysFromMnemonic(trimmed);
       setAccount({
         address: ad.address,
         numPubkeys: ad.numPubkeys,
-        xpriv: ad.xpriv,
+        mnemonic: ad.mnemonic,
+        nkCommit: ad.nkCommit,
       });
       await saveWithPassword(password);
       setAuth('seed');
 
       try {
-        const res = await api.ownerBalances(ad.address);
-        setBalance(res.assets.reduce((sum, a) => sum + a.balance, 0));
-        // Restore-from-seed has no local memory of past sends — the
-        // mnemonic could correspond to an address that has already
-        // sent N times against this server. Hydrate the BIP-32
-        // child-index counter from the server BEFORE the user
-        // navigates to /send to avoid the "Vorheriger Public Key
-        // fehlt" 400 documented on `BalanceResponseSchema.num_sends`.
-        syncNumPubkeys(res.assets.reduce((sum, a) => sum + a.num_sends, 0));
+        const res = await api.walletBalance({
+          address: ad.address,
+          mnemonic: ad.mnemonic,
+          nkCommit: ad.nkCommit,
+        });
+        setBalance(res.balance);
+        syncNumPubkeys(res.num_sends);
       } catch {
-        // Non-fatal — WalletScreen will keep its loading placeholder.
+        // Non-fatal.
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to restore wallet');
@@ -796,13 +804,13 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
 
       setStage('restoring');
       const mnemonic = await deriveMnemonicFromPrf(result.prfOutput);
-      const wasm = await initWasm();
-      const ad = await wasm.createAccountFromMnemonic(mnemonic);
+      const ad = accountKeysFromMnemonic(mnemonic);
 
       setAccount({
         address: ad.address,
         numPubkeys: ad.numPubkeys,
-        xpriv: ad.xpriv,
+        mnemonic: ad.mnemonic,
+        nkCommit: ad.nkCommit,
       });
 
       await saveCredential({
@@ -815,12 +823,13 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
       setAuth('passkey', result.credentialId);
 
       try {
-        const res = await api.ownerBalances(ad.address);
-        setBalance(res.assets.reduce((sum, a) => sum + a.balance, 0));
-        // Same rationale as the seed-restore path: a passkey-restored
-        // wallet has no local memory of past sends. Hydrate the
-        // counter from the server now to avoid a /send 400 later.
-        syncNumPubkeys(res.assets.reduce((sum, a) => sum + a.num_sends, 0));
+        const res = await api.walletBalance({
+          address: ad.address,
+          mnemonic: ad.mnemonic,
+          nkCommit: ad.nkCommit,
+        });
+        setBalance(res.balance);
+        syncNumPubkeys(res.num_sends);
       } catch {
         // Non-fatal.
       }

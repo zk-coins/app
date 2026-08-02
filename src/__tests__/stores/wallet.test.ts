@@ -3,9 +3,11 @@ import { useWalletStore } from '@/stores/wallet';
 import type { Account } from '@/stores/wallet';
 
 const testAccount: Account = {
-  address: 'a'.repeat(64),
+  address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
   numPubkeys: 0,
-  xpriv: 'xprv9s21ZrQH143K3GJpoapnV8SFfuZcECe',
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
 };
 
 beforeEach(() => {

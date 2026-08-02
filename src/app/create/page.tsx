@@ -67,7 +67,7 @@ export default function CreateCoinPage() {
       setError(t('errInvalidAmount'));
       return;
     }
-    if (!account.xpriv) {
+    if (!account.mnemonic || !account.nkCommit) {
       setError(t('errInvalidName'));
       return;
     }
@@ -82,9 +82,10 @@ export default function CreateCoinPage() {
           name: trimmedName,
           decimals: dec,
           amount: amt,
-          xpriv: account.xpriv,
+          mnemonic: account.mnemonic,
+          nkCommit: account.nkCommit,
         },
-        { onPhase: (job: JobStatus) => setPhase(job.phase) },
+        { onPhase: (job: JobStatus) => setPhase(job.phase ?? null) },
       );
       setSuccess({ name: trimmedName, amount: amt, decimals: dec });
     } catch (err) {

@@ -28,16 +28,24 @@ vi.mock('next/navigation', () => ({
 }));
 
 const ALICE = {
+  username: 'alice',
   address: 'a'.repeat(64),
   numPubkeys: 0,
-  xpriv: 'xprv-alice',
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
 };
 const DOMAIN = 'zkcoins.app';
-const ALICE_ZK = toZkAddress(ALICE.address, DOMAIN);
+const ALICE_ZK = toZkAddress(ALICE.username ?? 'alice', DOMAIN);
 
 beforeEach(() => {
   routerReplace.mockClear();
-  useNetworkStore.setState({ networkName: '', usernameDomain: DOMAIN });
+  useNetworkStore.setState({
+    network: 'regtest',
+    usernameDomain: DOMAIN,
+    infoError: null,
+    infoLoaded: true,
+  });
   useWalletStore.setState({
     account: ALICE,
     balance: 0,
@@ -62,7 +70,7 @@ describe('ReceivePage — funded render', () => {
     render(<ReceivePage />);
     expect(screen.getByTestId('receive-heading')).toHaveTextContent('Receive Bitcoin');
     expect(screen.getByTestId('qr-code')).toBeInTheDocument();
-    expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy address');
+    expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy name');
     // The address card shows the zk-form of the address ({hex}@zkcoins.app).
     expect(screen.getByText(ALICE_ZK)).toBeInTheDocument();
   });
@@ -85,7 +93,7 @@ describe('ReceivePage — copy feedback', () => {
     render(<ReceivePage />);
 
     const button = screen.getByTestId('receive-copy-btn');
-    expect(button).toHaveTextContent('Copy address');
+    expect(button).toHaveTextContent('Copy name');
     expect(button).not.toHaveAttribute('data-copied');
 
     await user.click(button);
@@ -99,7 +107,7 @@ describe('ReceivePage — copy feedback', () => {
     await expect(navigator.clipboard.readText()).resolves.toBe(ALICE_ZK);
   });
 
-  it('reverts the button to "Copy address" after the 1.5 s timeout', async () => {
+  it('reverts the button to "Copy name" after the 1.5 s timeout', async () => {
     // Collapse the 1.5 s `setTimeout(setCopied(false), 1500)` to a
     // microtask so the assertion lands inside the default test
     // budget. Targeting only delay=1500 leaves every other timer
@@ -129,12 +137,12 @@ describe('ReceivePage — copy feedback', () => {
     await act(async () => {
       await Promise.resolve();
     });
-    expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy address');
+    expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy name');
     expect(timerSpy).toHaveBeenCalledWith(expect.any(Function), 1_500);
     timerSpy.mockRestore();
   });
 
-  it('stays on "Copy address" when the clipboard write is rejected', async () => {
+  it('stays on "Copy name" when the clipboard write is rejected', async () => {
     // Exercises the `writeText(...).then(onOk, onErr)` rejection leg: a
     // denied/unavailable clipboard must leave the button untouched (no
     // "Copied" flip) and must not throw.
@@ -151,7 +159,7 @@ describe('ReceivePage — copy feedback', () => {
     });
 
     expect(writeSpy).toHaveBeenCalledWith(ALICE_ZK);
-    expect(button).toHaveTextContent('Copy address');
+    expect(button).toHaveTextContent('Copy name');
     expect(button).not.toHaveAttribute('data-copied');
   });
 });

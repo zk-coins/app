@@ -70,7 +70,11 @@ beforeEach(() => {
     error: null,
   });
   useAuthStore.setState({ authMethod: 'seed', credentialId: 'cred-1', isHydrated: true });
-  vi.spyOn(api, 'info').mockResolvedValue({ network: 'signet' });
+  vi.spyOn(api, 'info').mockResolvedValue({
+    network: 'testnet',
+    protocol_version: 'v1',
+    features: ['wallet'],
+  });
   localStorage.clear();
 });
 

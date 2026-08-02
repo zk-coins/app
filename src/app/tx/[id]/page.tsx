@@ -16,7 +16,7 @@ import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
 import { useTransaction } from '@/hooks/useTransaction';
-import type { TxDetail } from '@/lib/api/client';
+import { historyItemDate, type TxDetail } from '@/lib/api/client';
 import { formatBtc, formatBtcCompact, truncateAddress, toZkAddress } from '@/lib/format';
 
 // Block explorer base (build-time, like the network-activity chart).
@@ -29,13 +29,16 @@ export default function TransactionDetailPage() {
   const account = useWalletStore((s) => s.account);
   const usernameDomain = useNetworkStore((s) => s.usernameDomain);
 
-  // Route param → positive integer id, or `null` for a malformed param
-  // (the hook turns `null` into the not-found state without a request).
-  // `[id]` is a single dynamic segment, so `params.id` is always a string.
-  const parsed = Number(params.id);
-  const id = Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+  // Route param is a pull-session record id (string). Empty / missing → no fetch.
+  const rawId = params.id;
+  const id = typeof rawId === 'string' && rawId.length > 0 ? rawId : null;
 
-  const { detail, loading, error } = useTransaction(id, account?.address);
+  const txAccount =
+    account && account.mnemonic && account.nkCommit
+      ? { address: account.address, mnemonic: account.mnemonic, nkCommit: account.nkCommit }
+      : undefined;
+
+  const { detail, loading, error } = useTransaction(id, txAccount);
 
   return (
     <AppShell showNav={false}>
@@ -105,28 +108,31 @@ function TxDetailMissing({ kind }: { kind: 'not_found' | 'error' }) {
   );
 }
 
-const STATUS_STYLES: Record<TxDetail['status'], string> = {
+const STATUS_STYLES: Record<string, string> = {
   confirmed: 'border-bitcoin/40 bg-bitcoin/10 text-bitcoin',
+  completed: 'border-bitcoin/40 bg-bitcoin/10 text-bitcoin',
   pending: 'border-line2 bg-surface text-ink2',
   failed: 'border-bad/40 bg-bad/10 text-bad',
 };
 
 function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDomain: string }) {
-  const positive = detail.direction !== 'send';
-  const label =
-    detail.direction === 'mint' ? 'Faucet' : detail.direction === 'send' ? 'Sent' : 'Received';
-  const HeroIcon =
-    detail.direction === 'send' ? ArrowUpRight : detail.direction === 'mint' ? Plus : ArrowDownLeft;
+  const kind = detail.kind;
+  const positive = kind !== 'send';
+  const label = kind === 'mint' ? 'Faucet' : kind === 'send' ? 'Sent' : 'Received';
+  const HeroIcon = kind === 'send' ? ArrowUpRight : kind === 'mint' ? Plus : ArrowDownLeft;
 
   const explorerHref = EXPLORER_URL && detail.txid ? `${EXPLORER_URL}/tx/${detail.txid}` : null;
-  const zkAddress = toZkAddress(detail.address, usernameDomain);
-  // `confirmed` means the node accepted the proof + the commitment was
-  // mined — i.e. the proof verified against the circuit below.
-  const verified = detail.status === 'confirmed';
+  const accountAddr = detail.address ?? '';
+  const zkAddress = accountAddr ? toZkAddress(accountAddr, usernameDomain) : '';
+  // `confirmed` / `completed` mean the proof path finished successfully.
+  const verified = detail.status === 'confirmed' || detail.status === 'completed';
+  const amount = typeof detail.amount === 'number' ? detail.amount : undefined;
+  const status = detail.status ?? 'pending';
+  const statusClass = STATUS_STYLES[status] ?? STATUS_STYLES.pending;
 
   return (
     <section data-testid="tx-detail-body" className="mt-8 space-y-8">
-      {/* Hero — direction, signed amount, status */}
+      {/* Hero — kind, signed amount, status */}
       <div className="flex flex-col items-center text-center">
         <div
           className={`flex h-14 w-14 items-center justify-center rounded-full ${
@@ -144,23 +150,27 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
             positive ? 'text-ink' : 'text-bitcoin'
           }`}
         >
-          {formatBtcCompact(positive ? detail.amount : -detail.amount)} BTC
+          {amount === undefined ? '—' : `${formatBtcCompact(positive ? amount : -amount)} BTC`}
         </p>
         <span
           data-testid="tx-detail-status"
-          className={`mt-3 rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${STATUS_STYLES[detail.status]}`}
+          className={`mt-3 rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusClass}`}
         >
-          {detail.status}
+          {status}
         </span>
       </div>
 
       {/* Overview */}
       <Section title="Overview">
         <Row label="Direction" value={label} testid="tx-detail-direction" />
-        <Row label="Date" value={formatFullTimestamp(detail.timestamp)} testid="tx-detail-v-time" />
+        <Row
+          label="Date"
+          value={formatFullTimestamp(historyItemDate(detail))}
+          testid="tx-detail-v-time"
+        />
         <Row label="Account" testid="tx-detail-account">
           <span className="mono text-[12px] text-ink2">
-            {zkAddress || truncateAddress(detail.address)}
+            {zkAddress || (accountAddr ? truncateAddress(accountAddr) : '—')}
           </span>
         </Row>
         <Row label="Reference" value={`#${detail.id}`} mono testid="tx-detail-v-id" />
@@ -170,25 +180,33 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
       <Section title="Amounts">
         <Row
           label="Amount"
-          value={`${formatBtc(detail.amount)} BTC`}
+          value={amount === undefined ? '—' : `${formatBtc(amount)} BTC`}
           mono
           testid="tx-detail-v-amount-full"
         />
         <Row
           label="Balance after"
-          value={`${formatBtc(detail.balance_after)} BTC`}
+          value={
+            typeof detail.balance_after === 'number'
+              ? `${formatBtc(detail.balance_after)} BTC`
+              : '—'
+          }
           mono
           testid="tx-detail-v-balance-after"
         />
         <Row
           label="Balance before"
-          value={detail.balance_before === null ? '—' : `${formatBtc(detail.balance_before)} BTC`}
+          value={
+            typeof detail.balance_before === 'number'
+              ? `${formatBtc(detail.balance_before)} BTC`
+              : '—'
+          }
           mono
           testid="tx-detail-v-balance-before"
         />
         <Row
           label="Send counter"
-          value={String(detail.num_sends_after)}
+          value={typeof detail.num_sends_after === 'number' ? String(detail.num_sends_after) : '—'}
           mono
           testid="tx-detail-v-num-sends"
         />
@@ -245,16 +263,16 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
         </Row>
         <Row
           label="Block height"
-          value={detail.block_height === null ? '—' : String(detail.block_height)}
+          value={typeof detail.block_height === 'number' ? String(detail.block_height) : '—'}
           mono
           testid="tx-detail-v-block-height"
         />
         <Row
           label="Commit value"
           value={
-            detail.commit_output_value === null
-              ? '—'
-              : `${formatBtc(detail.commit_output_value)} BTC`
+            typeof detail.commit_output_value === 'number'
+              ? `${formatBtc(detail.commit_output_value)} BTC`
+              : '—'
           }
           mono
           testid="tx-detail-v-commit-value"
@@ -273,9 +291,10 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
   );
 }
 
-/** Full local date + time. `timestamp` is Unix seconds (node wire form). */
-function formatFullTimestamp(timestampSecs: number): string {
-  return new Date(timestampSecs * 1000).toLocaleString([], {
+/** Full local date + time from an already-parsed Date. */
+function formatFullTimestamp(date: Date): string {
+  if (Number.isNaN(date.getTime())) return '—';
+  return date.toLocaleString([], {
     year: 'numeric',
     month: 'short',
     day: 'numeric',

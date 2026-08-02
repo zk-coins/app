@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import SendPage from '@/app/send/page';
@@ -22,8 +22,32 @@ vi.mock('next/navigation', () => ({
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  numPubkeys: 0,
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 const SATS_PER_BTC = 100_000_000;
+
+/** §7.5 Invoice JSON — raw hex recipients are rejected on the v1 send path. */
+const BOB_INVOICE = JSON.stringify({
+  amount: '100000',
+  recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+  asset_id: 'bb'.repeat(32),
+  pk0: 'cc'.repeat(32),
+  nk_commit: 'dd'.repeat(32),
+  ivpk: 'ee'.repeat(32),
+  op_pubkey: 'ff'.repeat(32),
+  relays: ['wss://relay.example'],
+  addr_sig: '11'.repeat(64),
+  sig: '22'.repeat(64),
+});
+
+function setRecipient(value: string) {
+  fireEvent.change(screen.getByTestId('send-recipient-input'), { target: { value } });
+}
 
 let walletSendSpy: ReturnType<typeof vi.spyOn>;
 let walletBalanceSpy: ReturnType<typeof vi.spyOn>;
@@ -47,9 +71,11 @@ beforeEach(() => {
   });
   walletSendSpy = vi.spyOn(api, 'walletSend').mockResolvedValue({
     job_id: 'wsend-1',
+    kind: 'send',
     status: 'completed',
     phase: 'completed',
-    result: { success: true, proof_id: 7 },
+    progress: 1,
+    result: { output_coin_ids: ['07'.repeat(32)] },
   });
   walletBalanceSpy = vi
     .spyOn(api, 'walletBalance')
@@ -83,12 +109,12 @@ describe('SendPage — single-asset surface', () => {
     expect(submit).toBeEnabled();
   });
 
-  it('drives the confirm → walletSend (no asset_id) → success flow', async () => {
+  it('drives the confirm → walletSend (Invoice delivery) → success flow', async () => {
     const user = userEvent.setup();
     render(<SendPage />);
     await screen.findByTestId('send-submit-btn');
 
-    await user.type(screen.getByTestId('send-recipient-input'), 'b'.repeat(64));
+    setRecipient(BOB_INVOICE);
     await user.type(screen.getByTestId('send-amount-input'), '0.001');
     await user.click(screen.getByTestId('send-submit-btn'));
 
@@ -99,8 +125,13 @@ describe('SendPage — single-asset surface', () => {
       expect(screen.getByTestId('send-success-heading')).toBeInTheDocument();
     });
     expect(walletSendSpy).toHaveBeenCalledTimes(1);
-    const arg = walletSendSpy.mock.calls[0][0] as { amount: number; recipient: string };
+    const arg = walletSendSpy.mock.calls[0][0] as {
+      amount: number;
+      recipient: string;
+      delivery: { type: string };
+    };
     expect(arg.amount).toBe(Math.round(0.001 * SATS_PER_BTC));
+    expect(arg.delivery.type).toBe('invoice');
     expect(screen.getByTestId('send-success-amount')).toBeInTheDocument();
   });
 

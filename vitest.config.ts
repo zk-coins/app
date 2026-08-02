@@ -7,7 +7,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@/': path.resolve(__dirname, './src/') + '/',
-      '@zkcoins/wasm': path.resolve(__dirname, './packages/zkcoins-wasm/src/index.ts'),
     },
   },
   test: {

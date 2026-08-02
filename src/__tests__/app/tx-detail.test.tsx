@@ -19,25 +19,24 @@ vi.mock('next/navigation', () => ({
   useParams: () => ({ id: route.id }),
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  numPubkeys: 0,
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 
 const MINT: TxDetail = {
   id: 7,
+  kind: 'mint',
   address: 'a'.repeat(64),
-  txid: null,
-  timestamp: 1_780_000_000,
-  direction: 'mint',
+  created_at: 1_780_000_000,
   amount: 10_000,
-  counterparty: null,
   status: 'pending',
-  block_height: null,
-  memo: null,
   balance_after: 10_000,
-  balance_before: null,
   num_sends_after: 0,
-  commitment_public_key: null,
   circuit_digest: 'cd'.repeat(32),
-  commit_output_value: null,
 };
 
 let spy: ReturnType<typeof vi.spyOn>;
@@ -85,13 +84,17 @@ describe('TransactionDetailPage', () => {
     expect(screen.getByTestId('tx-detail-source')).toHaveTextContent('Your node');
     // Pending → awaiting confirmation (no verified marker).
     expect(screen.getByTestId('tx-detail-verification')).toHaveTextContent('Awaiting confirmation');
-    expect(spy).toHaveBeenCalledWith(7, ALICE.address);
+    expect(spy).toHaveBeenCalledWith('7', {
+      address: ALICE.address,
+      mnemonic: ALICE.mnemonic,
+      nkCommit: ALICE.nkCommit,
+    });
   });
 
   it('renders a confirmed send: signed amount, verified marker, raw txid (no explorer)', async () => {
     spy.mockResolvedValue({
       ...MINT,
-      direction: 'send',
+      kind: 'send',
       status: 'confirmed',
       amount: 6_000,
       balance_after: 4_000,
@@ -115,7 +118,7 @@ describe('TransactionDetailPage', () => {
   });
 
   it('renders a receive detail label', async () => {
-    spy.mockResolvedValue({ ...MINT, direction: 'receive' });
+    spy.mockResolvedValue({ ...MINT, kind: 'receive' });
     render(<TransactionDetailPage />);
     expect(await screen.findByTestId('tx-detail-label')).toHaveTextContent('Received');
   });
@@ -130,14 +133,16 @@ describe('TransactionDetailPage', () => {
     expect(account).toHaveTextContent('aaaaaaaaaa...aaaaaaaa');
   });
 
-  it('shows an em-dash for a null circuit digest', async () => {
-    spy.mockResolvedValue({ ...MINT, circuit_digest: null });
+  it('shows an em-dash when circuit digest is absent', async () => {
+    const { circuit_digest: _omit, ...rest } = MINT;
+    void _omit;
+    spy.mockResolvedValue(rest);
     render(<TransactionDetailPage />);
     expect(await screen.findByTestId('tx-detail-v-circuit-digest')).toHaveTextContent('—');
   });
 
-  it('shows not-found for a non-integer route id without fetching', async () => {
-    route.id = 'not-a-number';
+  it('shows not-found for an empty route id without fetching', async () => {
+    route.id = '';
     render(<TransactionDetailPage />);
     expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
       'Transaction not found',
@@ -198,7 +203,7 @@ describe('TransactionDetailPage — explorer link', () => {
     });
     vi.spyOn(freshApi, 'getTransaction').mockResolvedValue({
       ...MINT,
-      direction: 'send',
+      kind: 'send',
       status: 'confirmed',
       txid: 'ab'.repeat(32),
     });

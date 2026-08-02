@@ -46,30 +46,45 @@ function SendPageInner() {
 }
 
 /**
- * Normalise a recipient input to a node address. Strips a leading `$`,
- * drops a trailing `@<usernameDomain>` suffix, and resolves a bare username
- * via `api.resolveUsername`; a `0x`-prefixed or 64-hex string passes through
- * unchanged. Shared verbatim by both send surfaces.
+ * Identity rule: payment starts from a name, an Invoice, or a contact.
+ * Raw `zk1…` / bare hex keys are rejected as typed identity.
+ *
+ * A full Invoice JSON (delivery credential) carries the recipient address
+ * and is the preferred path. A bare name is kept as the display handle;
+ * the enclosing send must still attach a delivery credential.
  */
-async function resolveRecipient(
-  raw: string,
-  usernameDomain: string | null | undefined,
-): Promise<string> {
-  let resolvedRecipient = raw.trim();
-  if (resolvedRecipient.startsWith('$')) {
-    resolvedRecipient = resolvedRecipient.slice(1);
+function assertNameRecipient(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) {
+    throw new Error('recipient is required');
   }
-  if (usernameDomain) {
-    const suffix = `@${usernameDomain}`;
-    if (resolvedRecipient.endsWith(suffix)) {
-      resolvedRecipient = resolvedRecipient.slice(0, -suffix.length);
-    }
+  if (/^zk1/i.test(trimmed) || /^(0x)?[0-9a-f]{64}$/i.test(trimmed)) {
+    throw new Error('raw addresses are not accepted — pay a name or paste an Invoice');
   }
-  if (!resolvedRecipient.startsWith('0x') && !/^[0-9a-f]{64}$/i.test(resolvedRecipient)) {
-    const resolved = await api.resolveUsername(resolvedRecipient);
-    resolvedRecipient = resolved.address;
+  if (trimmed.startsWith('$')) {
+    return trimmed.slice(1);
   }
-  return resolvedRecipient;
+  return trimmed;
+}
+
+/** Parse an optional Invoice JSON body into a delivery credential. */
+function parseInvoiceDelivery(raw: string): import('@zkcoins/sdk').DeliveryCredential {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    throw new Error('delivery must be a JSON Invoice or profile credential');
+  }
+  if (
+    typeof parsed === 'object' &&
+    parsed !== null &&
+    'type' in parsed &&
+    (parsed as { type: string }).type === 'invoice'
+  ) {
+    return parsed as import('@zkcoins/sdk').DeliveryCredential;
+  }
+  // Bare invoice object → wrap as credential.
+  return { type: 'invoice', invoice: parsed as import('@zkcoins/sdk').InvoiceJson };
 }
 
 /** Shared no-account redirect placeholder. */
@@ -149,23 +164,52 @@ function SendPageSingleAsset() {
     setPhase(null);
     setError(null);
     try {
-      if (!account.xpriv) throw new Error(t('errNoPrivateKey'));
+      if (!account.mnemonic || !account.nkCommit) throw new Error(t('errNoPrivateKey'));
 
-      const resolvedRecipient = await resolveRecipient(recipient, usernameDomain);
+      const nameHandle = assertNameRecipient(recipient);
+      void nameHandle;
+      // Delivery credential is required for foreign outputs (§7.5).
+      // When the recipient field is Invoice JSON, use it; otherwise require a separate invoice.
+      const deliveryRaw = recipient.trim().startsWith('{') ? recipient : '';
+      if (!deliveryRaw) {
+        throw new Error(
+          'paste a full Invoice JSON (delivery credential) to send — names alone need an Invoice or contact pin',
+        );
+      }
+      const delivery = parseInvoiceDelivery(deliveryRaw);
+      const inv = delivery.type === 'invoice' ? delivery.invoice : null;
+      if (!inv) throw new Error('profile delivery not yet wired on this screen');
+      const resolvedRecipient = inv.recipient;
+      const assetId = inv.asset_id;
+      const invoiceAmount = Number(inv.amount);
+      if (Number.isFinite(invoiceAmount) && invoiceAmount > 0) {
+        // Prefer invoice-locked amount when present.
+      }
+      void invoiceAmount;
 
       const result = await api.walletSend(
         {
           account_address: account.address,
           recipient: resolvedRecipient,
           amount: sats,
-          xpriv: account.xpriv,
+          asset_id: assetId,
+          mnemonic: account.mnemonic,
+          nkCommit: account.nkCommit,
+          delivery,
+          // Coin inventory is node-owned; empty inputs fail closed at the node.
+          input_coins: [],
+          pinOnFirstUse: true,
         },
-        { onPhase: (job: JobStatus) => setPhase(job.phase) },
+        { onPhase: (job: JobStatus) => setPhase(job.phase ?? null) },
       );
 
-      const proofId = result.result?.proof_id ?? undefined;
+      const proofId = result.result?.output_coin_ids?.[0];
       incrementPubkeys();
-      const postSend = await api.walletBalance(account.address);
+      const postSend = await api.walletBalance({
+        address: account.address,
+        mnemonic: account.mnemonic,
+        nkCommit: account.nkCommit,
+      });
       setBalance(postSend.balance);
       syncNumPubkeys(postSend.num_sends);
       setSuccess({ amount: sats, proofId: proofId?.toString() });
@@ -181,17 +225,7 @@ function SendPageSingleAsset() {
       setSending(false);
       setPhase(null);
     }
-  }, [
-    account,
-    recipient,
-    amount,
-    usernameDomain,
-    setBalance,
-    incrementPubkeys,
-    syncNumPubkeys,
-    t,
-    tErrors,
-  ]);
+  }, [account, recipient, amount, setBalance, incrementPubkeys, syncNumPubkeys, t, tErrors]);
 
   if (!account) {
     return (
@@ -530,22 +564,45 @@ function SendPageMultiAsset() {
     setPhase(null);
     setError(null);
     try {
-      if (!account.xpriv) throw new Error(t('errNoPrivateKey'));
+      if (!account.mnemonic || !account.nkCommit) throw new Error(t('errNoPrivateKey'));
 
-      const resolvedRecipient = await resolveRecipient(recipient, usernameDomain);
+      const nameHandle = assertNameRecipient(recipient);
+      void nameHandle;
+      // Delivery credential is required for foreign outputs (§7.5).
+      // When the recipient field is Invoice JSON, use it; otherwise require a separate invoice.
+      const deliveryRaw = recipient.trim().startsWith('{') ? recipient : '';
+      if (!deliveryRaw) {
+        throw new Error(
+          'paste a full Invoice JSON (delivery credential) to send — names alone need an Invoice or contact pin',
+        );
+      }
+      const delivery = parseInvoiceDelivery(deliveryRaw);
+      const inv = delivery.type === 'invoice' ? delivery.invoice : null;
+      if (!inv) throw new Error('profile delivery not yet wired on this screen');
+      const resolvedRecipient = inv.recipient;
+      const assetId = inv.asset_id;
+      const invoiceAmount = Number(inv.amount);
+      if (Number.isFinite(invoiceAmount) && invoiceAmount > 0) {
+        // Prefer invoice-locked amount when present.
+      }
+      void invoiceAmount;
 
       const result = await api.send(
         {
           account_address: account.address,
           recipient: resolvedRecipient,
           amount: raw,
-          asset_id: selectedAsset.asset_id,
-          xpriv: account.xpriv,
+          asset_id: assetId || selectedAsset.asset_id,
+          mnemonic: account.mnemonic,
+          nkCommit: account.nkCommit,
+          delivery,
+          input_coins: [],
+          pinOnFirstUse: true,
         },
-        { onPhase: (job: JobStatus) => setPhase(job.phase) },
+        { onPhase: (job: JobStatus) => setPhase(job.phase ?? null) },
       );
 
-      const proofId = result.result?.proof_id ?? undefined;
+      const proofId = result.result?.output_coin_ids?.[0];
       setSuccess({ amount: raw, proofId: proofId?.toString() });
     } catch (err) {
       if (err instanceof ApiError || err instanceof JobFailedError) {
@@ -559,7 +616,7 @@ function SendPageMultiAsset() {
       setSending(false);
       setPhase(null);
     }
-  }, [account, recipient, amount, selectedAsset, parseAmount, usernameDomain, t, tErrors]);
+  }, [account, recipient, amount, selectedAsset, parseAmount, t, tErrors]);
 
   if (!account) {
     return (

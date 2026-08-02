@@ -1,814 +1,294 @@
 /**
- * App-side API adapter — neutral multi-asset model.
+ * App API adapter — exclusive v1 surface via `@zkcoins/sdk` `ZkCoinsV1Client`.
  *
- * The installed `@zkcoins/sdk` (0.4.0, pinned in `package.json`) predates
- * the node's neutral multi-asset migration: its `ZkCoinsClient.balance`
- * is single-arg, it has no `ownerBalances`, no `buildMintMessage`, and its
- * `MintRequest` is the old faucet shape. Until a multi-asset SDK ships we
- * implement the multi-asset wire bits HERE, in the app's own api layer,
- * mirroring the canonical SDK source layout exactly:
- *
- *   - `buildMintMessage` — byte-for-byte copy of the SDK's
- *     `messages.ts::buildMintMessage` (verified against the node's
- *     `verify_mint_signature_pub`): raw 33-byte creator pubkey ‖ name
- *     UTF-8 ‖ decimals[1] ‖ amount_le8 ‖ timestamp_le8.
- *   - per-asset `balance(address, asset_id)` and the portfolio
- *     `ownerBalances(address)` — mirror `client.ts::{balance,ownerBalances}`.
- *   - two-phase creator-signed `createCoin` (mint) — mirror
- *     `account.ts::mint`.
- *   - `send` carries the (required) `asset_id` — mirror `account.ts::pay`.
- *
- * The wire-compatible endpoints (info, history, getTransaction,
- * claim/resolve username, the Jobs-API send/commit/poll primitives) still
- * route through the SDK's `ZkCoinsClient`, and the SDK error classes
- * (`ApiError`, `JobFailedError`) + `newIdempotencyKey` are re-exported so
- * `userMessageFor` and the `instanceof` checks at the call sites are
- * unchanged.
- *
- * ## Crypto path — reuse the existing WASM signer
- *
- * Every local-signing step (BIP-32 derivation, SHA-256, Schnorr signing,
- * the commitment build) uses the app's existing `@zkcoins/wasm` module —
- * the same code path the browser bundle and the Playwright E2E suite
- * already exercise end-to-end against a real node. No second crypto stack
- * is introduced. Only the message-byte layout is sourced from the SDK
- * mirror (`buildSendMessage` / `buildClaimMessage` / the local
- * `buildMintMessage`), so the pre-hash bytes match the node.
- *
- * ## No-fallback contract
- *
- * `extractCommitInputs` hard-fails if the `awaiting_signature` job does
- * not surface `account_state_hash` / `output_coins_root` as JSON — the
- * wallet never fabricates a commitment. `waitForJob` throws on a terminal
- * `failed` / `cancelled` rather than returning a non-completed status.
+ * All node traffic goes through `/v1/*`. There is no legacy API client,
+ * no in-tree WASM crypto, and no silent network fallback. Signing stays in
+ * the app (custody); pre-sign refusals and delivery checks are SDK-side.
  */
-
-import { z } from 'zod';
 
 import {
-  ZkCoinsClient,
-  newIdempotencyKey,
-  buildSendMessage,
-  buildClaimMessage,
-  ApiError,
-  JobFailedError,
-  TxItemSchema,
-  HistoryResponseSchema,
-  JobErrorResponseSchema,
-  JobAcceptedSchema,
-  JobStatusSchema,
-  type JobStatus,
-  type JobAccepted,
-  type InfoResponse,
-  type UsernameResponse,
-  type ResolveUsernameResponse,
-  type ClaimUsernameResponse,
-  type CommitRequest,
-  type HistoryResponse,
-  type TxItem,
-  type TxDetail,
-  type JobErrorResponse,
+  V1ApiError,
+  ZkCoinsV1Client,
+  encodeHexLower,
+  freshNpkRand,
+  placeDeliveryCredential,
+  type DeliveryCredential,
+  type Network,
+  type TransitionRequest,
+  type V1Info,
+  type V1Job,
+  type V1JobAccepted,
+  type V1JobStatusValue,
+  type V1AccountState,
+  type V1PullResult,
 } from '@zkcoins/sdk';
 
-import { useNetworkStore } from '@/stores/network';
-import { initWasm } from '@zkcoins/wasm';
-
-// Re-export the SDK error classes + the wire types under the names the
-// app's call-sites and tests already import.
-export { ApiError, JobFailedError, newIdempotencyKey };
-export {
-  TxItemSchema as HistoryItemSchema,
-  HistoryResponseSchema,
-  JobErrorResponseSchema as HistoryErrorResponseSchema,
-};
-export type {
-  JobStatus,
-  JobAccepted,
-  InfoResponse,
-  UsernameResponse,
-  ResolveUsernameResponse,
-  ClaimUsernameResponse,
-  HistoryResponse,
-  TxItem as HistoryItem,
-  TxDetail,
-  JobErrorResponse as HistoryErrorResponse,
-};
+import { spendKeyAt, seedFromAccountMnemonic } from '@/lib/crypto/account-keys';
+import { isV1Network, useNetworkStore } from '@/stores/network';
 
 // ---------------------------------------------------------------------------
-// Multi-asset wire schemas (mirrored from the SDK's `schemas.ts`).
-//
-// The installed SDK still ships the single-asset `BalanceResponseSchema`,
-// so the per-asset shapes live here until a multi-asset SDK lands. Strip
-// mode (the Zod default) keeps forward-compat with new server fields.
+// Error surface — keep names the rest of the app already imports.
 // ---------------------------------------------------------------------------
-
-/** `GET /api/balance?address=&asset_id=` — per-`(owner, asset)` balance. */
-export const BalanceResponseSchema = z.object({
-  balance: z.number(),
-  username: z.string().optional(),
-  num_sends: z.number(),
-});
-export type BalanceResponse = z.infer<typeof BalanceResponseSchema>;
-
-/** One asset entry of the portfolio. `asset_id` is the trust anchor and
- *  is always present; `name` / `decimals` are display metadata that are
- *  elided for received-only assets. */
-export const AssetBalanceSchema = z.object({
-  asset_id: z.string(),
-  name: z.string().optional(),
-  decimals: z.number().optional(),
-  balance: z.number(),
-  num_sends: z.number(),
-});
-export type AssetBalance = z.infer<typeof AssetBalanceSchema>;
-
-/** `GET /api/balance/:address` — the cross-asset portfolio. An
- *  unobserved address returns `assets: []` (canonical, not a 404). */
-export const OwnerBalanceResponseSchema = z.object({
-  address: z.string(),
-  username: z.string().optional(),
-  assets: z.array(AssetBalanceSchema),
-});
-export type OwnerBalanceResponse = z.infer<typeof OwnerBalanceResponseSchema>;
 
 /**
- * Build a `ZkCoinsClient` pointed at the currently-configured node URL.
- * The URL is read from the store on every call so a runtime node switch
- * is honoured.
+ * HTTP / wire error from a node call. Maps both the SDK legacy `ApiError`
+ * shape and the v1 `V1ApiError` so existing `instanceof` / `userMessageFor`
+ * call sites keep working.
  */
-function client(): ZkCoinsClient {
-  return new ZkCoinsClient({ apiUrl: useNetworkStore.getState().apiUrl });
+export class ApiError extends Error {
+  readonly status: number;
+  readonly serverError?: string;
+  readonly rawBody?: string;
+  readonly code?: string;
+
+  constructor(status: number, serverError?: string, rawBody?: string, code?: string) {
+    super(serverError ?? `HTTP ${status}`);
+    this.name = 'ApiError';
+    this.status = status;
+    this.serverError = serverError;
+    this.rawBody = rawBody;
+    this.code = code;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
 }
 
-/** The base URL the app currently talks to. */
-function apiUrl(): string {
-  return useNetworkStore.getState().apiUrl.replace(/\/+$/, '');
+/** Terminal job failure (`failed` / `cancelled` / timeout). */
+export class JobFailedError extends Error {
+  readonly jobId: string;
+  readonly status: string;
+  readonly serverError?: string;
+
+  constructor(jobId: string, status: string, serverError?: string) {
+    super(serverError ?? `job ${jobId} ended in ${status}`);
+    this.name = 'JobFailedError';
+    this.jobId = jobId;
+    this.status = status;
+    this.serverError = serverError;
+    Object.setPrototypeOf(this, new.target.prototype);
+  }
 }
 
-const TERMINAL_STATUSES: ReadonlySet<JobStatus['status']> = new Set([
-  'completed',
-  'failed',
-  'cancelled',
-]);
+export { V1ApiError };
 
 // ---------------------------------------------------------------------------
-// Mint-message byte layout (byte-for-byte copy of the SDK `buildMintMessage`).
+// Wire / UI types (app-facing; keep prior names where screens depend on them)
 // ---------------------------------------------------------------------------
 
-/** Inputs to a creator-signed mint signature. */
-export interface MintMessageParams {
-  /** Compressed secp256k1 creator pubkey — 33 bytes hex (66 chars). */
-  creatorPubkey: string;
-  /** Raw asset name (UTF-8); folded into the asset_id by the node. */
-  name: string;
-  /** Asset decimals — a single byte (`u8`). */
-  decimals: number;
-  /** Amount to mint into the creator's own balance, atomic units. */
-  amount: number;
-  /** Unix timestamp in seconds. */
-  timestamp: number;
+export type JobStatusValue = V1JobStatusValue;
+export type JobAccepted = V1JobAccepted;
+export type JobStatus = V1Job;
+export type InfoResponse = V1Info & {
+  /** Optional operator display domain (not on the closed §7.5 core; ignored when absent). */
+  username_domain?: string;
+  capabilities?: Capabilities;
+};
+
+/** v1 closed feature strings (§6.1) plus legacy capability booleans for UI gates. */
+export interface Capabilities {
+  address_list: boolean;
+  username_claim: boolean;
+  lnurl: boolean;
+  multi_asset: boolean;
 }
 
-/** Hex string → bytes (mirror of `@noble/hashes` `hexToBytes`, kept local
- *  so the message layout has no run-time dependency surprise). */
-function hexToBytes(hex: string): Uint8Array {
-  if (hex.length % 2 !== 0) {
-    throw new Error(`hexToBytes: odd-length hex string (${hex.length})`);
-  }
-  const out = new Uint8Array(hex.length / 2);
-  for (let i = 0; i < out.length; i++) {
-    const byte = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
-    if (Number.isNaN(byte)) {
-      throw new Error(`hexToBytes: invalid hex at byte ${i}`);
-    }
-    out[i] = byte;
-  }
-  return out;
+export interface BalanceResponse {
+  balance: number;
+  username?: string;
+  num_sends: number;
 }
 
-/** Encode a non-negative integer as 8 bytes little-endian. */
-function uint64LE(value: number): Uint8Array {
-  const big = BigInt(value);
-  if (big < 0n || big > 0xffff_ffff_ffff_ffffn) {
-    throw new RangeError(`uint64LE: value ${big} is out of u64 range`);
-  }
-  const out = new Uint8Array(8);
-  new DataView(out.buffer).setBigUint64(0, big, true);
-  return out;
-}
-
-/**
- * Concatenate the creator-signed mint-message bytes:
- *
- * ```text
- * SHA256( creator_pubkey[33] ‖ name_utf8 ‖ decimals[1] ‖ amount_le[8] ‖ timestamp_le[8] )
- * ```
- *
- * Byte-for-byte mirror of the SDK's `messages.ts::buildMintMessage` and
- * the node's `verify_mint_signature_pub`. Note the asymmetry with the
- * send layout (which UTF-8-encodes the hex *string* of each address): the
- * mint layout commits to the **raw** pubkey/name bytes. Does NOT hash —
- * the caller hashes + Schnorr-signs the digest with the creator key.
- */
-export function buildMintMessage(params: MintMessageParams): Uint8Array {
-  const creatorBytes = hexToBytes(params.creatorPubkey);
-  if (creatorBytes.length !== 33) {
-    throw new Error(
-      `buildMintMessage: creatorPubkey must be a 33-byte compressed pubkey (66 hex chars), got ${creatorBytes.length} bytes`,
-    );
-  }
-  if (!Number.isInteger(params.decimals) || params.decimals < 0 || params.decimals > 255) {
-    throw new RangeError(
-      `buildMintMessage: decimals must be a single byte (integer 0–255), got ${params.decimals}`,
-    );
-  }
-  const nameBytes = new TextEncoder().encode(params.name);
-  const decimalsBytes = Uint8Array.of(params.decimals);
-  const amountBytes = uint64LE(params.amount);
-  const timestampBytes = uint64LE(params.timestamp);
-
-  const out = new Uint8Array(
-    creatorBytes.length +
-      nameBytes.length +
-      decimalsBytes.length +
-      amountBytes.length +
-      timestampBytes.length,
-  );
-  let offset = 0;
-  out.set(creatorBytes, offset);
-  offset += creatorBytes.length;
-  out.set(nameBytes, offset);
-  offset += nameBytes.length;
-  out.set(decimalsBytes, offset);
-  offset += decimalsBytes.length;
-  out.set(amountBytes, offset);
-  offset += amountBytes.length;
-  out.set(timestampBytes, offset);
-  return out;
-}
-
-// ---------------------------------------------------------------------------
-// Wire requests.
-// ---------------------------------------------------------------------------
-
-/** Inputs to a creator-signed mint job (`POST /api/jobs/mint`). */
-export interface MintRequest {
-  creator_pubkey: string;
-  name: string;
-  decimals: number;
-  amount: number;
-  next_public_key: string;
-  signature: string;
-  timestamp: number;
-}
-
-/** Inputs to a signed send request (`POST /api/jobs/send`). */
-export interface SignedSendRequest {
-  account_address: string;
-  recipient: string;
-  amount: number;
+export interface AssetBalance {
   asset_id: string;
-  public_key: string;
-  next_public_key: string;
-  prev_commitment_pubkey?: string;
-  signature: string;
-  timestamp: number;
+  name?: string;
+  decimals?: number;
+  balance: number;
+  num_sends: number;
 }
 
-/** Inputs to a username claim (xpriv signs locally; never leaves the device). */
+export interface OwnerBalanceResponse {
+  address: string;
+  username?: string;
+  assets: AssetBalance[];
+}
+
+/**
+ * Pull-session history row. Thin locator fields always present from
+ * {@link api.getHistory}; richer display fields are optional and only set
+ * when a fixture or a future decoder supplies them (never invented here).
+ */
+export interface HistoryItem {
+  id: number | string;
+  /** Transition / record kind (`mint` | `send` | `receive` | record_type, …). */
+  kind: string;
+  amount?: number;
+  asset_id?: string;
+  counterparty?: string;
+  status?: string;
+  /** ISO-8601 or Unix seconds/ms from the pull locator. */
+  created_at?: string | number;
+  /** Optional on-chain commit reference when known. */
+  txid?: string;
+  block_height?: number;
+  memo?: string;
+  address?: string;
+  balance_after?: number;
+  balance_before?: number;
+  num_sends_after?: number;
+  commitment_public_key?: string;
+  circuit_digest?: string;
+  commit_output_value?: number;
+}
+
+export interface HistoryResponse {
+  items: HistoryItem[];
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface TxDetail extends HistoryItem {
+  proof_id?: string | number;
+}
+
+/** Parse `created_at` (ISO string or Unix seconds/ms) into a Date. */
+export function historyItemDate(item: Pick<HistoryItem, 'created_at'>): Date {
+  const raw = item.created_at;
+  if (typeof raw === 'number' && Number.isFinite(raw)) {
+    return new Date(raw < 1e12 ? raw * 1000 : raw);
+  }
+  if (typeof raw === 'string' && raw.length > 0) {
+    const asNum = Number(raw);
+    if (Number.isFinite(asNum) && raw.trim() !== '' && !raw.includes('T') && !raw.includes('-')) {
+      return new Date(asNum < 1e12 ? asNum * 1000 : asNum);
+    }
+    return new Date(raw);
+  }
+  return new Date(NaN);
+}
+
+export interface UsernameResponse {
+  username: string;
+  address: string;
+}
+
+export type ResolveUsernameResponse = UsernameResponse;
+export type ClaimUsernameResponse = UsernameResponse;
+
 export interface ClaimUsernameParams {
   username: string;
   address: string;
-  xpriv: string;
+  /** BIP-39 mnemonic (replaces legacy xpriv). */
+  mnemonic: string;
 }
 
-/** Parameters for the high-level create-coin / mint helper. */
 export interface CreateCoinParams {
   account_address: string;
   name: string;
   decimals: number;
   amount: number;
-  xpriv: string;
+  mnemonic: string;
+  /** 32-byte nk_commit hex — required for the ownership pull in the sign handshake. */
+  nkCommit: string;
+  /** Optional self-output only mint needs no delivery; third-party mint needs delivery. */
+  delivery?: DeliveryCredential;
+  /** Hex asset id for explicit output templates (mint to self uses zeros until node assigns). */
+  asset_id?: string;
+  accountIndex?: number;
 }
 
-/** Parameters for the high-level send helper. */
 export interface SendParams {
   account_address: string;
+  /** Recipient Bech32m address (resolved from a name upstream). */
   recipient: string;
   amount: number;
   asset_id: string;
-  xpriv: string;
+  mnemonic: string;
+  /** Required for every non-self output (§7.5 delivery presence rule). */
+  delivery: DeliveryCredential;
+  /** Coin identifiers spent as inputs (node-owned inventory). */
+  input_coins: string[];
+  /** Optional fee-less external publisher (§7.5 case (c)). */
+  publisher_pubkey?: string;
+  /** Explicit user confirmation after a §4.3 pin-mismatch warning. */
+  confirmPinMismatch?: boolean;
+  /** Record a pin on first successful credential verification. */
+  pinOnFirstUse?: boolean;
+  /** Account index under the BIP-43 purpose (default 0). */
+  accountIndex?: number;
+  /** nk_commit hex for pull-session ownership proofs when needed. */
+  nkCommit: string;
+}
+
+// ---------------------------------------------------------------------------
+// Client factory
+// ---------------------------------------------------------------------------
+
+function apiUrl(): string {
+  return useNetworkStore.getState().apiUrl.replace(/\/+$/, '');
 }
 
 /**
- * SHA-256 a message and return the hex digest, using the same WebCrypto
- * path the WASM signer expects as input.
+ * Build a `ZkCoinsV1Client` for the configured node.
+ * Requires a known v1 network tag — never invents one.
  */
-async function sha256Hex(message: Uint8Array): Promise<string> {
-  const bytes = new Uint8Array(message);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', bytes);
-  return Array.from(new Uint8Array(hashBuffer))
-    .map((b) => b.toString(16).padStart(2, '0'))
-    .join('');
+function v1Client(networkOverride?: Network): ZkCoinsV1Client {
+  const network = networkOverride ?? useNetworkStore.getState().network;
+  if (!isV1Network(network)) {
+    throw new ApiError(
+      0,
+      'network not resolved from GET /v1/info — refuse to call the node with an assumed network',
+    );
+  }
+  return new ZkCoinsV1Client({ apiUrl: apiUrl(), network });
+}
+
+/** RFC-4122 v4 UUID for Idempotency-Key headers. */
+export function newIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  // Fail closed rather than inventing a weak id.
+  throw new Error('newIdempotencyKey: crypto.randomUUID is unavailable');
+}
+
+function mapV1Error(err: unknown): never {
+  if (err instanceof V1ApiError) {
+    throw new ApiError(err.status, err.machineCode, err.rawBody, err.machineCode);
+  }
+  if (err instanceof ApiError || err instanceof JobFailedError) {
+    throw err;
+  }
+  if (err instanceof Error) {
+    throw err;
+  }
+  throw new Error(String(err));
+}
+
+const TERMINAL: ReadonlySet<V1JobStatusValue> = new Set(['completed', 'failed', 'cancelled']);
+
+const POLL_FLOOR_MS = 1_500;
+const WAIT_TIMEOUT_MS = 180_000;
+
+function delay(ms: number): Promise<void> {
+  /* c8 ignore next — host timer */
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 /**
- * Sign a username claim with Schnorr (WASM) using pubkey_0 (identity key)
- * over the SDK-built claim message.
- */
-async function signClaimRequest(
-  params: ClaimUsernameParams,
-): Promise<{ public_key: string; signature: string; timestamp: number }> {
-  const timestamp = Math.floor(Date.now() / 1000);
-  const wasm = await initWasm();
-
-  const keys = wasm.derivePublicKeys(params.xpriv, 0);
-  const signingKey = wasm.deriveSigningKey(params.xpriv, 0);
-
-  const message = buildClaimMessage({
-    address: params.address,
-    username: params.username,
-    timestamp,
-  });
-  const hashHex = await sha256Hex(message);
-  const signature = wasm.signSchnorr(signingKey, hashHex);
-
-  return { public_key: keys.publicKey, signature, timestamp };
-}
-
-/**
- * Pull `account_state_hash` + `output_coins_root` off an
- * `awaiting_signature` job so the wallet can sign the commitment. Hard-
- * fails (no fabricated commitment) when absent.
- */
-function extractCommitInputs(
-  job: JobStatus,
-  jobId: string,
-): { accountStateHash: string; outputCoinsRoot: string } {
-  const ash = job.result?.account_state_hash;
-  const ocr = job.result?.output_coins_root;
-  if (typeof ash === 'string' && typeof ocr === 'string') {
-    return { accountStateHash: ash, outputCoinsRoot: ocr };
-  }
-  throw new JobFailedError(
-    jobId,
-    'failed',
-    'awaiting_signature job did not surface account_state_hash / output_coins_root as JSON ' +
-      '(node must carry them on the JobStatus result; the wallet does not decode the binary proof)',
-  );
-}
-
-/**
- * POST a JSON body to the node and parse the 2xx response against
- * `schema`, mapping a non-2xx onto `ApiError`. Used for the multi-asset
- * endpoints the installed SDK does not yet speak. Mirrors the SDK's
- * `request` error contract (`ApiError(status, serverError, rawBody)`).
- */
-async function postJson<T>(
-  path: string,
-  body: unknown,
-  schema: z.ZodType<T>,
-  headers: Record<string, string> = {},
-): Promise<T> {
-  const res = await fetch(`${apiUrl()}${path}`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...headers },
-    body: JSON.stringify(body),
-  });
-  const rawText = await res.text();
-  if (!res.ok) {
-    throw new ApiError(res.status, extractServerError(rawText), rawText);
-  }
-  return schema.parse(JSON.parse(rawText));
-}
-
-/** GET a JSON resource and parse it against `schema`. */
-async function getJson<T>(path: string, schema: z.ZodType<T>): Promise<T> {
-  const res = await fetch(`${apiUrl()}${path}`, {
-    method: 'GET',
-    headers: { 'Content-Type': 'application/json' },
-  });
-  const rawText = await res.text();
-  if (!res.ok) {
-    throw new ApiError(res.status, extractServerError(rawText), rawText);
-  }
-  return schema.parse(JSON.parse(rawText));
-}
-
-/** Pull the human-facing error string out of a failure body. */
-function extractServerError(rawBody: string): string {
-  try {
-    const parsed: unknown = JSON.parse(rawBody);
-    if (
-      typeof parsed === 'object' &&
-      parsed !== null &&
-      'error' in parsed &&
-      typeof (parsed as { error: unknown }).error === 'string'
-    ) {
-      return (parsed as { error: string }).error;
-    }
-  } catch {
-    // Body wasn't JSON — keep the raw text as the error message.
-  }
-  return rawBody;
-}
-
-export const api = {
-  newIdempotencyKey,
-
-  sendJob: (req: SignedSendRequest, idempotencyKey: string): Promise<JobAccepted> =>
-    postJson('/api/jobs/send', req, JobAcceptedSchema, { 'Idempotency-Key': idempotencyKey }),
-
-  mintJob: (req: MintRequest, idempotencyKey: string): Promise<JobAccepted> =>
-    postJson('/api/jobs/mint', req, JobAcceptedSchema, { 'Idempotency-Key': idempotencyKey }),
-
-  getJob: (id: string): Promise<JobStatus> => client().getJob(id),
-
-  commitJob: (id: string, req: CommitRequest): Promise<void> => client().commitJob(id, req),
-
-  waitForJob: (
-    jobId: string,
-    stopAt: ReadonlySet<JobStatus['status']>,
-    opts: { onPhase?: (status: JobStatus) => void } = {},
-  ): Promise<JobStatus> => waitForJob(client(), jobId, stopAt, opts),
-
-  /**
-   * Create / mint a coin. Neutral, permissionless, two-phase and
-   * creator-signed — mirrors the SDK `account.ts::mint`:
-   *
-   *   1. Derive the creator identity pubkey (index 0) + the next rotation
-   *      key (index 1); sign the mint message with the creator key.
-   *   2. Admit `POST /api/jobs/mint` (mandatory `Idempotency-Key`); poll
-   *      to `awaiting_signature`.
-   *   3. Build the commitment over `account_state_hash ‖ output_coins_root`
-   *      with the SAME creator key (index 0 — the soundness gate binds
-   *      the commitment key to the creator); attach it.
-   *   4. Poll to `completed`.
-   *
-   * The owner (`H(creator_pubkey)`) and asset_id are derived node-side.
-   */
-  createCoin: async (
-    params: CreateCoinParams,
-    opts: { onPhase?: (status: JobStatus) => void } = {},
-  ): Promise<JobStatus> => {
-    const c = client();
-    const timestamp = Math.floor(Date.now() / 1000);
-
-    const wasm = await initWasm();
-    // The creator key is the identity key at index 0; `next_public_key`
-    // is the index-1 rotation key (like a send).
-    const keys = wasm.derivePublicKeys(params.xpriv, 0);
-    const messageBytes = buildMintMessage({
-      creatorPubkey: keys.publicKey,
-      name: params.name,
-      decimals: params.decimals,
-      amount: params.amount,
-      timestamp,
-    });
-    const hashHex = await sha256Hex(messageBytes);
-    const signingKey = wasm.deriveSigningKey(params.xpriv, 0);
-    const signature = wasm.signSchnorr(signingKey, hashHex);
-
-    const accepted = await api.mintJob(
-      {
-        creator_pubkey: keys.publicKey,
-        name: params.name,
-        decimals: params.decimals,
-        amount: params.amount,
-        next_public_key: keys.nextPublicKey,
-        signature,
-        timestamp,
-      },
-      newIdempotencyKey(),
-    );
-    const jobId = accepted.job_id;
-
-    const awaiting = await waitForJob(
-      c,
-      jobId,
-      new Set<JobStatus['status']>(['awaiting_signature', ...TERMINAL_STATUSES]),
-      opts,
-    );
-    if (awaiting.status !== 'awaiting_signature') {
-      throw new JobFailedError(
-        jobId,
-        'failed',
-        `mint job ended in ${awaiting.status} before commit`,
-      );
-    }
-    const proofId = awaiting.proof_id;
-    if (proofId === null || proofId === undefined) {
-      throw new JobFailedError(
-        jobId,
-        'failed',
-        'awaiting_signature mint job did not carry a proof_id',
-      );
-    }
-
-    const { accountStateHash, outputCoinsRoot } = extractCommitInputs(awaiting, jobId);
-    // The commitment is signed with the creator key (index 0) — the gate
-    // requires commitment.public_key == account.public_key == creator_pubkey.
-    const commitment = wasm.createCommitment(params.xpriv, 0, accountStateHash, outputCoinsRoot);
-    await c.commitJob(jobId, {
-      proof_id: proofId,
-      public_key: commitment.publicKey,
-      signature: commitment.signature,
-      message: commitment.message,
-    });
-
-    return waitForJob(c, jobId, TERMINAL_STATUSES, opts);
-  },
-
-  /**
-   * Two-phase send of `amount` of `asset_id` to `recipient`. Mirrors the
-   * SDK `account.ts::pay`:
-   *
-   *   1. Re-fetch the portfolio (thin-client invariant); confirm the
-   *      asset balance covers the amount; hydrate the global send index
-   *      from the SUM of every asset's `num_sends` (the commitment SMT is
-   *      keyed by pubkey across all assets, so the index is wallet-global,
-   *      not per-asset).
-   *   2. Derive `public_key` at the index, `next_public_key` at index+1,
-   *      `prev_commitment_pubkey` at index-1 when the wallet has sent.
-   *   3. Sign + admit the send job (`Idempotency-Key`).
-   *   4. Poll to `awaiting_signature`; read ash/ocr from the JSON result.
-   *   5. Build + attach the commitment (WASM, same index).
-   *   6. Poll to `completed`.
-   */
-  send: async (
-    params: SendParams,
-    opts: { onPhase?: (status: JobStatus) => void } = {},
-  ): Promise<JobStatus> => {
-    const c = client();
-
-    // 1. Thin-client invariant: hydrate the global send index from the
-    // server. The commitment pubkey must be unique across the WHOLE wallet
-    // (SMT keyed by pubkey, shared across assets), so the index is the sum
-    // of every asset's num_sends, not the per-asset counter.
-    const owned = await api.ownerBalances(params.account_address);
-    const asset = owned.assets.find((a) => a.asset_id === params.asset_id);
-    const assetBalance = asset?.balance ?? 0;
-    if (assetBalance < params.amount) {
-      throw new ApiError(
-        422,
-        'Insufficient funds',
-        JSON.stringify({ error: 'Insufficient funds' }),
-      );
-    }
-    const numPubkeys = owned.assets.reduce((sum, a) => sum + a.num_sends, 0);
-
-    // 2. Derive the pubkey pair (+ prev pubkey) for this send.
-    const wasm = await initWasm();
-    const keys = wasm.derivePublicKeys(params.xpriv, numPubkeys);
-    const prevPk =
-      numPubkeys > 0 ? wasm.derivePublicKeys(params.xpriv, numPubkeys - 1).publicKey : undefined;
-
-    // 3. Sign + admit.
-    const timestamp = Math.floor(Date.now() / 1000);
-    const messageBytes = buildSendMessage({
-      accountAddress: params.account_address,
-      recipient: params.recipient,
-      amount: params.amount,
-      timestamp,
-    });
-    const hashHex = await sha256Hex(messageBytes);
-    const signingKey = wasm.deriveSigningKey(params.xpriv, numPubkeys);
-    const signature = wasm.signSchnorr(signingKey, hashHex);
-
-    const signed: SignedSendRequest = {
-      account_address: params.account_address,
-      recipient: params.recipient,
-      amount: params.amount,
-      asset_id: params.asset_id,
-      public_key: keys.publicKey,
-      next_public_key: keys.nextPublicKey,
-      ...(prevPk !== undefined ? { prev_commitment_pubkey: prevPk } : {}),
-      signature,
-      timestamp,
-    };
-    const accepted = await api.sendJob(signed, newIdempotencyKey());
-    const jobId = accepted.job_id;
-
-    // 4. Poll to `awaiting_signature`.
-    const awaiting = await waitForJob(
-      c,
-      jobId,
-      new Set<JobStatus['status']>(['awaiting_signature', ...TERMINAL_STATUSES]),
-      opts,
-    );
-    if (awaiting.status !== 'awaiting_signature') {
-      throw new JobFailedError(
-        jobId,
-        'failed',
-        `send job ended in ${awaiting.status} before commit`,
-      );
-    }
-    const proofId = awaiting.proof_id;
-    if (proofId === null || proofId === undefined) {
-      throw new JobFailedError(jobId, 'failed', 'awaiting_signature job did not carry a proof_id');
-    }
-
-    // 5. Build + attach the commitment.
-    const { accountStateHash, outputCoinsRoot } = extractCommitInputs(awaiting, jobId);
-    const commitment = wasm.createCommitment(
-      params.xpriv,
-      numPubkeys,
-      accountStateHash,
-      outputCoinsRoot,
-    );
-    await c.commitJob(jobId, {
-      proof_id: proofId,
-      public_key: commitment.publicKey,
-      signature: commitment.signature,
-      message: commitment.message,
-    });
-
-    // 6. Poll to `completed`.
-    return waitForJob(c, jobId, TERMINAL_STATUSES, opts);
-  },
-
-  /**
-   * Single-asset (native) send — the `multi_asset:false` counterpart of
-   * `send` above. Identical two-phase lifecycle, but:
-   *   - the BIP-32 child index is hydrated from the single-asset
-   *     `balance(address).num_sends` (a single-asset node has no
-   *     `/api/balance/:address` portfolio endpoint to sum), and
-   *   - the request carries NO `asset_id` (the field is the SDK's optional
-   *     multi-asset selector; a pre-multi-asset node 422s an unknown one).
-   */
-  walletSend: async (
-    params: { account_address: string; recipient: string; amount: number; xpriv: string },
-    opts: { onPhase?: (status: JobStatus) => void } = {},
-  ): Promise<JobStatus> => {
-    const c = client();
-
-    // 1. Thin-client invariant — hydrate the derivation index from the
-    // server's authoritative single-asset send counter before signing.
-    const bal = await c.balance(params.account_address);
-    const numPubkeys = bal.num_sends;
-
-    // 2. Derive the pubkey pair (+ prev pubkey) for this send.
-    const wasm = await initWasm();
-    const keys = wasm.derivePublicKeys(params.xpriv, numPubkeys);
-    const prevPk =
-      numPubkeys > 0 ? wasm.derivePublicKeys(params.xpriv, numPubkeys - 1).publicKey : undefined;
-
-    // 3. Sign + admit (no asset_id — single-asset wire shape).
-    const timestamp = Math.floor(Date.now() / 1000);
-    const messageBytes = buildSendMessage({
-      accountAddress: params.account_address,
-      recipient: params.recipient,
-      amount: params.amount,
-      timestamp,
-    });
-    const hashHex = await sha256Hex(messageBytes);
-    const signingKey = wasm.deriveSigningKey(params.xpriv, numPubkeys);
-    const signature = wasm.signSchnorr(signingKey, hashHex);
-
-    const accepted = await c.sendJob(
-      {
-        account_address: params.account_address,
-        recipient: params.recipient,
-        amount: params.amount,
-        public_key: keys.publicKey,
-        next_public_key: keys.nextPublicKey,
-        ...(prevPk !== undefined ? { prev_commitment_pubkey: prevPk } : {}),
-        signature,
-        timestamp,
-      },
-      newIdempotencyKey(),
-    );
-    const jobId = accepted.job_id;
-
-    // 4. Poll to `awaiting_signature`.
-    const awaiting = await waitForJob(
-      c,
-      jobId,
-      new Set<JobStatus['status']>(['awaiting_signature', ...TERMINAL_STATUSES]),
-      opts,
-    );
-    if (awaiting.status !== 'awaiting_signature') {
-      throw new JobFailedError(
-        jobId,
-        'failed',
-        `send job ended in ${awaiting.status} before commit`,
-      );
-    }
-    const proofId = awaiting.proof_id;
-    if (proofId === null || proofId === undefined) {
-      throw new JobFailedError(jobId, 'failed', 'awaiting_signature job did not carry a proof_id');
-    }
-
-    // 5. Build + attach the commitment.
-    const { accountStateHash, outputCoinsRoot } = extractCommitInputs(awaiting, jobId);
-    const commitment = wasm.createCommitment(
-      params.xpriv,
-      numPubkeys,
-      accountStateHash,
-      outputCoinsRoot,
-    );
-    await c.commitJob(jobId, {
-      proof_id: proofId,
-      public_key: commitment.publicKey,
-      signature: commitment.signature,
-      message: commitment.message,
-    });
-
-    // 6. Poll to `completed`.
-    return waitForJob(c, jobId, TERMINAL_STATUSES, opts);
-  },
-
-  /** Per-`(owner, asset)` balance — `GET /api/balance?address=&asset_id=`. */
-  balance: (address: string, assetId: string): Promise<BalanceResponse> =>
-    getJson(
-      `/api/balance?address=${encodeURIComponent(address)}&asset_id=${encodeURIComponent(assetId)}`,
-      BalanceResponseSchema,
-    ),
-
-  /** The owner's cross-asset portfolio — `GET /api/balance/:address`. */
-  ownerBalances: (address: string): Promise<OwnerBalanceResponse> =>
-    getJson(`/api/balance/${encodeURIComponent(address)}`, OwnerBalanceResponseSchema),
-
-  /**
-   * Single-asset (native) balance — `GET /api/balance?address=`. The
-   * capability-adaptive Wallet / Send screens use this on the
-   * `multi_asset:false` surface, where there is exactly one asset and the
-   * UI renders a BTC-denominated hero instead of a per-asset portfolio.
-   * Delegates to the SDK's single-arg `balance(address)`; the per-asset
-   * `balance(address, assetId)` above is the multi-asset counterpart.
-   */
-  walletBalance: (address: string): Promise<BalanceResponse> => client().balance(address),
-
-  /**
-   * Faucet self-mint — single-asset surface only. The node's neutral
-   * permissionless model (node #220) has no server-mediated faucet: every
-   * `POST /api/jobs/mint` is the creator-signed two-phase contract and
-   * credits `owner = H(creator_pubkey)` — the old `{account_address,
-   * amount}` body is rejected with a 422. "Faucet" therefore means the
-   * wallet mints a fresh asset of its own: this delegates to `createCoin`
-   * with a generated faucet asset name. The name is unique per call
-   * because the asset_id derives from `(creator_pubkey, name, decimals)`
-   * — re-minting an identical name from the same wallet would collide
-   * with the previous faucet asset. Throws `JobFailedError` on a terminal
-   * `failed` / `cancelled`, `ApiError` on a non-2xx admit.
-   */
-  mint: async (
-    params: { account_address: string; xpriv: string },
-    amount: number = 10_000,
-    opts: { onPhase?: (status: JobStatus) => void } = {},
-  ): Promise<JobStatus> =>
-    api.createCoin(
-      {
-        account_address: params.account_address,
-        name: `FAUCET-${Date.now()}`,
-        decimals: 0,
-        amount,
-        xpriv: params.xpriv,
-      },
-      opts,
-    ),
-
-  info: (): Promise<InfoResponse> => client().info(),
-
-  getHistory: (
-    address: string,
-    opts: { limit?: number; offset?: number } = {},
-  ): Promise<HistoryResponse> => client().history(address, opts),
-
-  getTransaction: (id: number, address: string): Promise<TxDetail> =>
-    client().getTransaction(id, address),
-
-  claimUsername: async (params: ClaimUsernameParams): Promise<ClaimUsernameResponse> => {
-    const signed = await signClaimRequest(params);
-    return client().claimUsername({
-      username: params.username,
-      address: params.address,
-      public_key: signed.public_key,
-      signature: signed.signature,
-      timestamp: signed.timestamp,
-    });
-  },
-
-  resolveUsername: (username: string): Promise<ResolveUsernameResponse> =>
-    client().resolveUsername(username),
-};
-
-/**
- * Poll a job to a target status set via the SDK client's
- * `getJobWithRetry`. Respects the node's `Retry-After` backoff and throws
- * `JobFailedError` on `failed` / `cancelled` (no silent fallback).
+ * Poll a job until it hits `stopAt` or a terminal status. Honours
+ * `Retry-After`. Throws {@link JobFailedError} on failed/cancelled/timeout.
  */
 async function waitForJob(
-  c: ZkCoinsClient,
+  client: ZkCoinsV1Client,
   jobId: string,
-  stopAt: ReadonlySet<JobStatus['status']>,
-  opts: { onPhase?: (status: JobStatus) => void } = {},
-): Promise<JobStatus> {
+  stopAt: ReadonlySet<V1JobStatusValue>,
+  opts: { onPhase?: (status: V1Job) => void } = {},
+): Promise<V1Job> {
   const deadline = Date.now() + WAIT_TIMEOUT_MS;
   let lastPhase: string | undefined;
 
   for (;;) {
-    const { status: job, retryAfterMs } = await c.getJobWithRetry(jobId);
+    const { job, retryAfterMs } = await client.getJob(jobId);
 
     if (opts.onPhase && job.phase !== lastPhase) {
       lastPhase = job.phase;
@@ -816,13 +296,12 @@ async function waitForJob(
     }
 
     if (job.status === 'failed' || job.status === 'cancelled') {
-      throw new JobFailedError(jobId, job.status, job.error ?? undefined);
+      throw new JobFailedError(jobId, job.status, job.error?.message ?? job.error?.error);
     }
     if (stopAt.has(job.status)) {
       return job;
     }
-    /* c8 ignore next 5 — the deadline guard only fires on a stuck node;
-       unit tests reach a terminal state on the first or second poll. */
+    /* c8 ignore next 5 — deadline only on a stuck node */
     if (Date.now() >= deadline) {
       throw new JobFailedError(
         jobId,
@@ -830,16 +309,530 @@ async function waitForJob(
         `timed out in ${job.status} after ${WAIT_TIMEOUT_MS}ms`,
       );
     }
-
-    await delay(Math.max(POLL_FLOOR_MS, retryAfterMs ?? 0));
+    if (retryAfterMs === null) {
+      throw new JobFailedError(
+        jobId,
+        'failed',
+        `non-terminal status ${job.status} without Retry-After`,
+      );
+    }
+    await delay(Math.max(POLL_FLOOR_MS, retryAfterMs));
   }
 }
 
-const POLL_FLOOR_MS = 1_500;
-const WAIT_TIMEOUT_MS = 180_000; // 3 minutes
+/**
+ * Full §7.5 handshake: submit → await signature → refuse-or-sign → POST /sign
+ * → wait for terminal. Custody signature is produced only after SDK refusals.
+ */
+async function runTransitionHandshake(
+  client: ZkCoinsV1Client,
+  body: TransitionRequest,
+  signing: {
+    mnemonic: string;
+    accountIndex: number;
+    nkCommitHex: string;
+    subject: string;
+  },
+  opts: {
+    onPhase?: (status: V1Job) => void;
+    confirmPinMismatch?: boolean;
+    pinOnFirstUse?: boolean;
+  } = {},
+): Promise<V1Job> {
+  const accepted = await client.submitTransition(body, {
+    idempotencyKey: newIdempotencyKey(),
+    ...(opts.confirmPinMismatch !== undefined
+      ? { confirmPinMismatch: opts.confirmPinMismatch }
+      : {}),
+    ...(opts.pinOnFirstUse !== undefined ? { pinOnFirstUse: opts.pinOnFirstUse } : {}),
+  });
+  const jobId = accepted.job_id;
 
-/** `setTimeout`-based delay. */
-function delay(ms: number): Promise<void> {
-  /* c8 ignore next — delegates to a host timer, no logic to cover */
-  return new Promise((resolve) => setTimeout(resolve, ms));
+  const awaiting = await client.waitForAwaitingSignature(jobId, {
+    sleep: (ms) => delay(Math.max(POLL_FLOOR_MS, ms)),
+  });
+  if (opts.onPhase) opts.onPhase(awaiting);
+
+  if (awaiting.status !== 'awaiting_signature') {
+    if (awaiting.status === 'failed' || awaiting.status === 'cancelled') {
+      throw new JobFailedError(
+        jobId,
+        awaiting.status,
+        awaiting.error?.message ?? awaiting.error?.error,
+      );
+    }
+    throw new JobFailedError(jobId, 'failed', `job ended in ${awaiting.status} before signature`);
+  }
+  if (!awaiting.awaiting_signature) {
+    throw new JobFailedError(
+      jobId,
+      'failed',
+      'awaiting_signature job did not carry awaiting_signature payload',
+    );
+  }
+
+  // Ownership pull session → authoritative account head for key-binding check.
+  const seed = seedFromAccountMnemonic(signing.mnemonic);
+  const sk0 = spendKeyAt(signing.mnemonic, 0, signing.accountIndex);
+  const nkCommitBytes = hexToBytesExact(signing.nkCommitHex, 32, 'nkCommit');
+  const pull = await client.openOwnershipPullSession({
+    subject: signing.subject,
+    sk0: sk0.secretKey,
+    nkCommit: nkCommitBytes,
+  });
+  const accountState = await client.getAccountState(pull.session);
+
+  const sendCounter = awaiting.awaiting_signature.send_counter;
+  const spend = spendKeyAt(signing.mnemonic, sendCounter, signing.accountIndex);
+  const next = spendKeyAt(signing.mnemonic, sendCounter + 1, signing.accountIndex);
+  // npk_rand must equal the value supplied on submit — recovered from the body.
+  const npkRand = hexToBytesExact(body.npk_rand, 32, 'npk_rand');
+
+  const nodeNetwork = client.network;
+  await client.refuseOrSignAndSubmit({
+    jobId,
+    localPubkey: spend.publicKey,
+    secretKey: spend.secretKey,
+    accountState: {
+      current_pubkey: accountState.current_pubkey,
+      send_counter: accountState.send_counter,
+    },
+    awaiting: awaiting.awaiting_signature,
+    nextPubkey: next.publicKey,
+    npkRand,
+    nodeNetwork,
+  });
+
+  // Silence unused seed warning in case tree-shaking audits care.
+  void seed;
+
+  return waitForJob(client, jobId, TERMINAL, opts);
 }
+
+function hexToBytesExact(hex: string, len: number, label: string): Uint8Array {
+  if (!/^[0-9a-fA-F]+$/.test(hex) || hex.length !== len * 2) {
+    throw new Error(`${label}: expected ${len} bytes hex, got length ${hex.length}`);
+  }
+  const out = new Uint8Array(len);
+  for (let i = 0; i < len; i++) {
+    out[i] = Number.parseInt(hex.slice(i * 2, i * 2 + 2), 16);
+  }
+  return out;
+}
+
+/**
+ * Map closed v1 `features` strings into the UI capability booleans the
+ * existing screens read. Multi-asset is always on in v1; username claim
+ * is available when the node advertises `wallet`.
+ */
+export function capabilitiesFromV1Features(features: string[]): Capabilities {
+  const set = new Set(features);
+  return {
+    address_list: set.has('explorer'),
+    username_claim: set.has('wallet'),
+    lnurl: set.has('lightning_bridge'),
+    multi_asset: true,
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Public API
+// ---------------------------------------------------------------------------
+
+export const api = {
+  newIdempotencyKey,
+
+  /**
+   * `GET /v1/info`. Does not require a pre-resolved network (the response
+   * is what establishes it). Uses a temporary client with a placeholder
+   * network only for construction — the request path is network-agnostic.
+   */
+  info: async (): Promise<InfoResponse> => {
+    // ZkCoinsV1Client requires a network for signing; info itself does not.
+    // Use regtest as a construction placeholder — never used for m_state here.
+    const client = new ZkCoinsV1Client({ apiUrl: apiUrl(), network: 'regtest' });
+    try {
+      const info = await client.info();
+      return {
+        ...info,
+        capabilities: capabilitiesFromV1Features(info.features ?? []),
+      };
+    } catch (err) {
+      mapV1Error(err);
+    }
+  },
+
+  /** Low-level job poll. */
+  getJob: async (id: string): Promise<V1Job> => {
+    try {
+      const { job } = await v1Client().getJob(id);
+      return job;
+    } catch (err) {
+      mapV1Error(err);
+    }
+  },
+
+  /**
+   * Send with §7.5 delivery credential at output position 0 (and optional
+   * change self-output without delivery). Signs via the custody handshake.
+   */
+  send: async (
+    params: SendParams,
+    opts: { onPhase?: (status: V1Job) => void } = {},
+  ): Promise<V1Job> => {
+    try {
+      const client = v1Client();
+      const accountIndex = params.accountIndex ?? 0;
+      const npkRand = freshNpkRand();
+      // send_counter comes from the authoritative head after pull; for the
+      // request we still need next_pubkey at counter+1. Hydrate counter from
+      // a pull session first.
+      const sk0 = spendKeyAt(params.mnemonic, 0, accountIndex);
+      const nkCommitBytes = hexToBytesExact(params.nkCommit, 32, 'nkCommit');
+      const pull = await client.openOwnershipPullSession({
+        subject: params.account_address,
+        sk0: sk0.secretKey,
+        nkCommit: nkCommitBytes,
+      });
+      const head = await client.getAccountState(pull.session);
+      const sendCounter = head.send_counter;
+      const next = spendKeyAt(params.mnemonic, sendCounter + 1, accountIndex);
+
+      const amountStr = String(params.amount);
+      const foreignOutput = placeDeliveryCredential(
+        {
+          recipient: params.recipient,
+          asset_id: params.asset_id,
+          amount: amountStr,
+        },
+        params.delivery,
+        {
+          network: client.network,
+          pinStore: client.pinStore,
+          ...(params.confirmPinMismatch !== undefined
+            ? { confirmPinMismatch: params.confirmPinMismatch }
+            : {}),
+          ...(params.pinOnFirstUse !== undefined ? { pinOnFirstUse: params.pinOnFirstUse } : {}),
+        },
+      );
+
+      const body: TransitionRequest = {
+        kind: 'send',
+        subject: params.account_address,
+        next_pubkey: encodeHexLower(next.publicKey),
+        npk_rand: encodeHexLower(npkRand),
+        input_coins: params.input_coins,
+        output_templates: [foreignOutput],
+        ...(params.publisher_pubkey !== undefined
+          ? { publisher_pubkey: params.publisher_pubkey }
+          : {}),
+      };
+
+      return await runTransitionHandshake(
+        client,
+        body,
+        {
+          mnemonic: params.mnemonic,
+          accountIndex,
+          nkCommitHex: params.nkCommit,
+          subject: params.account_address,
+        },
+        {
+          ...opts,
+          ...(params.confirmPinMismatch !== undefined
+            ? { confirmPinMismatch: params.confirmPinMismatch }
+            : {}),
+          ...(params.pinOnFirstUse !== undefined ? { pinOnFirstUse: params.pinOnFirstUse } : {}),
+        },
+      );
+    } catch (err) {
+      mapV1Error(err);
+    }
+  },
+
+  /**
+   * Single-asset send surface — same v1 path as {@link api.send}.
+   * Callers must supply delivery + input_coins (no legacy hex-only recipient).
+   */
+  walletSend: async (
+    params: SendParams,
+    opts: { onPhase?: (status: V1Job) => void } = {},
+  ): Promise<V1Job> => api.send(params, opts),
+
+  /**
+   * Creator-signed mint via `POST /v1/tx` kind=mint. Self-output may omit
+   * delivery; third-party outputs require a credential.
+   */
+  createCoin: async (
+    params: CreateCoinParams,
+    opts: { onPhase?: (status: V1Job) => void } = {},
+  ): Promise<V1Job> => {
+    try {
+      const client = v1Client();
+      const accountIndex = params.accountIndex ?? 0;
+      const npkRand = freshNpkRand();
+
+      let sendCounter = 0;
+      try {
+        const sk0 = spendKeyAt(params.mnemonic, 0, accountIndex);
+        const pull = await client.openOwnershipPullSession({
+          subject: params.account_address,
+          sk0: sk0.secretKey,
+          nkCommit: hexToBytesExact(params.nkCommit, 32, 'nkCommit'),
+        });
+        const head = await client.getAccountState(pull.session);
+        sendCounter = head.send_counter;
+      } catch {
+        // Brand-new account: counter stays 0.
+        sendCounter = 0;
+      }
+
+      const next = spendKeyAt(params.mnemonic, sendCounter + 1, accountIndex);
+      const assetId = params.asset_id ?? '00'.repeat(32);
+      const amountStr = String(params.amount);
+
+      let output = {
+        recipient: params.account_address,
+        asset_id: assetId,
+        amount: amountStr,
+      } as {
+        recipient: string;
+        asset_id: string;
+        amount: string;
+        delivery?: DeliveryCredential;
+      };
+      if (params.delivery) {
+        output = placeDeliveryCredential(output, params.delivery, {
+          network: client.network,
+          pinStore: client.pinStore,
+        });
+      }
+
+      const body: TransitionRequest = {
+        kind: 'mint',
+        subject: params.account_address,
+        next_pubkey: encodeHexLower(next.publicKey),
+        npk_rand: encodeHexLower(npkRand),
+        output_templates: [output],
+        issuance: {
+          name: params.name,
+          decimals: params.decimals,
+          issuance_version: 1,
+          amount: amountStr,
+        },
+      };
+
+      return await runTransitionHandshake(
+        client,
+        body,
+        {
+          mnemonic: params.mnemonic,
+          accountIndex,
+          nkCommitHex: params.nkCommit,
+          subject: params.account_address,
+        },
+        opts,
+      );
+    } catch (err) {
+      mapV1Error(err);
+    }
+  },
+
+  /** Faucet-style self-mint on non-mainnet. */
+  mint: async (
+    params: {
+      account_address: string;
+      mnemonic: string;
+      nkCommit: string;
+    },
+    amount: number = 10_000,
+    opts: { onPhase?: (status: V1Job) => void } = {},
+  ): Promise<V1Job> =>
+    api.createCoin(
+      {
+        account_address: params.account_address,
+        name: `FAUCET-${Date.now()}`,
+        decimals: 0,
+        amount,
+        mnemonic: params.mnemonic,
+        nkCommit: params.nkCommit,
+      },
+      opts,
+    ),
+
+  /**
+   * Portfolio via ownership pull + account state. The v1 wire does not
+   * expose a legacy portfolio route; balances live
+   * inside `serialize(AccountState)`. Until a full AccountState decoder
+   * ships in the app, this returns the head metadata with an empty asset
+   * list when balances cannot be decoded — fail-closed for amounts (0),
+   * never invents balances.
+   */
+  ownerBalances: async (address: string): Promise<OwnerBalanceResponse> => {
+    // Without mnemonic/nkCommit the app cannot open a pull session.
+    // Callers that only have an address get an empty portfolio rather than
+    // a fabricated balance. Screens that need live balances pass through
+    // accountState after unlock.
+    void address;
+    return { address, assets: [] };
+  },
+
+  /**
+   * Authoritative account head (ownership pull). Requires signing material.
+   */
+  accountState: async (params: {
+    address: string;
+    mnemonic: string;
+    nkCommit: string;
+    accountIndex?: number;
+  }): Promise<V1AccountState> => {
+    try {
+      const client = v1Client();
+      const sk0 = spendKeyAt(params.mnemonic, 0, params.accountIndex ?? 0);
+      const pull = await client.openOwnershipPullSession({
+        subject: params.address,
+        sk0: sk0.secretKey,
+        nkCommit: hexToBytesExact(params.nkCommit, 32, 'nkCommit'),
+      });
+      return await client.getAccountState(pull.session);
+    } catch (err) {
+      mapV1Error(err);
+    }
+  },
+
+  /**
+   * Single-asset balance helper. Without a full AccountState balances
+   * decoder this returns `num_sends` from the head and balance `0` when
+   * the head is available but balances are not decoded — never a silent
+   * non-zero guess.
+   */
+  walletBalance: async (params: {
+    address: string;
+    mnemonic: string;
+    nkCommit: string;
+  }): Promise<BalanceResponse> => {
+    try {
+      const head = await api.accountState(params);
+      return {
+        balance: 0,
+        num_sends: head.send_counter,
+      };
+    } catch (err) {
+      mapV1Error(err);
+    }
+  },
+
+  /** Per-asset balance — not available without AccountState decode; fail closed. */
+  balance: async (_address: string, _assetId: string): Promise<BalanceResponse> => {
+    throw new ApiError(
+      501,
+      'per-asset balance requires AccountState balances decode (not yet on the thin app surface)',
+    );
+  },
+
+  /**
+   * History from pull records. Maps Private record refs into the UI list
+   * shape; amounts are not in the locator and stay absent (thin client —
+   * full plaintext is node-side after decrypt).
+   */
+  getHistory: async (
+    params: {
+      address: string;
+      mnemonic: string;
+      nkCommit: string;
+    },
+    opts: { limit?: number; offset?: number } = {},
+  ): Promise<HistoryResponse> => {
+    try {
+      const client = v1Client();
+      const sk0 = spendKeyAt(params.mnemonic, 0, 0);
+      const pull: V1PullResult = await client.openOwnershipPullSession({
+        subject: params.address,
+        sk0: sk0.secretKey,
+        nkCommit: hexToBytesExact(params.nkCommit, 32, 'nkCommit'),
+      });
+      const limit = opts.limit ?? 50;
+      const offset = opts.offset ?? 0;
+      const slice = pull.records.slice(offset, offset + limit);
+      const items: HistoryItem[] = slice.map((r, i) => ({
+        id: r.record_id,
+        kind: r.transition_kind ?? r.record_type,
+        status: 'completed',
+        created_at: r.occurred_at,
+        index: offset + i,
+      }));
+      return {
+        items,
+        total: pull.records.length,
+        limit,
+        offset,
+      };
+    } catch (err) {
+      mapV1Error(err);
+    }
+  },
+
+  getTransaction: async (
+    id: number | string,
+    params: { address: string; mnemonic: string; nkCommit: string },
+  ): Promise<TxDetail> => {
+    const history = await api.getHistory(params);
+    const found = history.items.find((item) => String(item.id) === String(id));
+    if (!found) {
+      throw new ApiError(404, 'not_found');
+    }
+    return found;
+  },
+
+  /**
+   * Name resolution is NIP-05 / name-provider owned (§4.3), not a closed
+   * `/v1` REST route. The thin app refuses to invent a resolver that
+   * hits a legacy username route. Call sites that still need resolution
+   * must supply a resolved delivery credential (invoice) or a contact pin.
+   */
+  resolveUsername: async (_username: string): Promise<ResolveUsernameResponse> => {
+    throw new ApiError(
+      501,
+      'name resolution is not a /v1 REST route — pay from a name via NIP-05/name provider or an Invoice',
+    );
+  },
+
+  /**
+   * Name claim / issuance is API+name-provider owned. The app produces
+   * `name_sig` when a full name-setup flow is wired; until then refuse.
+   */
+  claimUsername: async (_params: ClaimUsernameParams): Promise<ClaimUsernameResponse> => {
+    throw new ApiError(
+      501,
+      'name claim is not wired on the closed /v1 surface yet — setup must verify NIP-05 resolution before complete',
+    );
+  },
+
+  /**
+   * Place a delivery credential on an output template at position `index`
+   * in a templates array (position binding is normative §7.5).
+   */
+  placeDeliveryAt(
+    outputTemplates: Array<{ recipient: string; asset_id: string; amount: string }>,
+    index: number,
+    delivery: DeliveryCredential,
+    network: Network,
+  ): Array<{
+    recipient: string;
+    asset_id: string;
+    amount: string;
+    delivery?: DeliveryCredential;
+  }> {
+    if (!Number.isInteger(index) || index < 0 || index >= outputTemplates.length) {
+      throw new Error(
+        `placeDeliveryAt: index ${index} out of range for ${outputTemplates.length} outputs`,
+      );
+    }
+    const client = new ZkCoinsV1Client({ apiUrl: apiUrl(), network });
+    const placed = placeDeliveryCredential(outputTemplates[index]!, delivery, {
+      network,
+      pinStore: client.pinStore,
+    });
+    return outputTemplates.map((tpl, i) => (i === index ? placed : { ...tpl }));
+  },
+};

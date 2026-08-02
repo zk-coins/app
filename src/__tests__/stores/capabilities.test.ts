@@ -33,7 +33,12 @@ describe('useCapabilities — initial state', () => {
 
 describe('useCapabilities.fetch — server response handling', () => {
   it('writes server capabilities to the store and sets loaded=true', async () => {
-    vi.spyOn(api, 'info').mockResolvedValue({ network: 'Mutinynet', capabilities: ALL_ON });
+    vi.spyOn(api, 'info').mockResolvedValue({
+      network: 'testnet',
+      protocol_version: 'v1',
+      features: ['wallet'],
+      capabilities: ALL_ON,
+    });
 
     await useCapabilities.getState().fetch();
 
@@ -41,13 +46,23 @@ describe('useCapabilities.fetch — server response handling', () => {
     expect(useCapabilities.getState().loaded).toBe(true);
   });
 
-  it('falls back to fail-closed when the server omits the capabilities field', async () => {
-    // Pre-#29 server: only `network`. Schema allows it, capabilities is undefined.
-    vi.spyOn(api, 'info').mockResolvedValue({ network: 'Mutinynet' });
+  it('derives capabilities from v1 features when the capabilities field is omitted', async () => {
+    // Closed `/v1/info` advertises `features`; the app maps those into the
+    // legacy capability booleans (no silent all-off when features are present).
+    vi.spyOn(api, 'info').mockResolvedValue({
+      network: 'testnet',
+      protocol_version: 'v1',
+      features: ['wallet'],
+    });
 
     await useCapabilities.getState().fetch();
 
-    expect(useCapabilities.getState().capabilities).toEqual(FAIL_CLOSED);
+    expect(useCapabilities.getState().capabilities).toEqual({
+      address_list: false,
+      username_claim: true,
+      lnurl: false,
+      multi_asset: true,
+    });
     expect(useCapabilities.getState().loaded).toBe(true);
   });
 

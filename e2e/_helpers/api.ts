@@ -77,17 +77,16 @@ export const api = {
     getJson<OwnerBalance>(`/api/balance/${encodeURIComponent(address)}`),
 
   /**
-   * Single-asset balance — `GET /api/balance?address=` (no `asset_id`).
-   * This is the EXACT read the single-asset UI performs, so the FALSE
-   * (single-asset) globalSetup leg polls it to observe what the app will
-   * observe. The multi-asset node itself 422s the parameterless form
-   * (`asset_id` is required — there is no native asset); on the
-   * single-asset leg the request goes through the CI info-proxy, which
-   * translates it into a `GET /api/balance/:address` portfolio aggregate
-   * (see `scripts/e2e-info-proxy.mjs`). The multi-asset leg uses
-   * `ownerBalances` directly instead.
+   * Per-asset balance — `GET /api/balance?address=&asset_id=`.
+   * Both params are required under the neutral multi-asset model (no native
+   * asset). Callers that only need "is funded?" should use {@link ownerBalances}
+   * and sum `assets[].balance` instead of inventing an asset id.
    */
-  walletBalance: (address: string): Promise<BalanceResponse> => sdkClient.balance(address),
+  walletBalance: (
+    address: string,
+    assetId: string,
+    signal?: AbortSignal,
+  ): Promise<BalanceResponse> => sdkClient.balance(address, assetId, signal),
 
   /**
    * Derive the fixture account from `mnemonic` via the app's `@zkcoins/wasm`

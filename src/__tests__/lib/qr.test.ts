@@ -102,15 +102,19 @@ describe('parseScannedRecipient', () => {
 });
 
 describe('isLikelyRecipient', () => {
+  it.each([['$alice'], ['alice'], ['alice@zkcoins.app'], ['bob.smith_1@zkcoins.app']])(
+    'accepts name %s',
+    (value) => {
+      expect(isLikelyRecipient(value)).toBe(true);
+    },
+  );
+
   it.each([
     ['0x' + 'a'.repeat(64)],
     ['A'.repeat(64)],
-    ['$alice'],
-    ['alice'],
-    ['1a2b3c4d@dev.zkcoins.app'],
-    ['bob.smith_1@zkcoins.app'],
-  ])('accepts %s', (value) => {
-    expect(isLikelyRecipient(value)).toBe(true);
+    ['zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq'],
+  ])('rejects raw key/address %s', (value) => {
+    expect(isLikelyRecipient(value)).toBe(false);
   });
 
   it.each([
@@ -119,19 +123,19 @@ describe('isLikelyRecipient', () => {
     ['hello world'],
     ['!!!'],
     ['https://zkcoins.app/u/alice'],
-    ['a'.repeat(101)],
+    ['a'.repeat(9000)],
   ])('rejects %s', (value) => {
     expect(isLikelyRecipient(value)).toBe(false);
   });
 });
 
 describe('extractRecipient', () => {
-  it('unwraps a scheme and returns the recipient', () => {
-    expect(extractRecipient('zkcoins:1a2b3c4d@dev.zkcoins.app')).toBe('1a2b3c4d@dev.zkcoins.app');
+  it('unwraps a scheme and returns a name recipient', () => {
+    expect(extractRecipient('zkcoins:alice@dev.zkcoins.app')).toBe('alice@dev.zkcoins.app');
   });
 
-  it('returns the bare recipient unchanged', () => {
-    expect(extractRecipient('  ' + 'f'.repeat(64) + '  ')).toBe('f'.repeat(64));
+  it('rejects bare hex keys', () => {
+    expect(extractRecipient('  ' + 'f'.repeat(64) + '  ')).toBeNull();
   });
 
   it('returns null for a non-recipient payload', () => {

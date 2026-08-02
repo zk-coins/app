@@ -42,18 +42,34 @@ export function formatUsd(sats: number, price = MOCK_BTC_USD): string {
 }
 
 /**
- * Render an address as `<8-char-prefix>@<domain>`. The domain is the
- * external hostname reported by the connected server via `/api/info`
- * — the caller reads it from `useNetworkStore` and passes it in.
- * Returns the empty string when either input is missing so callers
- * can treat "no domain yet" as a loading state without an extra
- * branch at every call-site.
+ * Render a receive **name** for display/QR.
+ *
+ * Identity rule (mandate): present names only — never a raw `zk1…`
+ * address or bare key as the primary identity. When a username is set,
+ * returns `username@domain` (or bare username when the domain is empty).
+ * When only a domain is known and no username, returns empty so the UI
+ * can show a name-setup prompt instead of a truncated key.
+ *
+ * The second argument is kept for call-site compatibility; the first is
+ * the username (preferred) or empty.
  */
-export function toZkAddress(hexAddress: string, domain: string): string {
-  if (!domain) return '';
-  if (!hexAddress) return `@${domain}`;
-  const stripped = hexAddress.toLowerCase().replace(/^0x/, '');
-  return `${stripped.slice(0, 8)}@${domain}`;
+export function toDisplayName(username: string | undefined, domain: string): string {
+  if (!username) return '';
+  if (!domain) return username;
+  return `${username}@${domain}`;
+}
+
+/**
+ * @deprecated Prefer {@link toDisplayName}. Kept as a thin alias so
+ * existing screens compile while identity migration completes. Does
+ * **not** encode raw addresses — returns empty without a username.
+ */
+export function toZkAddress(usernameOrAddress: string, domain: string): string {
+  // If it looks like a bare zk1 / hex key, refuse to format it as identity.
+  if (/^zk1/i.test(usernameOrAddress) || /^[0-9a-f]{64}$/i.test(usernameOrAddress)) {
+    return '';
+  }
+  return toDisplayName(usernameOrAddress, domain);
 }
 
 export function truncateAddress(addr: string, head = 10, tail = 8): string {

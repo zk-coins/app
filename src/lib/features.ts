@@ -8,19 +8,9 @@
 //    in the bundle. All flags default off (fail-closed); set the env
 //    var to the literal string `"true"` at build time to opt in.
 //
-// 2. **Runtime server capabilities** (`USERNAME_CLAIM`, …). Reported
-//    by the server at `/api/info` (see
-//    `zk-coins/node::router.rs::Capabilities`) and stored in
-//    `useCapabilities`. Only *opt-in* server features get a bit:
-//    Always-on functionality (mint/faucet endpoints, username resolve and
-//    display) is permanently part of every node build and is therefore
-//    unconditional in the UI — no capability check guards it.
-//    Consumers must read runtime bits via `useFeatures()` inside a
-//    component, so the component re-renders when the capabilities
-//    load. Reading them statically from `process.env` would force
-//    operators to mirror the server's Cargo feature set in the app's
-//    build flags, which is the drift problem this hook exists to
-//    remove.
+// 2. **Runtime server capabilities** derived from `GET /v1/info.features`
+//    (closed set §6.1). Consumers must read runtime bits via
+//    `useFeatures()` inside a component.
 
 import { useMemo } from 'react';
 import { useCapabilities } from '@/stores/capabilities';
@@ -37,39 +27,24 @@ const buildTime = {
 } as const;
 
 /**
- * Build-time client flags only. Safe to read in non-React contexts
- * (`notFound()` page guards, module-level constants). Does NOT expose
- * any server-reported capability — those must be read via
- * `useFeatures()` so the consumer re-renders when `/api/info` lands.
+ * Build-time client flags only. Safe to read in non-React contexts.
+ * Does NOT expose any server-reported capability.
  */
 export const FEATURES = buildTime;
 
 /**
  * Merged feature set: build-time client flags + opt-in runtime server
- * capabilities. Subscribes to the capabilities store, so the host
- * component re-renders when `/api/info` lands.
- *
- * Always-on server functionality (mint, username resolve/display) is
- * unconditional and is not represented here — call those endpoints
- * directly. Only features a self-hoster might switch off get a flag.
+ * capabilities from `GET /v1/info`.
  */
 export function useFeatures() {
   const caps = useCapabilities((s) => s.capabilities);
-  // Memo on the underlying booleans so the returned object is reference-
-  // stable across renders that didn't change a capability. Without this,
-  // every render produces a fresh object and any consumer that puts
-  // `features` in a `useEffect` dependency list would loop.
   return useMemo(
     () =>
       ({
         ...buildTime,
         USERNAME_CLAIM: caps.username_claim,
-        // Runtime node capability: the shared Wallet / Send screens read this
-        // to pick the single-asset hero vs the per-asset surface based on what
-        // the *connected node* reports at `/api/info`. The dedicated
-        // multi-asset routes (`/create`, `/asset/[id]`) ship unconditionally —
-        // there is no build-time gate — and redirect home at runtime when the
-        // node reports `multi_asset:false`.
+        // v1 is multi-asset by construction; the bit stays for screen
+        // branching that still reads MULTI_ASSET.
         MULTI_ASSET: caps.multi_asset,
       }) as const,
     [caps.username_claim, caps.multi_asset],

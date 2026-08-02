@@ -2165,9 +2165,7 @@
               <div class="img">
                 <img src="/handbook/screenshots/09-network-info-node.png" alt="node info" />
               </div>
-              <div class="desc">
-                Connected node host shown in the Settings About card.
-              </div>
+              <div class="desc">Connected node host shown in the Settings About card.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -2183,8 +2181,8 @@
                 <img src="/handbook/screenshots/09-network-loading.png" alt="network loading" />
               </div>
               <div class="desc">
-                Spec intercepts <code>/api/info</code> with an 8 s delay → network-not-loaded
-                state (Network row absent, node host still shown).
+                Spec intercepts <code>/api/info</code> with an 8 s delay → network-not-loaded state
+                (Network row absent, node host still shown).
               </div>
             </div>
           </div>
@@ -2587,7 +2585,9 @@
             <div class="spec-head">
               <div class="lhs">
                 <h2><span class="num">15</span>Send — Scan QR</h2>
-                <div class="file">e2e/15-send-scan-qr.spec.ts · e2e/16-send-scan-fallback.spec.ts</div>
+                <div class="file">
+                  e2e/15-send-scan-qr.spec.ts · e2e/16-send-scan-fallback.spec.ts
+                </div>
               </div>
               <div class="rhs">
                 <b>4 tests · 2 baselines</b>
@@ -2623,7 +2623,10 @@
                 >
               </div>
               <div class="img">
-                <img src="/handbook/screenshots/15-scan-filled.png" alt="recipient filled by scan" />
+                <img
+                  src="/handbook/screenshots/15-scan-filled.png"
+                  alt="recipient filled by scan"
+                />
               </div>
               <div class="desc">
                 The fake camera plays a QR clip; the scanner decodes it, validates the payload, and
@@ -2677,11 +2680,11 @@
           <p class="spec-intro">
             The <code>/tx/[id]</code> transaction-detail page: every history row is clickable and
             opens a dedicated page rendering the node's full
-            <code>GET /api/history/{id}</code> detail — direction, status, the decoded
-            account-state snapshot (balance before/after, send counter, commitment key), the
-            verifier circuit digest, and the on-chain reference. Per-run values (id, timestamp,
-            amounts, hashes) carry <code>tx-detail-v-*</code> testids and are masked + width-pinned,
-            so the goldens assert the layout, labels, and status chrome.
+            <code>GET /api/history/{id}</code> detail — direction, status, the decoded account-state
+            snapshot (balance before/after, send counter, commitment key), the verifier circuit
+            digest, and the on-chain reference. Per-run values (id, timestamp, amounts, hashes)
+            carry <code>tx-detail-v-*</code> testids and are masked + width-pinned, so the goldens
+            assert the layout, labels, and status chrome.
           </p>
 
           <div class="tests">
@@ -2737,7 +2740,8 @@
               <div class="head">
                 <span class="name">tx-detail-missing</span>
                 <span class="src">
-                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/17-tx-detail.spec.ts#L94"
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/17-tx-detail.spec.ts#L94"
                     >L94</a
                   >
                 </span>
@@ -2749,9 +2753,9 @@
                 />
               </div>
               <div class="desc">
-                The not-found surface: an unknown id (or a row scoped to a different wallet)
-                renders "Transaction not found" with a back-to-wallet action — the same surface a
-                hard navigation without an unlocked account resolves to.
+                The not-found surface: an unknown id (or a row scoped to a different wallet) renders
+                "Transaction not found" with a back-to-wallet action — the same surface a hard
+                navigation without an unlocked account resolves to.
               </div>
             </div>
           </div>
@@ -2980,8 +2984,8 @@
               </div>
               <div class="desc">
                 <span data-vp-target="mobile">
-                  Mobile: Alice's portfolio with her seeded fixture asset — name + masked
-                  per-asset balance row.
+                  Mobile: Alice's portfolio with her seeded fixture asset — name + masked per-asset
+                  balance row.
                 </span>
                 <span data-vp-target="desktop" hidden>
                   Desktop 1440 × 900: the same portfolio list, framed; balances masked.
@@ -2993,7 +2997,8 @@
               <div class="head">
                 <span class="name">portfolio-empty</span>
                 <span class="src">
-                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L56"
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L56"
                     >L56</a
                   >
                 </span>
@@ -3051,9 +3056,10 @@
             </div>
           </summary>
           <p class="spec-intro">
-            <code>/send</code> on a <code>multi_asset:true</code> node adds an <b>asset picker</b> to
-            the single-asset send flow: pick which held asset to send, then recipient + amount and
-            the two-phase private send. The send carries the chosen <code>asset_id</code> natively.
+            <code>/send</code> on a <code>multi_asset:true</code> node adds an
+            <b>asset picker</b> to the single-asset send flow: pick which held asset to send, then
+            recipient + amount and the two-phase private send. The send carries the chosen
+            <code>asset_id</code> natively.
           </p>
 
           <div class="tests">

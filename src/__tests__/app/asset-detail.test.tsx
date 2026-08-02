@@ -41,7 +41,13 @@ vi.mock('@/lib/features', () => ({
   useFeatures: () => FEATURES_STATE,
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  numPubkeys: 0,
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 
 function portfolio(assets: OwnerBalanceResponse['assets']): OwnerBalanceResponse {
   return { address: ALICE.address, assets };
@@ -115,14 +121,10 @@ describe('AssetDetailPage', () => {
       items: [
         {
           id: 1,
-          txid: null,
-          timestamp: 1_780_000_000,
-          direction: 'mint',
+          kind: 'mint',
           amount: 100,
-          counterparty: null,
           status: 'pending',
-          block_height: null,
-          memo: null,
+          created_at: 1_780_000_000,
         },
       ],
       total: 1,

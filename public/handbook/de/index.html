@@ -2171,9 +2171,7 @@
               <div class="img">
                 <img src="/handbook/screenshots/09-network-info-node.png" alt="node info" />
               </div>
-              <div class="desc">
-                Verbundener Node-Host in der Settings-About-Karte.
-              </div>
+              <div class="desc">Verbundener Node-Host in der Settings-About-Karte.</div>
             </div>
             <div class="test">
               <div class="head">
@@ -2593,7 +2591,9 @@
             <div class="spec-head">
               <div class="lhs">
                 <h2><span class="num">15</span>Senden — QR scannen</h2>
-                <div class="file">e2e/15-send-scan-qr.spec.ts · e2e/16-send-scan-fallback.spec.ts</div>
+                <div class="file">
+                  e2e/15-send-scan-qr.spec.ts · e2e/16-send-scan-fallback.spec.ts
+                </div>
               </div>
               <div class="rhs">
                 <b>4 Tests · 2 Baselines</b>
@@ -2612,11 +2612,10 @@
           <p class="spec-intro">
             Die "Scan QR"-Aktion im Send-Screen füllt den Empfänger, indem sie einen
             zkCoins-Adress-QR dekodiert — der QR des Receive-Screens rückwärts. Der Kamera-Pfad
-            steuert Chromiums Fake-Video-Device
-            (<code>--use-file-for-fake-video-capture</code>) mit einem Einzelbild-Y4M eines
-            QR-Codes und durchläuft so die volle <code>getUserMedia → canvas → jsQR</code>-Kette an
-            einem echten Bild; der Fallback-Pfad dekodiert ein hochgeladenes PNG. Beide nur in
-            Chromium.
+            steuert Chromiums Fake-Video-Device (<code>--use-file-for-fake-video-capture</code>) mit
+            einem Einzelbild-Y4M eines QR-Codes und durchläuft so die volle
+            <code>getUserMedia → canvas → jsQR</code>-Kette an einem echten Bild; der Fallback-Pfad
+            dekodiert ein hochgeladenes PNG. Beide nur in Chromium.
           </p>
 
           <div class="tests cols-2">
@@ -2631,12 +2630,15 @@
                 >
               </div>
               <div class="img">
-                <img src="/handbook/screenshots/15-scan-filled.png" alt="Empfänger per Scan gefüllt" />
+                <img
+                  src="/handbook/screenshots/15-scan-filled.png"
+                  alt="Empfänger per Scan gefüllt"
+                />
               </div>
               <div class="desc">
                 Die Fake-Kamera spielt einen QR-Clip; der Scanner dekodiert ihn, validiert die
-                Nutzlast und füllt das Empfänger-Feld — gezeigt im Ruhezustand, nachdem der
-                "Address scanned"-Hinweis verschwunden ist.
+                Nutzlast und füllt das Empfänger-Feld — gezeigt im Ruhezustand, nachdem der "Address
+                scanned"-Hinweis verschwunden ist.
               </div>
             </div>
             <div class="test">
@@ -2685,12 +2687,12 @@
           </summary>
           <p class="spec-intro">
             Die <code>/tx/[id]</code>-Detailseite: jede Verlaufszeile ist klickbar und öffnet eine
-            eigene Seite, die das vollständige Detail des Knotens
-            (<code>GET /api/history/{id}</code>) rendert — Richtung, Status, der dekodierte
-            Kontostand-Snapshot (Saldo davor/danach, Sende-Zähler, Commitment-Key), der
-            Verifier-Circuit-Digest und die On-Chain-Referenz. Laufabhängige Werte (ID, Zeitstempel,
-            Beträge, Hashes) tragen <code>tx-detail-v-*</code>-Testids und werden maskiert +
-            breitenfixiert, sodass die Goldens Layout, Labels und Status-Chrome prüfen.
+            eigene Seite, die das vollständige Detail des Knotens (<code>GET /api/history/{id}</code
+            >) rendert — Richtung, Status, der dekodierte Kontostand-Snapshot (Saldo davor/danach,
+            Sende-Zähler, Commitment-Key), der Verifier-Circuit-Digest und die On-Chain-Referenz.
+            Laufabhängige Werte (ID, Zeitstempel, Beträge, Hashes) tragen
+            <code>tx-detail-v-*</code>-Testids und werden maskiert + breitenfixiert, sodass die
+            Goldens Layout, Labels und Status-Chrome prüfen.
           </p>
 
           <div class="tests">
@@ -2732,8 +2734,8 @@
                 <span data-vp-target="mobile">
                   Mobil (ganze Seite): Alices Faucet-Mint-Detail, geöffnet aus der Verlaufszeile —
                   Hero mit Richtungs-Icon + vorzeichenbehaftetem Betrag + Status-Chip, dann die
-                  Abschnitte Übersicht, Beträge, Proof &amp; Verifikation, On-Chain und Privatsphäre.
-                  Laufabhängige Werte maskiert.
+                  Abschnitte Übersicht, Beträge, Proof &amp; Verifikation, On-Chain und
+                  Privatsphäre. Laufabhängige Werte maskiert.
                 </span>
                 <span data-vp-target="desktop" hidden>
                   Desktop 1440 × 900: dasselbe Mint-Detail — Labels und Abschnitts-Chrome sichtbar,
@@ -2747,7 +2749,8 @@
               <div class="head">
                 <span class="name">tx-detail-missing</span>
                 <span class="src">
-                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/17-tx-detail.spec.ts#L94"
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/17-tx-detail.spec.ts#L94"
                     >L94</a
                   >
                 </span>
@@ -2796,7 +2799,8 @@
             Durch erlaubnisfreies Minting (zk-coins/node #220) kann jedes Wallet ein eigenes Asset
             ausgeben — Name, Nachkommastellen und Startmenge — gutgeschrieben an
             <code>owner = H(creator_pubkey)</code>. Die Seite ist default-aktiv: sie wird immer
-            ausgeliefert und rendert, sobald der verbundene Knoten die Multi-Asset-Capability meldet.
+            ausgeliefert und rendert, sobald der verbundene Knoten die Multi-Asset-Capability
+            meldet.
           </p>
 
           <div class="tests">
@@ -2856,7 +2860,10 @@
                 </span>
               </div>
               <div class="img">
-                <img src="/handbook/screenshots/18-create-filled.png" alt="Coin erstellen ausgefüllt" />
+                <img
+                  src="/handbook/screenshots/18-create-filled.png"
+                  alt="Coin erstellen ausgefüllt"
+                />
               </div>
               <div class="desc">
                 Gültiger Name, Nachkommastellen und Menge eingegeben — die Schaltfläche „Erstellen"
@@ -2916,7 +2923,10 @@
                 </span>
               </div>
               <div class="img">
-                <img src="/handbook/screenshots/18-create-success.png" alt="Coin erstellen Erfolg" />
+                <img
+                  src="/handbook/screenshots/18-create-success.png"
+                  alt="Coin erstellen Erfolg"
+                />
               </div>
               <div class="desc">
                 Der Bestätigungs-Screen nach dem Mint — Name und ausgegebene Menge, mit „Fertig"
@@ -3005,7 +3015,8 @@
               <div class="head">
                 <span class="name">portfolio-empty</span>
                 <span class="src">
-                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L56"
+                  <a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L56"
                     >L56</a
                   >
                 </span>
@@ -3063,9 +3074,9 @@
           </summary>
           <p class="spec-intro">
             <code>/send</code> auf einem <code>multi_asset:true</code>-Knoten ergänzt den
-            Single-Asset-Sendeflow um einen <b>Asset-Picker</b>: gewünschtes gehaltenes Asset wählen,
-            dann Empfänger + Betrag und der zweiphasige private Versand. Der Send trägt die gewählte
-            <code>asset_id</code> nativ.
+            Single-Asset-Sendeflow um einen <b>Asset-Picker</b>: gewünschtes gehaltenes Asset
+            wählen, dann Empfänger + Betrag und der zweiphasige private Versand. Der Send trägt die
+            gewählte <code>asset_id</code> nativ.
           </p>
 
           <div class="tests">
@@ -3144,10 +3155,14 @@
                 </span>
               </div>
               <div class="img">
-                <img src="/handbook/screenshots/20-send-asset-picker.png" alt="Asset senden Picker" />
+                <img
+                  src="/handbook/screenshots/20-send-asset-picker.png"
+                  alt="Asset senden Picker"
+                />
               </div>
               <div class="desc">
-                Der geöffnete Asset-Picker — die gehaltenen Assets, aus denen das Wallet senden kann.
+                Der geöffnete Asset-Picker — die gehaltenen Assets, aus denen das Wallet senden
+                kann.
               </div>
             </div>
 
@@ -3162,11 +3177,14 @@
                 </span>
               </div>
               <div class="img">
-                <img src="/handbook/screenshots/20-send-asset-amount.png" alt="Asset senden Betrag" />
+                <img
+                  src="/handbook/screenshots/20-send-asset-amount.png"
+                  alt="Asset senden Betrag"
+                />
               </div>
               <div class="desc">
-                Empfänger und ein gültiger Betrag für das gewählte Asset eingegeben — der Versand ist
-                nun aktiv.
+                Empfänger und ein gültiger Betrag für das gewählte Asset eingegeben — der Versand
+                ist nun aktiv.
               </div>
             </div>
           </div>

@@ -38,8 +38,32 @@ vi.mock('@/components/QrScanModal', () => ({
   ),
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  numPubkeys: 0,
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 const SATS_PER_BTC = 100_000_000;
+
+/** §7.5 Invoice JSON — raw hex recipients are rejected on the v1 send path. */
+const BOB_INVOICE = JSON.stringify({
+  amount: '100000',
+  recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+  asset_id: 'bb'.repeat(32),
+  pk0: 'cc'.repeat(32),
+  nk_commit: 'dd'.repeat(32),
+  ivpk: 'ee'.repeat(32),
+  op_pubkey: 'ff'.repeat(32),
+  relays: ['wss://relay.example'],
+  addr_sig: '11'.repeat(64),
+  sig: '22'.repeat(64),
+});
+
+function setRecipient(value: string) {
+  fireEvent.change(screen.getByTestId('send-recipient-input'), { target: { value } });
+}
 
 function singleAssetSurface() {
   useCapabilities.setState({
@@ -137,20 +161,28 @@ describe('SendPage (single-asset) — send lifecycle phase + Done', () => {
       _req: unknown,
       opts: { onPhase?: (s: JobStatus) => void },
     ) => {
-      opts.onPhase?.({ job_id: 'wsend-1', status: 'proving', phase: 'proving' } as JobStatus);
+      opts.onPhase?.({
+        job_id: 'wsend-1',
+        kind: 'send',
+        status: 'proving',
+        phase: 'proving',
+        progress: 0.4,
+      });
       return {
         job_id: 'wsend-1',
+        kind: 'send',
         status: 'completed',
         phase: 'completed',
-        result: { success: true, proof_id: 7 },
-      } as JobStatus;
+        progress: 1,
+        result: { output_coin_ids: ['07'.repeat(32)] },
+      };
     }) as unknown as typeof api.walletSend);
     vi.spyOn(api, 'walletBalance').mockResolvedValue({ balance: SATS_PER_BTC, num_sends: 1 });
 
     const user = userEvent.setup();
     render(<SendPage />);
 
-    await user.type(screen.getByTestId('send-recipient-input'), 'b'.repeat(64));
+    setRecipient(BOB_INVOICE);
     await user.type(screen.getByTestId('send-amount-input'), '0.001');
     await user.click(screen.getByTestId('send-submit-btn'));
     await user.click(screen.getByTestId('send-confirm-btn'));

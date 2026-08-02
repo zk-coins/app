@@ -2,8 +2,8 @@
  * Transaction-list rendering in `WalletScreen` from server `/api/history`
  * truth (issue #175). Complements `WalletScreen.polling.test.tsx`
  * (portfolio cadence) by exercising the list/empty-state gating and the
- * per-row mapping of the node's `HistoryItem` shape (direction → label,
- * Unix-seconds timestamp). Labels are German (the default locale).
+ * per-row mapping of the node's `HistoryItem` shape (kind → label,
+ * created_at as Unix-seconds or ISO). Labels are German (the default locale).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -31,19 +31,21 @@ vi.mock('@/lib/features', () => ({
   useFeatures: () => FEATURES_STATE,
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  numPubkeys: 0,
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 
 function row(over: Partial<HistoryItem> = {}): HistoryItem {
   return {
     id: 1,
-    txid: null,
-    timestamp: 1_780_000_000,
-    direction: 'mint',
+    kind: 'mint',
     amount: 10_000,
-    counterparty: null,
     status: 'pending',
-    block_height: null,
-    memo: null,
+    created_at: 1_780_000_000,
     ...over,
   };
 }
@@ -60,8 +62,9 @@ let historySpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   useNetworkStore.setState({
     apiUrl: 'https://test.api',
-    networkName: 'Mutinynet',
-    bitcoinNetwork: 'mutinynet',
+    network: 'regtest',
+    infoError: null,
+    infoLoaded: true,
   });
   useWalletStore.setState({
     account: ALICE,
@@ -73,7 +76,11 @@ beforeEach(() => {
     storedAuthMethod: null,
     error: null,
   });
-  vi.spyOn(api, 'info').mockResolvedValue({ network: 'Mutinynet', bitcoin_network: 'mutinynet' });
+  vi.spyOn(api, 'info').mockResolvedValue({
+    network: 'regtest',
+    features: ['wallet'],
+    protocol_version: 'v1',
+  });
   vi.spyOn(api, 'ownerBalances').mockResolvedValue(FUNDED);
   historySpy = vi.spyOn(api, 'getHistory');
 });
@@ -94,12 +101,12 @@ describe('WalletScreen — transaction list from server history', () => {
     expect(screen.getByTestId('tx-row-amount')).toBeInTheDocument();
   });
 
-  it('maps direction to label (mint, receive, send)', async () => {
+  it('maps kind to label (mint, receive, send)', async () => {
     historySpy.mockResolvedValue({
       items: [
-        row({ id: 1, direction: 'mint', amount: 10_000 }),
-        row({ id: 2, direction: 'receive', amount: 25_000 }),
-        row({ id: 3, direction: 'send', amount: 5_000 }),
+        row({ id: 1, kind: 'mint', amount: 10_000 }),
+        row({ id: 2, kind: 'receive', amount: 25_000 }),
+        row({ id: 3, kind: 'send', amount: 5_000 }),
       ],
       total: 3,
       limit: 50,
