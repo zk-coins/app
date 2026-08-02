@@ -133,8 +133,17 @@ interface WalletState {
   setLoading: (loading: boolean) => void;
   setError: (error: string | null) => void;
 
-  saveWithPassword: (password: string) => Promise<void>;
-  saveWithPrf: (prfOutput: Uint8Array) => Promise<void>;
+  /**
+   * Encrypt and persist. When `accountToSave` is provided, activate that
+   * account only after a successful v2 write (atomic create/reimport —
+   * never expose an in-memory account that did not survive IDB).
+   */
+  saveWithPassword: (password: string, accountToSave?: Account) => Promise<void>;
+  /**
+   * Encrypt and persist with PRF. Same atomic activation rule as
+   * `saveWithPassword` when `accountToSave` is provided.
+   */
+  saveWithPrf: (prfOutput: Uint8Array, accountToSave?: Account) => Promise<void>;
   unlockWithPassword: (password: string) => Promise<void>;
   unlockWithPrf: (prfOutput: Uint8Array) => Promise<void>;
   lock: () => void;
@@ -166,8 +175,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   setError: (error) => set({ error }),
   clearNeedsSeedReimport: () => set({ needsSeedReimport: false }),
 
-  saveWithPassword: async (password: string) => {
-    const { account } = get();
+  saveWithPassword: async (password: string, accountToSave?: Account) => {
+    const account = accountToSave ?? get().account;
     if (!account) return;
 
     const walletData = serializeWalletPayload(account);
@@ -182,13 +191,21 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       payloadVersion: WALLET_PAYLOAD_VERSION,
     });
 
-    // Successful v2 write: drop legacy blob + reimport flag.
+    // Successful v2 write: activate account only now, drop legacy blob.
     clearLegacyStorage();
-    set({ needsSeedReimport: false, error: null, hasStoredWallet: true });
+    set({
+      account,
+      isLocked: false,
+      needsSeedReimport: false,
+      error: null,
+      hasStoredWallet: true,
+      storedAddress: account.address,
+      storedAuthMethod: 'seed',
+    });
   },
 
-  saveWithPrf: async (prfOutput: Uint8Array) => {
-    const { account } = get();
+  saveWithPrf: async (prfOutput: Uint8Array, accountToSave?: Account) => {
+    const account = accountToSave ?? get().account;
     if (!account) return;
 
     const walletData = serializeWalletPayload(account);
@@ -204,7 +221,15 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     });
 
     clearLegacyStorage();
-    set({ needsSeedReimport: false, error: null, hasStoredWallet: true });
+    set({
+      account,
+      isLocked: false,
+      needsSeedReimport: false,
+      error: null,
+      hasStoredWallet: true,
+      storedAddress: account.address,
+      storedAuthMethod: 'passkey',
+    });
   },
 
   unlockWithPassword: async (password: string) => {

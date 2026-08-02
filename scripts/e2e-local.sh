@@ -21,9 +21,8 @@
 #   3. start the test-only /v1/info capability-normalisation proxy
 #      (scripts/e2e-info-proxy.mjs) → upstream local node
 #   4. start the Next standalone server (node .next/standalone/server.js)
-#   5. Playwright, two legs:
-#        leg 1: --grep-invert "send-success" (parallel, fixtures minted once)
-#        leg 2: --grep "send-success" --workers=1 (ONE real send via the node)
+#   5. Playwright chromium suite (send is unavailable in this build — no
+#      separate send-success leg)
 #   6. tear everything down
 #
 # ── TOPOLOGY ──────────────────────────────────────────────────────────
@@ -167,11 +166,8 @@ if [[ "${1:-}" == "__in_container" ]]; then
   export E2E_FAUCET_CALLS="${E2E_FAUCET_CALLS:-1}"
   export E2E_NEED_FIXTURES="true"
 
-  echo "▶ [container] E2E leg 1 — parallel suite (excluding send-success)"
-  npx playwright test --project=chromium --grep-invert "send-success" "$@"
-
-  echo "▶ [container] E2E leg 2 — send-success (one real send, workers=1)"
-  npx playwright test --project=chromium --grep "send-success" --workers=1 "$@"
+  echo "▶ [container] E2E chromium suite (send unavailable — no send-success leg)"
+  npx playwright test --project=chromium "$@"
 
   echo "✓ [container] local E2E suite complete"
   exit 0

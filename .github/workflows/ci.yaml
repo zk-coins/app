@@ -212,8 +212,9 @@ jobs:
               ;;
           esac
 
-          npx playwright test --project=chromium --grep-invert "send-success"
-          npx playwright test --project=chromium --grep "send-success" --workers=1
+          # Send is unavailable in this build (no input-coin inventory);
+          # there is no send-success leg. Single chromium run covers the suite.
+          npx playwright test --project=chromium
         env:
           E2E_TARGET: local
           E2E_BASE_URL: http://127.0.0.1:3090

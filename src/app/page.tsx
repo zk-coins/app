@@ -70,6 +70,14 @@ export default function Home() {
     );
   }
 
+  // Incompatible encrypted or legacy store: reimport wins over unlock.
+  // unlockWithPassword/unlockWithPrf set needsSeedReimport while leaving
+  // hasStoredWallet+isLocked true — checking unlock first would trap the
+  // user on UnlockScreen forever (encrypted xpriv-era path).
+  if (needsSeedReimport) {
+    return <Onboarding reimportRequired onDiscardLegacy={handleDiscardLegacy} />;
+  }
+
   if (hasStoredWallet && isLocked) {
     return (
       <UnlockScreen
@@ -79,11 +87,6 @@ export default function Home() {
         onReset={handleReset}
       />
     );
-  }
-
-  // Legacy / incompatible store: keep data until re-import or confirmed reset.
-  if (needsSeedReimport) {
-    return <Onboarding reimportRequired onDiscardLegacy={handleDiscardLegacy} />;
   }
 
   return <Onboarding />;

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import {
   useWalletStore,
   parseWalletPayload,
@@ -178,6 +178,36 @@ describe('wallet store — unlock edge cases', () => {
     );
     expect(useWalletStore.getState().needsSeedReimport).toBe(true);
     expect(useWalletStore.getState().account).toBeNull();
+    // IndexedDB record must survive so the user can re-import or discard.
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+
+  it('saveWithPassword activates the account only after a successful write', async () => {
+    expect(useWalletStore.getState().account).toBeNull();
+    await useWalletStore.getState().saveWithPassword('pw12345678', testAccount);
+    const state = useWalletStore.getState();
+    expect(state.account).toEqual(testAccount);
+    expect(state.hasStoredWallet).toBe(true);
+    expect(state.needsSeedReimport).toBe(false);
+    expect(state.isLocked).toBe(false);
+  });
+
+  it('failed saveWithPassword leaves account null and does not clear reimport', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi
+      .spyOn(storage, 'saveEncryptedWallet')
+      .mockRejectedValueOnce(new Error('IDB write failed'));
+
+    useWalletStore.setState({ needsSeedReimport: true, account: null });
+    await expect(
+      useWalletStore.getState().saveWithPassword('pw12345678', testAccount),
+    ).rejects.toThrow('IDB write failed');
+
+    const state = useWalletStore.getState();
+    expect(state.account).toBeNull();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.hasStoredWallet).toBe(false);
+    spy.mockRestore();
   });
 });
 

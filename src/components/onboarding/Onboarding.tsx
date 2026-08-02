@@ -275,7 +275,7 @@ function Benefit({
 /* ---------- Seed Flow ---------- */
 
 function SeedFlow({ onBack }: { onBack: () => void }) {
-  const { setAccount, saveWithPassword } = useWalletStore();
+  const { saveWithPassword } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'generating' | 'reveal' | 'confirm' | 'password' | 'creating'>(
     'generating',
@@ -322,14 +322,13 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
     try {
       const phrase = mnemonic.join(' ');
       const ad = accountKeysFromMnemonic(phrase);
-      setAccount({
+      // Activate account only after confirmed v2 write — never leave a
+      // half-created wallet open if IndexedDB encryption fails.
+      await saveWithPassword(password, {
         address: ad.address,
         mnemonic: ad.mnemonic,
         nkCommit: ad.nkCommit,
       });
-
-      // Encrypt and persist to IndexedDB.
-      await saveWithPassword(password);
       setAuth('seed');
       // Balance is node-owned and not readable without AccountState decode —
       // do not invent 0 or cache a store balance (thin-client rule).
@@ -337,7 +336,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
       setError(err instanceof Error ? err.message : 'Failed to create wallet');
       setStage('password');
     }
-  }, [mnemonic, password, passwordConfirm, setAccount, saveWithPassword, setAuth]);
+  }, [mnemonic, password, passwordConfirm, saveWithPassword, setAuth]);
 
   return (
     <div className="space-y-6 py-2">
@@ -490,7 +489,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
 /* ---------- Passkey Flow ---------- */
 
 function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () => void }) {
-  const { setAccount, saveWithPrf } = useWalletStore();
+  const { saveWithPrf } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'intro' | 'registering' | 'creating'>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -514,12 +513,6 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
       const mnemonic = await deriveMnemonicFromPrf(result.prfOutput);
       const ad = accountKeysFromMnemonic(mnemonic);
 
-      setAccount({
-        address: ad.address,
-        mnemonic: ad.mnemonic,
-        nkCommit: ad.nkCommit,
-      });
-
       // Persist passkey credential metadata to IndexedDB.
       await saveCredential({
         credentialId: result.credentialId,
@@ -527,8 +520,12 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
         createdAt: Date.now(),
       });
 
-      // Encrypt wallet with PRF output and save to IndexedDB.
-      await saveWithPrf(result.prfOutput);
+      // Encrypt + activate only after confirmed v2 write.
+      await saveWithPrf(result.prfOutput, {
+        address: ad.address,
+        mnemonic: ad.mnemonic,
+        nkCommit: ad.nkCommit,
+      });
       setAuth('passkey', result.credentialId);
     } catch (err) {
       if (err instanceof PasskeyPrfUnsupportedError) {
@@ -548,7 +545,7 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
       }
       setStage('intro');
     }
-  }, [setAccount, saveWithPrf, setAuth]);
+  }, [saveWithPrf, setAuth]);
 
   return (
     <div className="space-y-6 py-2">
@@ -630,7 +627,7 @@ function SeedImportFlow({
   onBack: () => void;
   onPasskeyRestore?: () => void;
 }) {
-  const { setAccount, saveWithPassword } = useWalletStore();
+  const { saveWithPassword } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'input' | 'password' | 'restoring'>('input');
   const [phrase, setPhrase] = useState('');
@@ -672,19 +669,21 @@ function SeedImportFlow({
     try {
       const trimmed = phrase.trim().toLowerCase();
       const ad = accountKeysFromMnemonic(trimmed);
-      setAccount({
+      // Atomic reimport: do not set the global account until v2 persist
+      // succeeds. On failure Home stays on reimport/onboarding and the
+      // error remains visible; legacy IDB/localStorage is untouched.
+      await saveWithPassword(password, {
         address: ad.address,
         mnemonic: ad.mnemonic,
         nkCommit: ad.nkCommit,
       });
-      await saveWithPassword(password);
       setAuth('seed');
       // No balance hydration — thin client; balances not available yet.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to restore wallet');
       setStage('password');
     }
-  }, [phrase, password, passwordConfirm, setAccount, saveWithPassword, setAuth]);
+  }, [phrase, password, passwordConfirm, saveWithPassword, setAuth]);
 
   return (
     <div className="space-y-6 py-2">
@@ -807,7 +806,7 @@ function SeedImportFlow({
 /* ---------- Passkey Restore Flow ---------- */
 
 function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
-  const { setAccount, saveWithPrf } = useWalletStore();
+  const { saveWithPrf } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'intro' | 'authenticating' | 'restoring'>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -829,19 +828,18 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
       const mnemonic = await deriveMnemonicFromPrf(result.prfOutput);
       const ad = accountKeysFromMnemonic(mnemonic);
 
-      setAccount({
-        address: ad.address,
-        mnemonic: ad.mnemonic,
-        nkCommit: ad.nkCommit,
-      });
-
       await saveCredential({
         credentialId: result.credentialId,
         derivationVersion: DERIVATION_VERSION,
         createdAt: Date.now(),
       });
 
-      await saveWithPrf(result.prfOutput);
+      // Activate only after confirmed v2 write.
+      await saveWithPrf(result.prfOutput, {
+        address: ad.address,
+        mnemonic: ad.mnemonic,
+        nkCommit: ad.nkCommit,
+      });
       setAuth('passkey', result.credentialId);
     } catch (err) {
       if (err instanceof PasskeyPrfUnsupportedError) {
@@ -861,7 +859,7 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
       }
       setStage('intro');
     }
-  }, [setAccount, saveWithPrf, setAuth]);
+  }, [saveWithPrf, setAuth]);
 
   return (
     <div className="space-y-6 py-2">

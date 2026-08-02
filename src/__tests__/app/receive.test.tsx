@@ -1,15 +1,18 @@
 /**
- * ReceivePage — only name payloads that Send accepts are offered.
+ * ReceivePage — honest unavailability until name resolution is wired.
+ *
+ * Product contract (src/lib/api/client.ts::resolveUsername → 501):
+ * even a stored `username` is not a Send-accepted receive path without
+ * live NIP-05 resolution. Raw zk1 is rejected by extractRecipient.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { render, screen } from '@testing-library/react';
 import ReceivePage from '@/app/receive/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { toZkAddress } from '@/lib/format';
 import { extractRecipient } from '@/lib/qr';
+import { api } from '@/lib/api/client';
 
 const routerReplace = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -25,7 +28,6 @@ const ALICE = {
   nkCommit: '00'.repeat(32),
 };
 const DOMAIN = 'zkcoins.app';
-const ALICE_ZK = toZkAddress(ALICE.username ?? 'alice', DOMAIN);
 
 beforeEach(() => {
   routerReplace.mockClear();
@@ -53,15 +55,16 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('ReceivePage — name path', () => {
-  it('renders QR + name and the payload is accepted by extractRecipient', () => {
+describe('ReceivePage — send acceptance contract', () => {
+  it('stays unavailable even when a local username is stored (resolveUsername is 501)', async () => {
     render(<ReceivePage />);
     expect(screen.getByTestId('receive-heading')).toHaveTextContent('Receive');
-    expect(screen.getByTestId('qr-code')).toBeInTheDocument();
-    expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy name');
-    expect(screen.getByText(ALICE_ZK)).toBeInTheDocument();
-    // Property under test: Receive→Scan→Send round-trip shape.
-    expect(extractRecipient(ALICE_ZK)).toBe(ALICE_ZK);
+    expect(screen.getByTestId('receive-not-available')).toBeInTheDocument();
+    expect(screen.queryByTestId('qr-code')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('receive-copy-btn')).not.toBeInTheDocument();
+
+    // Product send path: name resolution is not a /v1 route.
+    await expect(api.resolveUsername(ALICE.username!)).rejects.toMatchObject({ status: 501 });
   });
 
   it('without a name marks receive as not available (no zk1 payload)', () => {
@@ -71,7 +74,6 @@ describe('ReceivePage — name path', () => {
     render(<ReceivePage />);
     expect(screen.getByTestId('receive-not-available')).toBeInTheDocument();
     expect(screen.queryByTestId('qr-code')).not.toBeInTheDocument();
-    expect(screen.queryByTestId('receive-copy-btn')).not.toBeInTheDocument();
     // Raw address is not a Send-accepted recipient.
     expect(extractRecipient(ALICE.address)).toBeNull();
   });
@@ -79,24 +81,5 @@ describe('ReceivePage — name path', () => {
   it('the back link routes to /', () => {
     render(<ReceivePage />);
     expect(screen.getByTestId('receive-back-link')).toHaveAttribute('href', '/');
-  });
-});
-
-describe('ReceivePage — copy feedback', () => {
-  it('flips the button to "Copied" after a successful clipboard write', async () => {
-    const user = userEvent.setup();
-    render(<ReceivePage />);
-
-    const button = screen.getByTestId('receive-copy-btn');
-    expect(button).toHaveTextContent('Copy name');
-    expect(button).not.toHaveAttribute('data-copied');
-
-    await user.click(button);
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(button).toHaveTextContent('Copied');
-    expect(button).toHaveAttribute('data-copied', 'true');
-    await expect(navigator.clipboard.readText()).resolves.toBe(ALICE_ZK);
   });
 });

@@ -17,6 +17,7 @@
  */
 
 import {
+  V1ApiError,
   ZkCoinsV1Client,
   encodeHexLower,
   freshNpkRand,
@@ -182,13 +183,10 @@ export const api = {
       sendCounter = head.send_counter;
     } catch (err) {
       // Only a typed HTTP 404 means "account does not exist yet".
-      // Network/auth/parse/5xx must abort before /v1/tx (same contract as
-      // the app client) — never invent sendCounter=0 for a live account.
-      const status =
-        err && typeof err === 'object' && 'status' in err
-          ? Number((err as { status: unknown }).status)
-          : NaN;
-      if (status !== 404) {
+      // Network/auth/parse/5xx and untyped wrappers must abort before
+      // /v1/tx (same contract as the app client's isAccountNotFoundError)
+      // — never invent sendCounter=0 for a live account.
+      if (!(err instanceof V1ApiError) || err.status !== 404) {
         throw err;
       }
       sendCounter = 0;

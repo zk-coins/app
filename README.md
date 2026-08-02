@@ -5,7 +5,7 @@
 
 **Private Bitcoin payments via Shielded CSV** — no new chain, no token, no consensus change, no trusted operator. Only Bitcoin, zero-knowledge proofs, and the user's own keys.
 
-The end-user **wallet** for zkCoins — a Next.js 15 PWA. The seed is encrypted on-device (IndexedDB); BIP-32 derivation and Schnorr signing run in an on-device Rust→WASM crate. Installable, LNURL receive.
+The end-user **wallet** for zkCoins — a Next.js 15 PWA. The seed is encrypted on-device (IndexedDB); BIP-32 derivation and Schnorr signing run via `@zkcoins/sdk` pure-TS crypto on-device. Installable, LNURL receive.
 
 > Live: [zkcoins.app](https://zkcoins.app) (PRD) · [dev.zkcoins.app](https://dev.zkcoins.app) (DEV) — Full system docs: **[docs.zkcoins.com](https://docs.zkcoins.com)** · Specification: **[docs.zkcoins.com/specification](https://docs.zkcoins.com/specification)**
 

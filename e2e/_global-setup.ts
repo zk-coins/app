@@ -3,8 +3,8 @@
  *
  * Mints two fresh wallets (Alice + Bob) by driving the same Create flow
  * the user would. Alice is then seeded by creating her OWN asset via the
- * neutral multi-asset create-coin flow (creator-signed mint: admit
- * POST /v1/jobs/mint → commit → poll to completed, configurable via
+ * neutral multi-asset create-coin flow (creator-signed mint: POST /v1/tx
+ * kind=mint → await signature → complete, configurable via
  * E2E_FAUCET_CALLS, default 1). There is no faucet under the neutral
  * multi-asset model — a wallet funds itself by minting an asset it owns.
  * Bob stays empty so the suite has a zero-portfolio fixture for the
@@ -209,7 +209,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   const browser = await chromium.launch();
   try {
     // Alice: fresh wallet, then seed via the creator-signed
-    // /v1/jobs/mint (admit → commit → completed) × FAUCET_CALLS.
+    // POST /v1/tx kind=mint (admit → sign → completed) × FAUCET_CALLS.
     const aliceCtx = await browser.newContext({ baseURL });
     applyColdStartTimeouts(aliceCtx);
     const alice = await withPageRetry(aliceCtx, 'create Alice wallet', async (page) => {

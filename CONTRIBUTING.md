@@ -39,34 +39,21 @@ npm run dev    # http://localhost:3090
 app/
 ├── src/
 │   ├── app/               # Next.js App Router (layout, pages)
-│   ├── components/        # React components
-│   │   ├── Header.tsx
-│   │   ├── WalletCard.tsx
-│   │   ├── SendForm.tsx
-│   │   ├── TransactionLog.tsx
-│   │   ├── SeedPhraseSetup.tsx
-│   │   ├── SeedPhraseImport.tsx
-│   │   ├── SetPassword.tsx
-│   │   ├── UnlockWallet.tsx
-│   │   ├── PasskeySetup.tsx
-│   │   └── Footer.tsx
-│   ├── hooks/             # React hooks
-│   │   └── useZkCoins.ts  # WASM integration
+│   ├── components/        # React components (onboarding, screens, shell)
 │   ├── lib/
-│   │   ├── api/           # REST API client (backend communication)
-│   │   └── crypto/        # Encryption, key derivation, passkey, storage
+│   │   ├── api/           # @zkcoins/sdk-backed /v1 client
+│   │   ├── crypto/        # Encryption, key derivation, passkey, storage
+│   │   └── format.ts / qr.ts / …
 │   └── stores/            # Zustand state management
 │       ├── auth.ts        # Auth flow state
 │       ├── network.ts     # API URL, network name
-│       └── wallet.ts      # Account, encrypted persistence
-├── packages/
-│       └── src/
-│           └── index.ts   # WASM API surface + JS fallback
-├── rust/
+│       ├── capabilities.ts
+│       └── wallet.ts      # Account, encrypted v2 persistence
+├── e2e/                   # Playwright specs + helpers
 ├── public/                # Static assets, PWA manifest, service worker
 ├── Dockerfile             # Multi-stage Next.js build
 ├── entrypoint.sh          # Runtime env var injection (DEV/PRD)
-└── next.config.js         # WASM support, standalone output
+└── next.config.js         # standalone output
 ```
 
 ## Architecture Principle — Thin Client
@@ -162,8 +149,8 @@ import { create } from 'zustand';
 import { useWalletStore } from '@/stores/wallet';
 import { api } from '@/lib/api/client';
 
-// 4. WASM
-import {} from /* wallet helpers */ '@zkcoins/sdk';
+// 4. On-device crypto / typed client (pure TS via @zkcoins/sdk)
+import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
 ```
 
 ### Component Pattern
@@ -228,27 +215,21 @@ const { balance } = await api.balance(address);
 
 Never call `fetch()` directly — always use the `api` object.
 
-### WASM Integration
+### On-device crypto (`@zkcoins/sdk`)
 
-The WASM module provides crypto operations (BIP32, Schnorr). It loads asynchronously with a JS fallback:
+BIP-39/32 derivation and BIP-340 Schnorr signing run in pure TypeScript via `@zkcoins/sdk` (through `src/lib/crypto/account-keys.ts` and `src/lib/api/client.ts`). There is no in-tree Rust/WASM crate and no WASM build step.
 
 ```typescript
-import {} from /* wallet helpers */ '@zkcoins/sdk';
+import { accountKeysFromMnemonic, createMnemonic } from '@/lib/crypto/account-keys';
+import { api } from '@/lib/api/client';
 
-const wasm = await initWasm();
-const account = await wasm.createAccount();
+const phrase = await createMnemonic();
+const keys = accountKeysFromMnemonic(phrase);
+// Signed transitions: api.createCoin / api.send → POST /v1/tx
 ```
 
-- WASM cannot run during SSR — all WASM usage must be in `'use client'` components
-- The `useZkCoins` hook handles WASM initialization
-
-## Building the WASM Module
-
-Only needed if you change `rust/client/`:
-
-```bash
-# Crypto ships via `@zkcoins/sdk` (pure TypeScript). No WASM build step.
-```
+- Key material never leaves the device unencrypted
+- Prefer `@/lib/crypto/account-keys` and `api.*` over importing SDK primitives in components
 
 ## Docker
 

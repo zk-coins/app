@@ -114,7 +114,7 @@ The committed baselines are `*-chromium-linux.png` — rendered on Linux. A nati
 
 The baselines were captured against the hosted DEV stack, whose `/v1/info` reports every opt-in capability **OFF** and `username_domain = dev.zkcoins.app`. A locally-run node built with `--all-features` reports them **ON** (`address_list/username_claim/lnurl = true`), a different `username_domain`, and an extra `bitcoin_network` field. In particular `username_claim:true` makes `WalletScreen` render an extra "Claim a username" form row (≈ +36 px) that shifts **~16 baselines** and fails the diff.
 
-To get baseline parity in local mode the `/v1/info` surface must match DEV. `scripts/e2e-info-proxy.mjs` is a **test-only** reverse-proxy (E2E infra, never bundled, never shipped) that normalises **only `GET /v1/info`** to the DEV surface (caps `false`, `username_domain = dev.zkcoins.app`, drops `bitcoin_network`) and passes **everything else** — jobs/mint/send/commit/balance/health — straight through to the real local node 1:1. (Rebuilding the node with a DEV-matching Cargo feature set was the alternative; the proxy is preferred because it is self-contained and does not couple this repo's E2E run to the node's build config.)
+To get baseline parity in local mode the `/v1/info` surface must match DEV. `scripts/e2e-info-proxy.mjs` is a **test-only** reverse-proxy (E2E infra, never bundled, never shipped) that normalises **only `GET /v1/info`** to the DEV surface (caps `false`, `username_domain = dev.zkcoins.app`, drops `bitcoin_network`) and passes **everything else** — `/v1/tx`, jobs, balance, health — straight through to the real local node 1:1. (Rebuilding the node with a DEV-matching Cargo feature set was the alternative; the proxy is preferred because it is self-contained and does not couple this repo's E2E run to the node's build config.)
 
 #### Topology (all inside the one Playwright container)
 
@@ -137,30 +137,26 @@ The browser build bakes `NEXT_PUBLIC_API_URL = http://127.0.0.1:3090` (the app's
 | `E2E_NETWORK_EXPECTED` | `signet`                           | Network badge label (same as dev mode).       |
 | `E2E_FAUCET_CALLS`     | `1`                                | Mint cycles to seed Alice in globalSetup.     |
 
-The script runs the same two-leg shape as CI: leg 1 is the parallel suite `--grep-invert "send-success"`, leg 2 is `--grep "send-success" --workers=1` (one real send through the local node + funded publisher). The HTML report and any failure artifacts are copied to `playwright-report-local/` on the host (gitignored).
+The script runs the same single chromium suite as CI. Send is unavailable in this build (no input-coin inventory), so there is no separate `send-success` leg. The HTML report and any failure artifacts are copied to `playwright-report-local/` on the host (gitignored).
 
 ## 5. Global setup — fresh accounts every run
 
 File: `e2e/_global-setup.ts`. Runs once before any worker starts. Linked from `playwright.config.ts` (see §4.1).
 
 ```text
-1. Generate two random 12-word BIP-39 mnemonics using the same WASM bridge the app
-   uses (`@zkcoins/sdk mnemonic helpers`). DRY, and any bug in the bridge surfaces
-   here too. 12 words matches the placeholder text in SeedImportFlow and the
-   length validated by `isValidMnemonic`.
-2. Derive Alice + Bob accounts via `accountKeysFromMnemonic(phrase)` —
-   returns `{ address, numPubkeys, xpriv }` exactly like the app.
-3. Seed Alice: run the creator-signed two-phase mint (admit POST /v1/jobs/mint
-   with the signed mint contract → poll to `awaiting_signature` → commit → poll
-   to `completed`) E2E_FAUCET_CALLS times. There is no server-mediated faucet —
-   the node's neutral permissionless model (zk-coins/node#220) credits
-   `owner = H(creator_pubkey)`, so Alice funds herself by minting her own
-   fixture asset (deterministic name `E2E-FIXTURE` on the single-asset leg).
-   We observe the resulting balance via GET /v1/balance (proxy-translated to
-   the portfolio aggregate) and store it (`alice.seededBalance`). Retry × 3
-   with exp backoff.
-   Bob is **not** funded — having one zero-balance fixture is required for
-   06-balance:balance-zero-faucet-visible and the No-funds banner in 07-send.
+1. Generate two random 12-word BIP-39 mnemonics using the same pure-TS
+   `@zkcoins/sdk` helpers the app uses (`e2e/_helpers/keys.ts`). DRY, and any
+   bug in key derivation surfaces here too. 12 words matches SeedImportFlow
+   and the length validated by `isValidMnemonic`.
+2. Derive Alice + Bob accounts via `accountFromMnemonic(phrase)` —
+   returns `{ address, nkCommit, mnemonic }` exactly like the app v1 path.
+3. Seed Alice: run the creator-signed mint (`POST /v1/tx` kind=mint → poll
+   to `awaiting_signature` → ownership sign → poll to `completed`)
+   E2E_FAUCET_CALLS times. There is no server-mediated faucet — the node's
+   neutral permissionless model credits the creator subject, so Alice funds
+   herself by minting her own fixture asset. Retry × 3 with exp backoff.
+   Bob is **not** funded — one zero-balance fixture remains useful for empty
+   wallet specs.
 4. Poll GET /v1/balance for Alice until balance > 0 (max 30 s). Server commits
    the mint inscription asynchronously — without this poll, the first Wallet
    screenshot races the polling tick.
@@ -178,7 +174,7 @@ File: `e2e/_global-setup.ts`. Runs once before any worker starts. Linked from `p
    (server has no delete endpoint) — that's fine, they're random and unfunded.
 ```
 
-Why two accounts and not one: `07-send.spec.ts` requires a real on-chain send between two real wallets — Alice → Bob — to populate Bob's transaction list. Self-send is rejected by the server, so a single fixture isn't sufficient.
+Why two accounts and not one: funded vs empty fixtures keep balance/portfolio specs honest. A live Alice→Bob send is not available in this build (send is unavailable).
 
 ## 6. Helper API
 
@@ -188,11 +184,10 @@ All paths relative to `e2e/`.
 
 ```ts
 export const api = {
-  info(): Promise<InfoResponse>;
-  balance(addressHex: string): Promise<BalanceResponse>;
-  // Jobs API: admit POST /v1/jobs/mint, then poll GET /v1/jobs/:id to completed.
-  mint(addressHex: string): Promise<JobStatus>; // server picks the amount
-  // No send/commit helpers — send is exercised through the UI.
+  info(): Promise<V1Info>;
+  // Creator-signed mint: POST /v1/tx kind=mint → await signature → complete.
+  createCoin(mnemonic, opts?): Promise<{ name; decimals; amount; address }>;
+  // Portfolio / balance reads refuse until AccountState decode ships.
 };
 ```
 
@@ -310,7 +305,7 @@ This section is the result of a line-by-line audit of every default-active compo
 
 ### 8.0 DEV-bundle vs PRD-bundle — what we screenshot
 
-The E2E suite runs against the **DEV-built frontend** (https://dev.zkcoins.app) because that's the only deployment where `/v1/jobs/mint` (faucet) is available — without it we can't seed Alice every run. The DEV bundle has every `FEATURES.*` flag ON. That introduces two categories of difference from PRD:
+The E2E suite runs against the **DEV-built frontend** (https://dev.zkcoins.app) because that's where fixture minting via `POST /v1/tx` kind=mint is available for seeding Alice every run. The DEV bundle has every `FEATURES.*` flag ON. That introduces two categories of difference from PRD:
 
 **(a) Pure navigation detours — traversed silently, not screenshotted.**
 
@@ -426,14 +421,14 @@ Settings page from Alice's wallet, all sections + every interactive widget the u
 
 WalletScreen balance area + copy chip + faucet banner under Alice and Bob.
 
-| #   | Step                        | Notes                                                                                                                                             |
-| --- | --------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | balance-funded-desktop      | Alice loaded. Balance $X + BTC value (masked), eye icon, address chip, Send/Receive enabled, no empty banner.                                     |
-| 2   | balance-funded-mobile       | Same, 375 × 812.                                                                                                                                  |
-| 3   | balance-hidden              | Eye toggle clicked → balance shows `••••`, EyeOff icon, BTC line also masked.                                                                     |
-| 4   | balance-zero-faucet-visible | Bob loaded. Empty-wallet banner with "Wallet is empty" + Faucet button (mint is always-on; DEV runs Mutinynet so the button is shown).            |
-| 5   | balance-faucet-minting      | Faucet click — button shows "Minting…" disabled. Intercept `/v1/jobs/mint` to delay 800 ms. (Spec removed — mint is exercised via `globalSetup`.) |
-| 6   | balance-copied-feedback     | Click address chip — Check icon + "copied" text appear for 1.5 s (assert via `waitForFunction` immediately after click).                          |
+| #   | Step                        | Notes                                                                                                                                  |
+| --- | --------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | balance-funded-desktop      | Alice loaded. Balance $X + BTC value (masked), eye icon, address chip, Send/Receive enabled, no empty banner.                          |
+| 2   | balance-funded-mobile       | Same, 375 × 812.                                                                                                                       |
+| 3   | balance-hidden              | Eye toggle clicked → balance shows `••••`, EyeOff icon, BTC line also masked.                                                          |
+| 4   | balance-zero-faucet-visible | Bob loaded. Empty-wallet banner with "Wallet is empty" + Faucet button (mint is always-on; DEV runs Mutinynet so the button is shown). |
+| 5   | balance-faucet-minting      | Faucet click — button shows "Minting…" disabled. (Spec removed — mint is exercised via `globalSetup` POST /v1/tx.)                     |
+| 6   | balance-copied-feedback     | Click address chip — Check icon + "copied" text appear for 1.5 s (assert via `waitForFunction` immediately after click).               |
 
 ### 8.7 `07-send.spec.ts` (12 tests / 12 shots)
 
@@ -656,7 +651,7 @@ Local iteration without CI: `E2E_BASE_URL=https://dev.zkcoins.app npx playwright
 
 - **PWA install**: §8.10 covers the deferred-prompt save path. The native browser prompt cannot be exercised headless. We accept this gap and document it here.
 - **Account creation crypto**: tested in unit tests (`src/__tests__/lib/crypto/*`) at 100%. Not re-tested at the E2E layer for individual byte values — E2E only proves "wallet exists and is functional after Create".
-- **Faucet flow** (`Mint test BTC` button): network-gated (shown off-mainnet, not env-gated), exercised in the DEV build. We **do not** add a screenshot spec for it — it's exercised indirectly by the `globalSetup` faucet call, which fails the whole suite if `/v1/jobs/mint` regresses.
+- **Fixture mint** (Alice seed): exercised by `globalSetup` via `POST /v1/tx` kind=mint; the suite fails if that path regresses.
 - **Network-activity chart**: not env-gated, so in scope — its page-level golden for `/network` is covered by §8.14 `14-network-activity.spec.ts`.
 
 ## 11. Workflow for developers (and future Claude sessions)

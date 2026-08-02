@@ -49,20 +49,18 @@ test.describe('Transaction detail', () => {
     await setViewport(page, 'desktop');
     await openFirstTxDetail(page);
 
-    // Alice's seeded row is a faucet mint, pending until the on-chain side
-    // is known. These are server-truth and stable across runs.
+    // Alice's seeded row is a faucet mint. v1 history maps pull records to
+    // `status: completed` (see src/lib/api/client.ts::getHistory).
     await expect(page.getByTestId('tx-detail-label')).toHaveText('Faucet');
-    await expect(page.getByTestId('tx-detail-status')).toContainText('pending');
+    await expect(page.getByTestId('tx-detail-status')).toContainText('completed');
     await expect(page.getByTestId('tx-detail-direction')).toContainText('Faucet');
     await expect(page.getByTestId('tx-detail-account')).toBeVisible();
     await expect(page.getByTestId('tx-detail-verification')).toBeVisible();
     await expect(page.getByTestId('tx-detail-counterparty')).toContainText('Private');
     await expect(page.getByTestId('tx-detail-memo')).toBeVisible();
     await expect(page.getByTestId('tx-detail-source')).toContainText('Your node');
-    // A mint has no commit txid yet → no explorer link, "Not yet broadcast".
-    await expect(page.getByTestId('tx-detail-txid')).toContainText('Not yet broadcast');
-    await expect(page.getByTestId('tx-detail-explorer-link')).toHaveCount(0);
-    // The decoded snapshot values are present (masked in the golden).
+    // Locator fields that always render (value cells may be "—" when the
+    // pull record has no decoded snapshot — still present for layout).
     await expect(page.getByTestId('tx-detail-v-balance-after')).toBeVisible();
     await expect(page.getByTestId('tx-detail-v-num-sends')).toBeVisible();
     // The loading frame has resolved.
@@ -87,8 +85,12 @@ test.describe('Transaction detail', () => {
     await setViewport(page, 'mobile');
     await openFirstTxDetail(page);
     await page.getByTestId('tx-detail-back').click();
-    // Back on the wallet screen — the balance area is the stable anchor.
-    await expect(page.getByTestId('balance-amount-usd')).toBeVisible({ timeout: 15_000 });
+    // Back on the wallet screen. CI info-proxy forces multi_asset:true, so
+    // the stable multi-asset anchor is the portfolio-unavailable banner
+    // (not the single-asset USD hero).
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({
+      timeout: 15_000,
+    });
   });
 
   test('tx-detail-missing', async ({ page }) => {

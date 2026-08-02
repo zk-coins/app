@@ -117,6 +117,40 @@ describe('Home — legacy reimport branch', () => {
     // Legacy blob must still be present until re-import or discard.
     expect(localStorage.getItem('zkcoins_wallet')).not.toBeNull();
   });
+
+  it('unlock of encrypted incompatible wallet routes to reimport and keeps the IDB blob', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { encrypt, deriveKeyFromPassword } = await import('@/lib/crypto/encryption');
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+
+    // Seed a password-encrypted but schema-incompatible (xpriv-era) blob.
+    const password = 'testpassword123';
+    const { key, salt } = await deriveKeyFromPassword(password);
+    const legacy = JSON.stringify({
+      account: { address: ALICE.address, xpriv: 'xprv…', numPubkeys: 0 },
+    });
+    const encrypted = await encrypt(legacy, key, salt);
+    await saveEncryptedWallet({
+      encrypted,
+      authMethod: 'seed',
+      address: ALICE.address,
+      createdAt: Date.now(),
+    });
+
+    render(<Home />);
+    expect(await screen.findByTestId('unlock-heading')).toBeInTheDocument();
+
+    await user.type(screen.getByTestId('unlock-password-input'), password);
+    await user.click(screen.getByTestId('unlock-submit-btn'));
+
+    // needsSeedReimport must win over hasStoredWallet+isLocked.
+    expect(await screen.findByTestId('seed-reimport-required')).toBeInTheDocument();
+    expect(screen.queryByTestId('unlock-heading')).not.toBeInTheDocument();
+    // Encrypted blob must remain until re-import or discard.
+    const stored = await loadEncryptedWallet();
+    expect(stored).not.toBeNull();
+    expect(stored?.address).toBe(ALICE.address);
+  });
 });
 
 describe('Home — unlock branch (stored wallet, locked)', () => {
@@ -181,5 +215,25 @@ describe('Home — branch priority', () => {
     });
     render(<Home />);
     expect(await screen.findByTestId('unlock-heading')).toBeInTheDocument();
+  });
+
+  it('prefers reimport over unlock when needsSeedReimport is set with a stored wallet', async () => {
+    const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'ct', iv: 'iv', salt: 'salt' },
+      authMethod: 'seed',
+      address: ALICE.address,
+      createdAt: Date.now(),
+    });
+    useWalletStore.setState({
+      account: null,
+      isLocked: true,
+      hasStoredWallet: true,
+      needsSeedReimport: true,
+      storedAuthMethod: 'seed',
+    });
+    render(<Home />);
+    expect(await screen.findByTestId('seed-reimport-required')).toBeInTheDocument();
+    expect(screen.queryByTestId('unlock-heading')).not.toBeInTheDocument();
   });
 });
