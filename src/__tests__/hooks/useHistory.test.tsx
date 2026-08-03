@@ -5,7 +5,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { renderHook, waitFor, act } from '@testing-library/react';
 import { useHistory } from '@/hooks/useHistory';
-import { api, type HistoryResponse } from '@/lib/api/client';
+import { ApiError, api, type HistoryResponse } from '@/lib/api/client';
 
 const ACCOUNT = {
   address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
@@ -107,5 +107,59 @@ describe('useHistory', () => {
     };
     rerender({ acc: other });
     await waitFor(() => expect(spy).toHaveBeenLastCalledWith(other));
+  });
+
+  it('surfaces ApiError.serverError (or message) on first failure', async () => {
+    spy.mockRejectedValue(new ApiError(503, 'node_unavailable'));
+    const { result } = renderHook(() => useHistory(ACCOUNT));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.error).toBe('node_unavailable');
+    expect(result.current.available).toBe(false);
+  });
+
+  it('falls back to ApiError.message when serverError is omitted', async () => {
+    spy.mockRejectedValue(new ApiError(502));
+    const { result } = renderHook(() => useHistory(ACCOUNT));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.error).toBe('HTTP 502');
+  });
+
+  it('stringifies non-Error rejections', async () => {
+    spy.mockRejectedValue('raw-history-failure');
+    const { result } = renderHook(() => useHistory(ACCOUNT));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.error).toBe('raw-history-failure');
+  });
+
+  it('does not write state when a success resolves after unmount', async () => {
+    let resolveFetch!: (v: HistoryResponse) => void;
+    spy.mockReturnValue(
+      new Promise<HistoryResponse>((res) => {
+        resolveFetch = res;
+      }),
+    );
+    const { unmount } = renderHook(() => useHistory(ACCOUNT));
+    unmount();
+    await act(async () => {
+      resolveFetch({ items: [{ id: 'late', kind: 'mint' }], total: 1, limit: 50, offset: 0 });
+      await Promise.resolve();
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not write state when a rejection lands after unmount', async () => {
+    let rejectFetch!: (e: unknown) => void;
+    spy.mockReturnValue(
+      new Promise<HistoryResponse>((_res, rej) => {
+        rejectFetch = rej;
+      }),
+    );
+    const { unmount } = renderHook(() => useHistory(ACCOUNT));
+    unmount();
+    await act(async () => {
+      rejectFetch(new Error('late'));
+      await Promise.resolve();
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

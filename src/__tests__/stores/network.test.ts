@@ -66,4 +66,31 @@ describe('network store', () => {
     expect(s.infoError).toBe('network down');
     expect(s.infoLoaded).toBe(true);
   });
+
+  it('setters update usernameDomain, features, infoError, and infoLoaded', () => {
+    const store = useNetworkStore.getState();
+    store.setUsernameDomain('names.example');
+    store.setFeatures(['wallet', 'explorer']);
+    store.setInfoError('stale');
+    store.setInfoLoaded(true);
+    const s = useNetworkStore.getState();
+    expect(s.usernameDomain).toBe('names.example');
+    expect(s.features).toEqual(['wallet', 'explorer']);
+    // setFeatures copies — mutating the input must not alias store state
+    const input = ['wallet'];
+    store.setFeatures(input);
+    input.push('mutated');
+    expect(useNetworkStore.getState().features).toEqual(['wallet']);
+    expect(s.infoError).toBe('stale');
+    expect(s.infoLoaded).toBe(true);
+  });
+
+  it('applyInfo clears usernameDomain when the field is omitted', () => {
+    useNetworkStore.getState().setUsernameDomain('old.example');
+    useNetworkStore.getState().applyInfo({ network: 'mainnet' });
+    const s = useNetworkStore.getState();
+    expect(s.network).toBe('mainnet');
+    expect(s.usernameDomain).toBe('');
+    expect(s.features).toEqual([]);
+  });
 });

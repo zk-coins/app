@@ -85,4 +85,30 @@ describe('useCapabilities.fetch — server response handling', () => {
     expect(useCapabilities.getState().capabilities).toEqual(FAIL_CLOSED);
     expect(useCapabilities.getState().loaded).toBe(true);
   });
+
+  it('stringifies non-Error rejections into applyInfoFailure', async () => {
+    vi.spyOn(api, 'info').mockRejectedValue('upstream-string-error');
+
+    await useCapabilities.getState().fetch();
+
+    expect(useCapabilities.getState().capabilities).toEqual(FAIL_CLOSED);
+    expect(useCapabilities.getState().loaded).toBe(true);
+  });
+
+  it('derives from empty features when both capabilities and features are absent', async () => {
+    vi.spyOn(api, 'info').mockResolvedValue({
+      network: 'regtest',
+      protocol_version: 'v1',
+    } as never);
+
+    await useCapabilities.getState().fetch();
+
+    // capabilitiesFromV1Features([]) → multi_asset true, rest false
+    expect(useCapabilities.getState().capabilities).toEqual({
+      address_list: false,
+      username_claim: false,
+      lnurl: false,
+      multi_asset: true,
+    });
+  });
 });

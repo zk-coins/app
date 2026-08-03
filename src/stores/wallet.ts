@@ -261,14 +261,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         error: null,
       });
     } catch (err) {
-      if (err instanceof IncompatibleWalletError) {
-        set({
-          account: null,
-          isLocked: true,
-          needsSeedReimport: true,
-          error: err.message,
-        });
-      }
+      // parseWalletPayload only throws IncompatibleWalletError; surface it as
+      // a forced re-import rather than leaving a half-unlocked store.
+      set({
+        account: null,
+        isLocked: true,
+        needsSeedReimport: true,
+        error: (err as Error).message,
+      });
       throw err;
     }
   },
@@ -289,14 +289,14 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         error: null,
       });
     } catch (err) {
-      if (err instanceof IncompatibleWalletError) {
-        set({
-          account: null,
-          isLocked: true,
-          needsSeedReimport: true,
-          error: err.message,
-        });
-      }
+      // Same as unlockWithPassword: parseWalletPayload is the only thrower
+      // and only raises IncompatibleWalletError.
+      set({
+        account: null,
+        isLocked: true,
+        needsSeedReimport: true,
+        error: (err as Error).message,
+      });
       throw err;
     }
   },

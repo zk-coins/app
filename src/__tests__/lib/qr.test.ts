@@ -127,6 +127,16 @@ describe('isLikelyRecipient', () => {
   ])('rejects %s', (value) => {
     expect(isLikelyRecipient(value)).toBe(false);
   });
+
+  it('accepts Invoice JSON delivery credentials (brace-wrapped)', () => {
+    const invoice = JSON.stringify({
+      amount: '1',
+      recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+    });
+    expect(isLikelyRecipient(invoice)).toBe(true);
+    expect(isLikelyRecipient(`  ${invoice}  `)).toBe(true);
+    expect(extractRecipient(invoice)).toBe(invoice);
+  });
 });
 
 describe('extractRecipient', () => {

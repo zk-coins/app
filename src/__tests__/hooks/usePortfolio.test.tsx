@@ -186,4 +186,49 @@ describe('usePortfolio', () => {
     });
     expect(ownerSpy).toHaveBeenCalledTimes(1);
   });
+
+  it('keeps last good list as stale when a later poll is 501', async () => {
+    ownerSpy
+      .mockResolvedValueOnce(portfolio([ASSET]))
+      .mockRejectedValue(
+        new ApiError(
+          501,
+          'portfolio not available in this build — AccountState balances decode is not wired yet',
+        ),
+      );
+
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePortfolio(ADDR_A));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.available).toBe(true);
+    expect(result.current.assets).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(result.current.assets).toHaveLength(1);
+    expect(result.current.stale).toBe(true);
+    expect(result.current.available).toBe(false);
+    expect(result.current.unavailableReason).toMatch(/not available/i);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('uses ApiError.message when serverError is omitted on 501', async () => {
+    const err = new ApiError(501);
+    ownerSpy.mockRejectedValue(err);
+    const { result } = renderHook(() => usePortfolio(ADDR_A));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.unavailableReason).toBe(err.message);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('stringifies non-Error rejections into error', async () => {
+    ownerSpy.mockRejectedValue('raw-portfolio-failure');
+    const { result } = renderHook(() => usePortfolio(ADDR_A));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.error).toBe('raw-portfolio-failure');
+    expect(result.current.available).toBe(false);
+  });
 });

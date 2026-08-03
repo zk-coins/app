@@ -95,11 +95,50 @@ describe('parseWalletPayload — versioned persistence', () => {
     expect(parseWalletPayload(raw)).toEqual(testAccount);
   });
 
+  it('accepts optional username and lowercases nkCommit', () => {
+    const raw = JSON.stringify({
+      version: WALLET_PAYLOAD_VERSION,
+      account: {
+        ...testAccount,
+        nkCommit: 'AB'.repeat(32),
+        username: 'alice',
+      },
+    });
+    expect(parseWalletPayload(raw)).toEqual({
+      ...testAccount,
+      nkCommit: 'ab'.repeat(32),
+      username: 'alice',
+    });
+  });
+
+  it('refuses non-object JSON roots', () => {
+    expect(() => parseWalletPayload('null')).toThrow(IncompatibleWalletError);
+    expect(() => parseWalletPayload('"string"')).toThrow(IncompatibleWalletError);
+    expect(() => parseWalletPayload('42')).toThrow(IncompatibleWalletError);
+  });
+
   it('refuses unversioned legacy xpriv payloads', () => {
     const raw = JSON.stringify({
       account: {
         address: testAccount.address,
         xpriv: 'xprv-legacy',
+      },
+    });
+    expect(() => parseWalletPayload(raw)).toThrow(IncompatibleWalletError);
+  });
+
+  it('refuses v2 payload whose account is not an object', () => {
+    const raw = JSON.stringify({ version: 2, account: 'not-an-object' });
+    expect(() => parseWalletPayload(raw)).toThrow(IncompatibleWalletError);
+  });
+
+  it('refuses v2 account that still carries xpriv without mnemonic', () => {
+    const raw = JSON.stringify({
+      version: 2,
+      account: {
+        address: testAccount.address,
+        xpriv: 'xprv-still-here',
+        nkCommit: testAccount.nkCommit,
       },
     });
     expect(() => parseWalletPayload(raw)).toThrow(IncompatibleWalletError);
@@ -280,6 +319,58 @@ describe('wallet store — PRF encryption', () => {
     useWalletStore.setState({ account: null });
 
     await expect(useWalletStore.getState().unlockWithPrf(prf2)).rejects.toThrow();
+  });
+
+  it('marks needsSeedReimport when PRF-decrypt yields an incompatible payload', async () => {
+    const prf = crypto.getRandomValues(new Uint8Array(32));
+    useWalletStore.getState().setAccount(testAccount);
+    await useWalletStore.getState().saveWithPrf(prf);
+
+    const { encrypt, deriveKeyFromPrf } = await import('@/lib/crypto/encryption');
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    const stored = await loadEncryptedWallet();
+    expect(stored).not.toBeNull();
+    const key = await deriveKeyFromPrf(prf);
+    const legacy = JSON.stringify({
+      account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 },
+    });
+    const encrypted = await encrypt(legacy, key);
+    await saveEncryptedWallet({
+      encrypted,
+      authMethod: 'passkey',
+      address: testAccount.address,
+      createdAt: Date.now(),
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPrf(prf)).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+});
+
+describe('wallet store — clearNeedsSeedReimport', () => {
+  it('clears the reimport flag without touching the account', () => {
+    useWalletStore.setState({
+      needsSeedReimport: true,
+      account: testAccount,
+      error: 'legacy',
+    });
+    useWalletStore.getState().clearNeedsSeedReimport();
+    expect(useWalletStore.getState().needsSeedReimport).toBe(false);
+    expect(useWalletStore.getState().account).toEqual(testAccount);
+  });
+});
+
+describe('wallet store — serialize username branch', () => {
+  it('persists username when present on the account', async () => {
+    const withUser = { ...testAccount, username: 'alice' };
+    await useWalletStore.getState().saveWithPassword('password123', withUser);
+    useWalletStore.setState({ account: null, isLocked: true });
+    await useWalletStore.getState().unlockWithPassword('password123');
+    expect(useWalletStore.getState().account?.username).toBe('alice');
   });
 });
 

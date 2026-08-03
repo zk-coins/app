@@ -1,10 +1,14 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import { HDKey } from '@scure/bip32';
 import {
   accountKeysFromMnemonic,
   createMnemonic,
+  deriveNk,
   isValidMnemonic,
+  seedFromAccountMnemonic,
   spendKeyAt,
 } from '@/lib/crypto/account-keys';
+import { seedFromMnemonicV1 } from '@zkcoins/sdk';
 
 const FIXTURE =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -42,5 +46,38 @@ describe('account-keys (SDK pure-TS)', () => {
 
   it('rejects invalid mnemonics', async () => {
     expect(await isValidMnemonic('not a real mnemonic phrase at all here')).toBe(false);
+  });
+
+  it('seedFromAccountMnemonic matches seedFromMnemonicV1', () => {
+    const a = seedFromAccountMnemonic(FIXTURE);
+    const b = seedFromMnemonicV1(FIXTURE);
+    expect(a).toEqual(b);
+    expect(a.length).toBe(64);
+  });
+
+  it('deriveNk rejects non-integer / negative account indexes', () => {
+    const seed = seedFromMnemonicV1(FIXTURE);
+    expect(() => deriveNk(seed, -1)).toThrow(/account/);
+    expect(() => deriveNk(seed, 1.5)).toThrow(/account/);
+    expect(() => deriveNk(seed, Number.NaN)).toThrow(/account/);
+  });
+
+  it('deriveNk returns 32 bytes for account 0', () => {
+    const seed = seedFromMnemonicV1(FIXTURE);
+    const nk = deriveNk(seed, 0);
+    expect(nk).toBeInstanceOf(Uint8Array);
+    expect(nk.length).toBe(32);
+  });
+
+  it('deriveNk fails closed when the HD child has no private key', () => {
+    const seed = seedFromMnemonicV1(FIXTURE);
+    const spy = vi.spyOn(HDKey, 'fromMasterSeed').mockReturnValue({
+      derive: () => ({ privateKey: null }),
+    } as never);
+    try {
+      expect(() => deriveNk(seed, 0)).toThrow(/no private key/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 });

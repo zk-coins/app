@@ -57,6 +57,25 @@ describe('normalizeInfo', () => {
     expect(out.network).toBe('Mutinynet');
     expect(out.future_field).toBe('kept');
   });
+
+  it('treats non-array features as empty and skips username_domain when unset', () => {
+    const out = normalizeInfo(
+      {
+        network: 'regtest',
+        features: 'wallet' as unknown as string[],
+        username_domain: 'keep-upstream.example',
+      },
+      '',
+    );
+    expect(out.features).toEqual([]);
+    expect(out.username_domain).toBe('keep-upstream.example');
+    expect(out.capabilities).toEqual({
+      address_list: false,
+      username_claim: false,
+      lnurl: false,
+      multi_asset: true,
+    });
+  });
 });
 
 describe('forwardHeaders', () => {

@@ -3,7 +3,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { useTransaction } from '@/hooks/useTransaction';
 import { ApiError, api, type TxDetail } from '@/lib/api/client';
 
@@ -60,5 +60,37 @@ describe('useTransaction', () => {
     const { result } = renderHook(() => useTransaction('r1', ACCOUNT));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error).toBe('error');
+  });
+
+  it('does not write state when success resolves after unmount', async () => {
+    let resolveFetch!: (v: TxDetail) => void;
+    spy.mockReturnValue(
+      new Promise<TxDetail>((res) => {
+        resolveFetch = res;
+      }),
+    );
+    const { unmount } = renderHook(() => useTransaction('r1', ACCOUNT));
+    unmount();
+    await act(async () => {
+      resolveFetch(DETAIL);
+      await Promise.resolve();
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not write state when rejection lands after unmount', async () => {
+    let rejectFetch!: (e: unknown) => void;
+    spy.mockReturnValue(
+      new Promise<TxDetail>((_res, rej) => {
+        rejectFetch = rej;
+      }),
+    );
+    const { unmount } = renderHook(() => useTransaction('r1', ACCOUNT));
+    unmount();
+    await act(async () => {
+      rejectFetch(new ApiError(500, 'late'));
+      await Promise.resolve();
+    });
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 });

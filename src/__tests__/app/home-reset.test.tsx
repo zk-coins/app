@@ -1,18 +1,10 @@
 /**
- * Home unlock-screen reset escape hatch (`src/app/page.tsx`).
+ * Home escape-hatch handlers (`src/app/page.tsx`):
+ * - `handleReset` on UnlockScreen (forgotten password / passkey gone)
+ * - `handleDiscardLegacy` on Onboarding when needsSeedReimport
  *
- * The routing-priority branches are covered in `home.test.tsx`; this file
- * isolates the one remaining handler — `handleReset`, the escape hatch
- * passed to `<UnlockScreen onReset={...} />` for users stranded on the
- * unlock screen (forgotten password / passkey gone). It must wipe all
- * three surfaces: the encrypted wallet blob (via `deleteWallet`), the
- * passkey credential record (`deleteCredential`), and the auth-store
- * state (`resetAuth`).
- *
- * UnlockScreen is stubbed to a single button that invokes `onReset`
- * directly — its real reset UI (confirm dialog, password field) is
- * covered in `UnlockWallet.test.tsx`; here only the Home-level chain is
- * under test.
+ * Child screens are stubbed to single buttons that invoke the props —
+ * their real UI is covered elsewhere.
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -25,9 +17,6 @@ import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api/client';
 import { deleteCredential } from '@/lib/crypto/storage';
 
-// The stubs are queried by role/name (no `data-testid`) so the
-// button-inventory audit — which scans all of src/ including __tests__ —
-// sees no orphan testids.
 vi.mock('@/components/onboarding/UnlockScreen', () => ({
   UnlockScreen: ({ onReset }: { onReset: () => void }) => (
     <button aria-label="stub reset" onClick={onReset}>
@@ -36,16 +25,28 @@ vi.mock('@/components/onboarding/UnlockScreen', () => ({
   ),
 }));
 vi.mock('@/components/onboarding/Onboarding', () => ({
-  Onboarding: () => <div role="note">stub onboarding</div>,
+  Onboarding: ({
+    onDiscardLegacy,
+    reimportRequired,
+  }: {
+    onDiscardLegacy?: () => void | Promise<void>;
+    reimportRequired?: boolean;
+  }) => (
+    <div role="note">
+      {reimportRequired ? (
+        <button aria-label="stub discard" onClick={() => void onDiscardLegacy?.()}>
+          stub discard
+        </button>
+      ) : (
+        'stub onboarding'
+      )}
+    </div>
+  ),
 }));
 vi.mock('@/components/screens/WalletScreen', () => ({
   WalletScreen: () => <div role="note">stub wallet</div>,
 }));
 
-// Keep the real storage module — `deleteWallet` relies on the real
-// `deleteEncryptedWallet`, and the test seeds a blob with the real
-// `saveEncryptedWallet` — but spy on `deleteCredential` to assert the
-// passkey leg of the reset chain fired.
 vi.mock('@/lib/crypto/storage', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/lib/crypto/storage')>();
   return { ...actual, deleteCredential: vi.fn().mockResolvedValue(undefined) };
@@ -67,6 +68,7 @@ beforeEach(() => {
     storedAddress: null,
     storedAuthMethod: null,
     error: null,
+    needsSeedReimport: false,
   });
   useAuthStore.setState({ authMethod: 'seed', credentialId: 'cred-1', isHydrated: true });
   vi.spyOn(api, 'info').mockResolvedValue({
@@ -74,13 +76,12 @@ beforeEach(() => {
     protocol_version: 'v1',
     features: ['wallet'],
   });
+  vi.mocked(deleteCredential).mockClear();
   localStorage.clear();
 });
 
 describe('Home — unlock-screen reset escape hatch', () => {
   it('wipes the wallet blob, passkey credential, and auth state on reset', async () => {
-    // Seed an encrypted blob so `checkForStoredWallet` flips the store into
-    // the locked/has-stored-wallet state that renders <UnlockScreen />.
     const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
     await saveEncryptedWallet({
       encrypted: { ciphertext: 'ct', iv: 'iv', salt: 'salt' },
@@ -95,10 +96,38 @@ describe('Home — unlock-screen reset escape hatch', () => {
     await waitFor(() => {
       expect(deleteCredential).toHaveBeenCalled();
     });
-    // deleteWallet cleared the stored-wallet flags...
     expect(useWalletStore.getState().hasStoredWallet).toBe(false);
     expect(useWalletStore.getState().isLocked).toBe(false);
-    // ...and resetAuth wiped the auth store identity.
+    expect(useAuthStore.getState().authMethod).toBeNull();
+  });
+});
+
+describe('Home — legacy reimport discard', () => {
+  it('handleDiscardLegacy wipes wallet, credential, auth, and clears reimport flag', async () => {
+    const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'ct', iv: 'iv', salt: 'salt' },
+      authMethod: 'seed',
+      address: ALICE_ADDRESS,
+      createdAt: Date.now(),
+    });
+    useWalletStore.setState({
+      account: null,
+      isLocked: true,
+      hasStoredWallet: true,
+      needsSeedReimport: true,
+      storedAuthMethod: 'seed',
+      storedAddress: ALICE_ADDRESS,
+    });
+
+    render(<Home />);
+    await userEvent.click(await screen.findByRole('button', { name: 'stub discard' }));
+
+    await waitFor(() => {
+      expect(deleteCredential).toHaveBeenCalled();
+    });
+    expect(useWalletStore.getState().hasStoredWallet).toBe(false);
+    expect(useWalletStore.getState().needsSeedReimport).toBe(false);
     expect(useAuthStore.getState().authMethod).toBeNull();
   });
 });

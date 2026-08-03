@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import ReceivePage from '@/app/receive/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
@@ -81,5 +81,27 @@ describe('ReceivePage — send acceptance contract', () => {
   it('the back link routes to /', () => {
     render(<ReceivePage />);
     expect(screen.getByTestId('receive-back-link')).toHaveAttribute('href', '/');
+  });
+
+  it('shows redirecting placeholder and replaces home when no account', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null, hasStoredWallet: false });
+    render(<ReceivePage />);
+    expect(screen.getByTestId('redirecting-placeholder')).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(routerReplace).toHaveBeenCalledWith('/');
+  });
+
+  it('clears the redirect timer on unmount before it fires', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null, hasStoredWallet: false });
+    const { unmount } = render(<ReceivePage />);
+    unmount();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(200);
+    });
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 });

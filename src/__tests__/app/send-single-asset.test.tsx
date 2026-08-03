@@ -4,16 +4,17 @@
  * that could POST /v1/tx with empty input_coins.
  */
 
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, screen } from '@testing-library/react';
 import { render } from '@/__tests__/_helpers/intl';
 import SendPage from '@/app/send/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useCapabilities } from '@/stores/capabilities';
 import { api } from '@/lib/api/client';
 
+const routerReplace = vi.fn();
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
 
@@ -25,6 +26,7 @@ const ALICE = {
 };
 
 beforeEach(() => {
+  routerReplace.mockClear();
   useCapabilities.setState({
     capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: false },
     loaded: true,
@@ -38,6 +40,10 @@ beforeEach(() => {
     storedAuthMethod: 'seed',
     error: null,
   });
+});
+
+afterEach(() => {
+  vi.useRealTimers();
 });
 
 describe('SendPage — not available yet', () => {
@@ -56,5 +62,16 @@ describe('SendPage — not available yet', () => {
     expect(screen.queryByTestId('send-recipient-input')).toBeNull();
     expect(screen.queryByTestId('send-amount-input')).toBeNull();
     expect(screen.queryByTestId('send-confirm-btn')).toBeNull();
+  });
+
+  it('redirects home when no account after the grace timeout', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null, hasStoredWallet: false });
+    render(<SendPage />);
+    expect(screen.getByTestId('redirecting-placeholder')).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(100);
+    });
+    expect(routerReplace).toHaveBeenCalledWith('/');
   });
 });
