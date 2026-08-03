@@ -1,0 +1,43 @@
+# syntax=docker/dockerfile:1
+#
+# Static nginx host for public/handbook/ — served at app-handbook.zkcoins.space
+# (PRD) and dev-app-handbook.zkcoins.space (DEV) via Cloudflare Tunnel.
+#
+# Built independently of the Next.js app runtime: no Node toolchain in the
+# final image. Build context is this repo's root; only the handbook HTML,
+# the assemble script, and committed e2e snapshot PNGs are copied in.
+#
+# Screenshots are assembled from e2e/*.spec.ts-snapshots/*-chromium-linux.png
+# via scripts/assemble-handbook-screenshots.sh. public/handbook/screenshots/
+# is git-ignored (local predev/prebuild sync only, see scripts/sync-handbook-baselines.mjs);
+# the second COPY below populates it inside the image from the multi-stage
+# assembly result instead, since a fresh checkout never has that gitignored
+# directory populated.
+#
+# Layout mirrors the Next static-export URL shape (`/handbook/…`) so the
+# same HTML works under `npm run dev` and the standalone nginx image.
+
+FROM alpine:3.20 AS screenshots-builder
+WORKDIR /work
+RUN apk add --no-cache bash coreutils
+COPY scripts/assemble-handbook-screenshots.sh ./scripts/
+COPY e2e/ ./e2e/
+RUN bash ./scripts/assemble-handbook-screenshots.sh /out
+
+FROM nginx:1.27.5-alpine
+
+# Serve under /handbook/ so absolute /handbook/screenshots/*.png refs resolve
+# the same way they do in the Next static export.
+COPY public/handbook/ /usr/share/nginx/html/handbook/
+COPY --from=screenshots-builder /out/ /usr/share/nginx/html/handbook/screenshots/
+COPY handbook.nginx.conf /etc/nginx/conf.d/default.conf
+# handbook.htpasswd here is the LOCAL-dev-only placeholder committed to the
+# repo (see its header comment). Real DEV/PRD deploys overwrite this file
+# with a secret-materialized htpasswd before invoking `docker build` — see
+# .github/workflows/handbook-deploy.yaml.
+COPY handbook.htpasswd /etc/nginx/handbook.htpasswd
+
+EXPOSE 8080
+
+HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
+    CMD wget -qO- --timeout=3 http://127.0.0.1:8080/healthz >/dev/null || exit 1

@@ -11,6 +11,7 @@
     "prebuild": "node scripts/sync-handbook-baselines.mjs",
     "build": "next build",
     "sync:handbook": "node scripts/sync-handbook-baselines.mjs",
+    "handbook:assemble": "bash scripts/assemble-handbook-screenshots.sh public/handbook/screenshots",
     "start": "next start --port 3090",
     "lint": "next lint && prettier --check .",
     "lint:fix": "next lint --fix && prettier --write .",

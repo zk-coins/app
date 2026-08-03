@@ -1,0 +1,203 @@
+name: Handbook Deploy
+
+# Branch routing (matches this repo's own deploy-dev.yaml / deploy-prd.yaml):
+#   push to develop → DEV → dev-app-handbook.zkcoins.space  (image :beta)
+#   push to main    → PRD → app-handbook.zkcoins.space      (image :latest)
+#
+# Runner + image architecture mirrors this repo's own deploy-dev.yaml /
+# deploy-prd.yaml (ubuntu-24.04-arm, linux/arm64, cloudflared-linux-arm64) —
+# NOT the sibling explorer repo's amd64 handbook pipeline, since this repo's
+# real deploy targets are arm64 hosts.
+#
+# Remote recreate command `zkcoins-app-handbook` is a placeholder the infra
+# side must provision (analogous to the existing `zkcoins-app` remote command
+# on the wallet hosts). The deploy step below fails loud if a required secret
+# is empty or missing — it never silently skips the recreate and never falls
+# back to a default.
+
+on:
+  push:
+    branches: [develop, main]
+    paths:
+      - 'public/handbook/**'
+      - 'e2e/**/*-snapshots/**'
+      - 'scripts/assemble-handbook-screenshots.sh'
+      - 'Dockerfile.handbook'
+      - 'handbook.nginx.conf'
+      - 'handbook.htpasswd'
+      - '.github/workflows/handbook-deploy.yaml'
+  workflow_dispatch:
+
+concurrency:
+  group: handbook-deploy-${{ github.ref_name }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  deploy-dev:
+    name: Deploy handbook DEV
+    if: github.ref_name == 'develop' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'develop')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    env:
+      DOCKER_TAGS: zkcoins/app-handbook:beta
+      HANDBOOK_URL: https://dev-app-handbook.zkcoins.space
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Materialize handbook htpasswd from secret
+        # The checked-in handbook.htpasswd is a LOCAL-dev-only placeholder
+        # (see its header comment) and must never reach a real DEV/PRD
+        # image. Overwrite it in this ephemeral checkout with the real
+        # basic-auth file from a repository secret before the Docker build
+        # picks it up. Fail loud — never fall back to the placeholder for
+        # a real deploy.
+        env:
+          HANDBOOK_HTPASSWD: ${{ secrets.HANDBOOK_HTPASSWD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${HANDBOOK_HTPASSWD}" ]]; then
+            echo "::error::HANDBOOK_HTPASSWD secret is empty or unset — refusing to deploy the handbook with the placeholder htpasswd" >&2
+            exit 1
+          fi
+          printf '%s\n' "${HANDBOOK_HTPASSWD}" > handbook.htpasswd
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.handbook
+          push: true
+          tags: ${{ env.DOCKER_TAGS }}
+          platforms: linux/arm64
+
+      - name: Install cloudflared
+        # Pinned release + hardcoded SHA-256 check before the binary is ever
+        # executed — no integrity check previously existed on this download.
+        env:
+          CLOUDFLARED_URL: https://github.com/cloudflare/cloudflared/releases/download/2025.4.0/cloudflared-linux-arm64
+          CLOUDFLARED_SHA256: 2561391ee9abdc828afcc52f5ac314b6551a9a6a31ff59cbc64efc63aec04615
+        run: |
+          set -euo pipefail
+          curl -fsSL "${CLOUDFLARED_URL}" -o /usr/local/bin/cloudflared
+          echo "${CLOUDFLARED_SHA256}  /usr/local/bin/cloudflared" | sha256sum -c -
+          chmod +x /usr/local/bin/cloudflared
+
+      - name: Deploy to DEV
+        # Remote command is a placeholder — infra must provision
+        # `zkcoins-app-handbook` on the DEV host (compose recreate of the
+        # handbook container). Same secret names as this repo's own
+        # deploy-dev.yaml. Every secret is guarded with `:?` so a missing
+        # secret fails the step loudly instead of running ssh against an
+        # empty host/user.
+        env:
+          DEPLOY_DEV_SSH_KEY: ${{ secrets.DEPLOY_DEV_SSH_KEY }}
+          DEPLOY_DEV_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_DEV_SSH_KNOWN_HOSTS }}
+          DEPLOY_DEV_HOST: ${{ secrets.DEPLOY_DEV_HOST }}
+          DEPLOY_DEV_USER: ${{ secrets.DEPLOY_DEV_USER }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_DEV_SSH_KEY:?DEPLOY_DEV_SSH_KEY secret is required}"
+          : "${DEPLOY_DEV_SSH_KNOWN_HOSTS:?DEPLOY_DEV_SSH_KNOWN_HOSTS secret is required}"
+          : "${DEPLOY_DEV_HOST:?DEPLOY_DEV_HOST secret is required}"
+          : "${DEPLOY_DEV_USER:?DEPLOY_DEV_USER secret is required}"
+          mkdir -p ~/.ssh
+          echo "${DEPLOY_DEV_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${DEPLOY_DEV_SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key \
+            -o ProxyCommand="cloudflared access ssh --hostname ${DEPLOY_DEV_HOST}" \
+            "${DEPLOY_DEV_USER}@${DEPLOY_DEV_HOST}" \
+            "zkcoins-app-handbook"
+
+      - name: Smoke-check /healthz
+        # Fail loudly if the deploy target does not answer 200 — no || true,
+        # no continue-on-error.
+        run: curl -f --max-time 10 "${{ env.HANDBOOK_URL }}/healthz"
+
+  deploy-prd:
+    name: Deploy handbook PRD
+    if: github.ref_name == 'main' || (github.event_name == 'workflow_dispatch' && github.ref_name == 'main')
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    env:
+      DOCKER_TAGS: zkcoins/app-handbook:latest
+      HANDBOOK_URL: https://app-handbook.zkcoins.space
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Materialize handbook htpasswd from secret
+        env:
+          HANDBOOK_HTPASSWD: ${{ secrets.HANDBOOK_HTPASSWD }}
+        run: |
+          set -euo pipefail
+          if [[ -z "${HANDBOOK_HTPASSWD}" ]]; then
+            echo "::error::HANDBOOK_HTPASSWD secret is empty or unset — refusing to deploy the handbook with the placeholder htpasswd" >&2
+            exit 1
+          fi
+          printf '%s\n' "${HANDBOOK_HTPASSWD}" > handbook.htpasswd
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile.handbook
+          push: true
+          tags: ${{ env.DOCKER_TAGS }}
+          platforms: linux/arm64
+
+      - name: Install cloudflared
+        env:
+          CLOUDFLARED_URL: https://github.com/cloudflare/cloudflared/releases/download/2025.4.0/cloudflared-linux-arm64
+          CLOUDFLARED_SHA256: 2561391ee9abdc828afcc52f5ac314b6551a9a6a31ff59cbc64efc63aec04615
+        run: |
+          set -euo pipefail
+          curl -fsSL "${CLOUDFLARED_URL}" -o /usr/local/bin/cloudflared
+          echo "${CLOUDFLARED_SHA256}  /usr/local/bin/cloudflared" | sha256sum -c -
+          chmod +x /usr/local/bin/cloudflared
+
+      - name: Deploy to PRD
+        env:
+          DEPLOY_PRD_SSH_KEY: ${{ secrets.DEPLOY_PRD_SSH_KEY }}
+          DEPLOY_PRD_SSH_KNOWN_HOSTS: ${{ secrets.DEPLOY_PRD_SSH_KNOWN_HOSTS }}
+          DEPLOY_PRD_HOST: ${{ secrets.DEPLOY_PRD_HOST }}
+          DEPLOY_PRD_USER: ${{ secrets.DEPLOY_PRD_USER }}
+        run: |
+          set -euo pipefail
+          : "${DEPLOY_PRD_SSH_KEY:?DEPLOY_PRD_SSH_KEY secret is required}"
+          : "${DEPLOY_PRD_SSH_KNOWN_HOSTS:?DEPLOY_PRD_SSH_KNOWN_HOSTS secret is required}"
+          : "${DEPLOY_PRD_HOST:?DEPLOY_PRD_HOST secret is required}"
+          : "${DEPLOY_PRD_USER:?DEPLOY_PRD_USER secret is required}"
+          mkdir -p ~/.ssh
+          echo "${DEPLOY_PRD_SSH_KEY}" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+          echo "${DEPLOY_PRD_SSH_KNOWN_HOSTS}" > ~/.ssh/known_hosts
+          ssh -i ~/.ssh/deploy_key \
+            -o ProxyCommand="cloudflared access ssh --hostname ${DEPLOY_PRD_HOST}" \
+            "${DEPLOY_PRD_USER}@${DEPLOY_PRD_HOST}" \
+            "zkcoins-app-handbook"
+
+      - name: Smoke-check /healthz
+        run: curl -f --max-time 10 "${{ env.HANDBOOK_URL }}/healthz"
