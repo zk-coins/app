@@ -6,7 +6,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { ZkCoinsV1Client, V1ApiError, type DeliveryCredential, type V1Job } from '@zkcoins/sdk';
+import {
+  ZkCoinsV1Client,
+  V1ApiError,
+  type DeliveryCredential,
+  type V1Job,
+  type V1JobStatusValue,
+  type V1JobErrorBody,
+  type V1Info,
+} from '@zkcoins/sdk';
 import {
   ApiError,
   JobFailedError,
@@ -38,7 +46,10 @@ const invoiceDelivery: DeliveryCredential = {
   },
 };
 
-function completedJob(overrides: Partial<V1Job> = {}): V1Job {
+/** Overrides may supply a partial error body (defensive fallback-parsing tests). */
+type JobOverrides = Omit<Partial<V1Job>, 'error'> & { error?: Partial<V1JobErrorBody> };
+
+function completedJob(overrides: JobOverrides = {}): V1Job {
   return {
     job_id: JOB_ID,
     kind: 'mint',
@@ -49,7 +60,7 @@ function completedJob(overrides: Partial<V1Job> = {}): V1Job {
   } as V1Job;
 }
 
-function awaitingJob(overrides: Partial<V1Job> = {}): V1Job {
+function awaitingJob(overrides: JobOverrides = {}): V1Job {
   return {
     job_id: JOB_ID,
     kind: 'mint',
@@ -58,10 +69,14 @@ function awaitingJob(overrides: Partial<V1Job> = {}): V1Job {
     progress: 0.5,
     awaiting_signature: {
       send_counter: 0,
-      m_state: '00'.repeat(32),
-      proof_data_hash: '11'.repeat(32),
+      new_account_state_hash: 'a0'.repeat(32),
+      output_coins_root: 'a1'.repeat(32),
+      input_nullifiers_root: 'a2'.repeat(32),
+      coin_history_root: 'a3'.repeat(32),
+      nav_commitment: 'a4'.repeat(32),
       npk_commit: '22'.repeat(32),
-      network: 'regtest',
+      proof_data_hash: '11'.repeat(32),
+      txn_pubkey: 'a5'.repeat(32),
     },
     ...overrides,
   } as V1Job;
@@ -69,7 +84,13 @@ function awaitingJob(overrides: Partial<V1Job> = {}): V1Job {
 
 const spies: Array<ReturnType<typeof vi.spyOn>> = [];
 
-function spyProto<K extends keyof ZkCoinsV1Client>(
+type V1ClientMethod = keyof {
+  [K in keyof ZkCoinsV1Client as ZkCoinsV1Client[K] extends (...args: any[]) => any
+    ? K
+    : never]: true;
+};
+
+function spyProto<K extends V1ClientMethod>(
   method: K,
   impl: ZkCoinsV1Client[K],
 ): ReturnType<typeof vi.spyOn> {
@@ -82,10 +103,12 @@ function mockHappyHandshake(opts: { sendCounter?: number; phases?: string[] } = 
   const sendCounter = opts.sendCounter ?? 0;
   spyProto('openOwnershipPullSession', async () => ({
     session: 'pull-sess',
+    session_expiry: '2099-01-01T00:00:00.000Z',
     records: [],
-    head: { send_counter: sendCounter, current_pubkey: 'aa'.repeat(32) },
   }));
   spyProto('getAccountState', async () => ({
+    account_state: 'ac'.repeat(32),
+    state_head: 'ad'.repeat(32),
     send_counter: sendCounter,
     current_pubkey: 'aa'.repeat(32),
   }));
@@ -94,12 +117,16 @@ function mockHappyHandshake(opts: { sendCounter?: number; phases?: string[] } = 
     awaitingJob({
       awaiting_signature: {
         send_counter: sendCounter,
-        m_state: '00'.repeat(32),
-        proof_data_hash: '11'.repeat(32),
+        new_account_state_hash: 'a0'.repeat(32),
+        output_coins_root: 'a1'.repeat(32),
+        input_nullifiers_root: 'a2'.repeat(32),
+        coin_history_root: 'a3'.repeat(32),
+        nav_commitment: 'a4'.repeat(32),
         npk_commit: '22'.repeat(32),
-        network: 'regtest',
+        proof_data_hash: '11'.repeat(32),
+        txn_pubkey: 'a5'.repeat(32),
       },
-    } as Partial<V1Job>),
+    }),
   );
   spyProto('refuseOrSignAndSubmit', async () => ({
     signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
@@ -116,8 +143,8 @@ function mockHappyHandshake(opts: { sendCounter?: number; phases?: string[] } = 
     }
     return {
       job: {
-        ...completedJob({ status: 'running', phase }),
-        status: 'running',
+        ...completedJob({ status: 'proving', phase }),
+        status: 'proving',
       } as V1Job,
       retryAfterMs: 10,
     };
@@ -239,9 +266,12 @@ describe('api.accountState / getHistory / getTransaction', () => {
   it('accountState returns the pull-session head', async () => {
     spyProto('openOwnershipPullSession', async () => ({
       session: 's1',
+      session_expiry: '2099-01-01T00:00:00.000Z',
       records: [],
     }));
     spyProto('getAccountState', async () => ({
+      account_state: 'ac'.repeat(32),
+      state_head: 'ad'.repeat(32),
       send_counter: 3,
       current_pubkey: 'ab'.repeat(32),
     }));
@@ -261,24 +291,28 @@ describe('api.accountState / getHistory / getTransaction', () => {
   it('getHistory maps pull records into UI items with limit/offset', async () => {
     spyProto('openOwnershipPullSession', async () => ({
       session: 's1',
+      session_expiry: '2099-01-01T00:00:00.000Z',
       records: [
         {
           record_id: 'r0',
           record_type: 'coin',
           transition_kind: 'mint',
+          blob_id: 'blob-r0',
           occurred_at: '2024-01-01T00:00:00.000Z',
         },
         {
           record_id: 'r1',
           record_type: 'coin',
           transition_kind: 'send',
+          blob_id: 'blob-r1',
           occurred_at: '2024-01-02T00:00:00.000Z',
         },
         {
           record_id: 'r2',
           record_type: 'note',
           // no transition_kind — falls back to record_type
-          occurred_at: 1_700_000_000,
+          blob_id: 'blob-r2',
+          occurred_at: '1700000000',
         },
       ],
     }));
@@ -305,6 +339,7 @@ describe('api.accountState / getHistory / getTransaction', () => {
   it('getHistory defaults limit/offset and maps errors', async () => {
     spyProto('openOwnershipPullSession', async () => ({
       session: 's1',
+      session_expiry: '2099-01-01T00:00:00.000Z',
       records: [],
     }));
     const empty = await api.getHistory({ address: ADDR, mnemonic: MNEMONIC, nkCommit: NK });
@@ -321,11 +356,13 @@ describe('api.accountState / getHistory / getTransaction', () => {
   it('getTransaction finds a row or 404s', async () => {
     spyProto('openOwnershipPullSession', async () => ({
       session: 's1',
+      session_expiry: '2099-01-01T00:00:00.000Z',
       records: [
         {
           record_id: 'tx-7',
           record_type: 'coin',
           transition_kind: 'send',
+          blob_id: 'blob-tx-7',
           occurred_at: '2024-06-01T00:00:00.000Z',
         },
       ],
@@ -357,9 +394,11 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
       if (pullCalls === 1) {
         throw new V1ApiError(404, 'not_found', 'missing account');
       }
-      return { session: 's-sign', records: [] };
+      return { session: 's-sign', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
     });
     spyProto('getAccountState', async () => ({
+      account_state: 'ac'.repeat(32),
+      state_head: 'ad'.repeat(32),
       send_counter: 0,
       current_pubkey: 'aa'.repeat(32),
     }));
@@ -425,7 +464,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       completedJob({
         status: 'failed',
         error: { error: 'prove_failed', message: 'circuit boom' },
-      } as Partial<V1Job>),
+      }),
     );
 
     await expect(
@@ -467,7 +506,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     });
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () =>
-      awaitingJob({ awaiting_signature: undefined } as Partial<V1Job>),
+      awaitingJob({ awaiting_signature: undefined }),
     );
 
     await expect(
@@ -491,7 +530,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       completedJob({
         status: 'cancelled',
         error: { error: 'user_cancelled' },
-      } as Partial<V1Job>),
+      }),
     );
 
     await expect(
@@ -515,6 +554,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
     spyProto('getAccountState', async () => ({
+      account_state: 'ac'.repeat(32),
+      state_head: 'ad'.repeat(32),
       send_counter: 0,
       current_pubkey: 'aa'.repeat(32),
     }));
@@ -523,14 +564,14 @@ describe('waitForJob branches via completed handshake + poll', () => {
     spies[0]!.mockImplementation(async () => {
       pulls += 1;
       if (pulls === 1) throw new V1ApiError(404, 'not_found', '');
-      return { session: 's', records: [] };
+      return { session: 's', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
     });
     spyProto('refuseOrSignAndSubmit', async () => ({
       signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob({ status: 'running', phase: 'proving' }),
+      job: completedJob({ status: 'proving', phase: 'proving' }),
     }));
     spyProto('getJob', async () => ({
-      job: completedJob({ status: 'running', phase: 'proving' }),
+      job: completedJob({ status: 'proving', phase: 'proving' }),
       retryAfterMs: null,
     }));
 
@@ -551,9 +592,11 @@ describe('waitForJob branches via completed handshake + poll', () => {
     spyProto('openOwnershipPullSession', async () => {
       pulls += 1;
       if (pulls === 1) throw new V1ApiError(404, 'not_found', '');
-      return { session: 's', records: [] };
+      return { session: 's', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
     });
     spyProto('getAccountState', async () => ({
+      account_state: 'ac'.repeat(32),
+      state_head: 'ad'.repeat(32),
       send_counter: 0,
       current_pubkey: 'aa'.repeat(32),
     }));
@@ -561,13 +604,13 @@ describe('waitForJob branches via completed handshake + poll', () => {
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
     spyProto('refuseOrSignAndSubmit', async () => ({
       signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob({ status: 'running' }),
+      job: completedJob({ status: 'proving' }),
     }));
     spyProto('getJob', async () => ({
       job: completedJob({
         status: 'failed',
         error: { message: 'prove exploded' },
-      } as Partial<V1Job>),
+      }),
       retryAfterMs: null,
     }));
 
@@ -588,9 +631,11 @@ describe('waitForJob branches via completed handshake + poll', () => {
     spyProto('openOwnershipPullSession', async () => {
       pulls += 1;
       if (pulls === 1) throw new V1ApiError(404, 'not_found', '');
-      return { session: 's', records: [] };
+      return { session: 's', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
     });
     spyProto('getAccountState', async () => ({
+      account_state: 'ac'.repeat(32),
+      state_head: 'ad'.repeat(32),
       send_counter: 0,
       current_pubkey: 'aa'.repeat(32),
     }));
@@ -601,13 +646,13 @@ describe('waitForJob branches via completed handshake + poll', () => {
     });
     spyProto('refuseOrSignAndSubmit', async () => ({
       signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob({ status: 'running' }),
+      job: completedJob({ status: 'proving' }),
     }));
     spyProto('getJob', async () => ({
       job: completedJob({
         status: 'cancelled',
         error: { error: 'user_cancelled_only' },
-      } as Partial<V1Job>),
+      }),
       retryAfterMs: null,
     }));
 
@@ -629,9 +674,11 @@ describe('waitForJob branches via completed handshake + poll', () => {
     spyProto('openOwnershipPullSession', async () => {
       pulls += 1;
       if (pulls === 1) throw new V1ApiError(404, 'not_found', '');
-      return { session: 's', records: [] };
+      return { session: 's', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
     });
     spyProto('getAccountState', async () => ({
+      account_state: 'ac'.repeat(32),
+      state_head: 'ad'.repeat(32),
       send_counter: 0,
       current_pubkey: 'aa'.repeat(32),
     }));
@@ -639,7 +686,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
     spyProto('refuseOrSignAndSubmit', async () => ({
       signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob({ status: 'running', phase: 'proving' }),
+      job: completedJob({ status: 'proving', phase: 'proving' }),
     }));
 
     let poll = 0;
@@ -647,7 +694,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
       poll += 1;
       if (poll === 1) {
         return {
-          job: completedJob({ status: 'running', phase: 'proving' }),
+          job: completedJob({ status: 'proving', phase: 'proving' }),
           retryAfterMs: 5, // below POLL_FLOOR_MS → floor applies
         };
       }
@@ -697,11 +744,13 @@ describe('api.send failure mapping (no delivery crypto)', () => {
 
 describe('api.info features default', () => {
   it('maps missing features to empty capability set (multi_asset still true)', async () => {
-    spyProto('info', async () => ({
-      network: 'regtest',
-      protocol_version: 'v1',
-      // features omitted
-    }));
+    spyProto('info', async () =>
+      // features intentionally omitted — defensive missing-field parsing
+      ({
+        network: 'regtest',
+        protocol_version: 'v1',
+      }) as V1Info,
+    );
     const info = await api.info();
     expect(info.capabilities).toEqual({
       address_list: false,

@@ -52,7 +52,13 @@ const invoiceDelivery: DeliveryCredential = {
 
 const spies: Array<ReturnType<typeof vi.spyOn>> = [];
 
-function spyProto<K extends keyof ZkCoinsV1Client>(method: K, impl: ZkCoinsV1Client[K]) {
+type V1ClientMethod = keyof {
+  [K in keyof ZkCoinsV1Client as ZkCoinsV1Client[K] extends (...args: any[]) => any
+    ? K
+    : never]: true;
+};
+
+function spyProto<K extends V1ClientMethod>(method: K, impl: ZkCoinsV1Client[K]) {
   const s = vi.spyOn(ZkCoinsV1Client.prototype, method).mockImplementation(impl as never);
   spies.push(s);
   return s;
@@ -77,17 +83,27 @@ function awaitingJob(sendCounter = 0): V1Job {
     progress: 0.5,
     awaiting_signature: {
       send_counter: sendCounter,
-      m_state: '00'.repeat(32),
-      proof_data_hash: '11'.repeat(32),
+      new_account_state_hash: 'a0'.repeat(32),
+      output_coins_root: 'a1'.repeat(32),
+      input_nullifiers_root: 'a2'.repeat(32),
+      coin_history_root: 'a3'.repeat(32),
+      nav_commitment: 'a4'.repeat(32),
       npk_commit: '22'.repeat(32),
-      network: 'regtest',
+      proof_data_hash: '11'.repeat(32),
+      txn_pubkey: 'a5'.repeat(32),
     },
   } as V1Job;
 }
 
 function mockHandshake(sendCounter = 0) {
-  spyProto('openOwnershipPullSession', async () => ({ session: 's', records: [] }));
+  spyProto('openOwnershipPullSession', async () => ({
+    session: 's',
+    session_expiry: '2099-01-01T00:00:00.000Z',
+    records: [],
+  }));
   spyProto('getAccountState', async () => ({
+    account_state: 'ac'.repeat(32),
+    state_head: 'ad'.repeat(32),
     send_counter: sendCounter,
     current_pubkey: 'aa'.repeat(32),
   }));
@@ -160,9 +176,11 @@ describe('api.createCoin with delivery', () => {
     spyProto('openOwnershipPullSession', async () => {
       pulls += 1;
       if (pulls === 1) throw new V1ApiError(404, 'not_found', '');
-      return { session: 's', records: [] };
+      return { session: 's', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
     });
     spyProto('getAccountState', async () => ({
+      account_state: 'ac'.repeat(32),
+      state_head: 'ad'.repeat(32),
       send_counter: 0,
       current_pubkey: 'aa'.repeat(32),
     }));
