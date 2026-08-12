@@ -11,7 +11,6 @@ import {
   V1ApiError,
   type DeliveryCredential,
   type V1Job,
-  type V1JobStatusValue,
   type V1JobErrorBody,
   type V1Info,
 } from '@zkcoins/sdk';
@@ -446,15 +445,88 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     expect(job.status).toBe('completed');
   });
 
+  it('rejects a non-canonical amount with leading zeros', async () => {
+    const pull = spyProto('openOwnershipPullSession', async () => {
+      throw new Error('openOwnershipPullSession must not run for an invalid amount');
+    });
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run for an invalid amount');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.createCoin({
+        account_address: ADDR,
+        name: 'Invalid',
+        decimals: 0,
+        amount: '0001',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown).toMatchObject({
+      name: 'Error',
+      message: 'createCoin: amount must be a non-empty unsigned decimal digit string, got "0001"',
+    });
+    expect(pull).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it('mint delegates to createCoin', async () => {
     mockHappyHandshake({ phases: ['completed'] });
     // First pull for createCoin account head: mockHappy already returns send_counter 0
-    const job = await api.mint({ account_address: ADDR, mnemonic: MNEMONIC, nkCommit: NK }, 42);
+    const job = await api.mint({ account_address: ADDR, mnemonic: MNEMONIC, nkCommit: NK }, '42');
     expect(job.status).toBe('completed');
   });
 });
 
 describe('runTransitionHandshake error branches via createCoin', () => {
+  it('classifies an abort during a long Retry-After sleep as a timeout', async () => {
+    const controller = new AbortController();
+    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async (_id, opts) => {
+      expect(opts?.signal).toBe(controller.signal);
+      if (!opts?.sleep) {
+        throw new Error('waitForAwaitingSignature test stub requires sleep');
+      }
+      const sleeping = opts.sleep(240_000);
+      controller.abort();
+      await sleeping;
+      throw new Error('abortable sleep resolved after the signal aborted');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.createCoin({
+        account_address: ADDR,
+        name: 'Timeout',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(timeout).toHaveBeenCalledWith(180_000);
+    expect(thrown).toBeInstanceOf(JobFailedError);
+    expect(thrown).toMatchObject({
+      jobId: JOB_ID,
+      status: 'failed',
+      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+      message: 'timed out waiting for awaiting_signature after 180000ms',
+    });
+  });
+
   it('throws JobFailedError when wait returns failed', async () => {
     spyProto('openOwnershipPullSession', async () => {
       throw new V1ApiError(404, 'not_found', '');
@@ -744,13 +816,12 @@ describe('api.send failure mapping (no delivery crypto)', () => {
 
 describe('api.info features default', () => {
   it('maps missing features to empty capability set (multi_asset still true)', async () => {
-    spyProto('info', async () =>
-      // features intentionally omitted — defensive missing-field parsing
-      ({
-        network: 'regtest',
-        protocol_version: 'v1',
-      }) as V1Info,
-    );
+    const malformedInfo: Partial<V1Info> = {
+      network: 'regtest',
+      protocol_version: 'v1',
+    };
+    // The unsafe cast deliberately simulates a malformed server response missing `features`.
+    spyProto('info', async () => malformedInfo as unknown as V1Info);
     const info = await api.info();
     expect(info.capabilities).toEqual({
       address_list: false,

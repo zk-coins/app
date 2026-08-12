@@ -103,6 +103,33 @@ export function formatAssetAmount(amount: number, decimals: number | undefined):
   });
 }
 
+/** Format an arbitrary-precision atomic-unit digit string without numeric conversion. */
+export function formatAssetAmountString(atomicDigits: string, decimals: number): string {
+  if (!/^[0-9]+$/.test(atomicDigits)) {
+    throw new Error(
+      `formatAssetAmountString: atomicDigits must be a non-empty unsigned decimal digit string, got ${JSON.stringify(atomicDigits)}`,
+    );
+  }
+  if (!Number.isInteger(decimals) || decimals < 0) {
+    throw new Error(
+      `formatAssetAmountString: decimals must be a non-negative integer, got ${JSON.stringify(decimals)}`,
+    );
+  }
+
+  const digits = atomicDigits.replace(/^0+(?=\d)/, '');
+  const decimalIndex = digits.length - decimals;
+  const integerDigits = decimalIndex > 0 ? digits.slice(0, decimalIndex) : '0';
+  const groupedInteger = integerDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  if (decimals === 0) return groupedInteger;
+
+  const fractionalDigits =
+    decimalIndex > 0
+      ? digits.slice(decimalIndex).replace(/0+$/, '')
+      : `${'0'.repeat(-decimalIndex)}${digits}`.replace(/0+$/, '');
+  return fractionalDigits.length > 0 ? `${groupedInteger}.${fractionalDigits}` : groupedInteger;
+}
+
 /** Short form of a 32-byte hex asset id — the trust anchor shown next to
  *  the (spoofable) human name. e.g. `ab12cd34…ef56`. */
 export function shortAssetId(assetId: string): string {

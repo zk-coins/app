@@ -9,7 +9,7 @@ import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
 import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
-import { formatAssetAmount } from '@/lib/format';
+import { formatAssetAmountString } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
 
 const MAX_DECIMALS = 18;
@@ -130,9 +130,7 @@ export default function CreateCoinPage() {
           </h1>
           <p className="mt-2 text-[14px] text-ink2">
             {t('successBody', {
-              // Display-only conversion — the mint request itself already went out
-              // with the raw, unrounded amount string (see api.createCoin).
-              amount: formatAssetAmount(Number(success.amount), success.decimals),
+              amount: formatAssetAmountString(success.amount, success.decimals),
               name: success.name,
             })}
           </p>

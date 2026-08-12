@@ -167,7 +167,7 @@ describe('isAccountNotFoundError', () => {
     expect(isAccountNotFoundError(new V1ApiError(404, 'not_found', 'missing'))).toBe(true);
     // A 404 without the not_found machine code (e.g. a different resource's
     // 404, or one relayed without a code) must NOT be treated as
-    // "account does not exist" — this is the narrowing this fix adds.
+    // "account does not exist".
     expect(isAccountNotFoundError(new ApiError(404, 'not_found'))).toBe(false);
     expect(isAccountNotFoundError(new V1ApiError(404, 'job_not_found', 'missing'))).toBe(false);
     expect(isAccountNotFoundError(new ApiError(500, 'boom'))).toBe(false);

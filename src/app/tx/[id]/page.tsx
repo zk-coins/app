@@ -3,15 +3,7 @@
 import type { ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
-import {
-  ArrowLeft,
-  ArrowUpRight,
-  ArrowDownLeft,
-  Plus,
-  Receipt,
-  ExternalLink,
-  ShieldCheck,
-} from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Plus, Receipt, ExternalLink } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
@@ -124,11 +116,15 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
   const explorerHref = EXPLORER_URL && detail.txid ? `${EXPLORER_URL}/tx/${detail.txid}` : null;
   const accountAddr = detail.address ?? '';
   const zkAddress = accountAddr ? toZkAddress(accountAddr, usernameDomain) : '';
-  // `confirmed` / `completed` mean the proof path finished successfully.
-  const verified = detail.status === 'confirmed' || detail.status === 'completed';
   const amount = typeof detail.amount === 'number' ? detail.amount : undefined;
   const status = detail.status ?? 'pending';
   const statusClass = STATUS_STYLES[status] ?? STATUS_STYLES.pending;
+  const confirmationLabel =
+    status === 'confirmed' || status === 'completed'
+      ? 'Confirmed'
+      : status === 'failed' || status === 'cancelled'
+        ? 'Not confirmed'
+        : 'Awaiting confirmation';
 
   return (
     <section data-testid="tx-detail-body" className="mt-8 space-y-8">
@@ -212,16 +208,16 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
         />
       </Section>
 
-      {/* Proof & verification */}
-      <Section title="Proof & verification">
-        <Row label="Verification" testid="tx-detail-verification">
-          {verified ? (
-            <span className="inline-flex items-center gap-1.5 text-[12px] font-medium text-bitcoin">
-              <ShieldCheck size={13} strokeWidth={2.25} /> Proof verified
-            </span>
-          ) : (
-            <span className="text-[12px] text-ink3">Awaiting confirmation</span>
-          )}
+      {/* Confirmation */}
+      <Section title="Confirmation">
+        <Row label="Status" testid="tx-detail-confirmation">
+          <span
+            className={`text-[12px] ${
+              confirmationLabel === 'Confirmed' ? 'font-medium text-bitcoin' : 'text-ink3'
+            }`}
+          >
+            {confirmationLabel}
+          </span>
         </Row>
         <Row
           label="Circuit digest"

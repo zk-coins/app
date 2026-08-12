@@ -80,8 +80,8 @@ describe('TransactionDetailPage', () => {
     expect(screen.getByTestId('tx-detail-txid')).toHaveTextContent('Not yet broadcast');
     expect(screen.getByTestId('tx-detail-counterparty')).toHaveTextContent('Private');
     expect(screen.getByTestId('tx-detail-source')).toHaveTextContent('Your node');
-    // Pending → awaiting confirmation (no verified marker).
-    expect(screen.getByTestId('tx-detail-verification')).toHaveTextContent('Awaiting confirmation');
+    // Pending records stay explicitly unconfirmed.
+    expect(screen.getByTestId('tx-detail-confirmation')).toHaveTextContent('Awaiting confirmation');
     expect(spy).toHaveBeenCalledWith('7', {
       address: ALICE.address,
       mnemonic: ALICE.mnemonic,
@@ -89,7 +89,7 @@ describe('TransactionDetailPage', () => {
     });
   });
 
-  it('renders a confirmed send: signed amount, verified marker, raw txid (no explorer)', async () => {
+  it('renders a confirmed send: signed amount, confirmation state, raw txid', async () => {
     spy.mockResolvedValue({
       ...MINT,
       kind: 'send',
@@ -108,7 +108,7 @@ describe('TransactionDetailPage', () => {
     expect(await screen.findByTestId('tx-detail-label')).toHaveTextContent('Sent');
     // Debit → Unicode-minus signed amount.
     expect(screen.getByTestId('tx-detail-v-amount')).toHaveTextContent('−');
-    expect(screen.getByTestId('tx-detail-verification')).toHaveTextContent('Proof verified');
+    expect(screen.getByTestId('tx-detail-confirmation')).toHaveTextContent('Confirmed');
     expect(screen.getByTestId('tx-detail-v-txid')).toBeInTheDocument();
     // No explorer env in unit tests → plain txid span, no outbound link.
     expect(screen.queryByTestId('tx-detail-explorer-link')).not.toBeInTheDocument();

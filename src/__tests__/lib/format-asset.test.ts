@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatAssetAmount, shortAssetId } from '@/lib/format';
+import { formatAssetAmount, formatAssetAmountString, shortAssetId } from '@/lib/format';
 
 describe('formatAssetAmount', () => {
   it('renders a 0-decimal asset as a plain integer with grouping', () => {
@@ -24,6 +24,16 @@ describe('formatAssetAmount', () => {
 
   it('treats a negative decimals as 0 (defensive)', () => {
     expect(formatAssetAmount(500, -1)).toBe('500');
+  });
+});
+
+describe('formatAssetAmountString', () => {
+  it('preserves fractional digits beyond the safe integer range', () => {
+    expect(formatAssetAmountString('1000000000000000001', 18)).toBe('1.000000000000000001');
+  });
+
+  it('preserves every digit above the safe integer range', () => {
+    expect(formatAssetAmountString('9223372036854775807', 0)).toBe('9,223,372,036,854,775,807');
   });
 });
 

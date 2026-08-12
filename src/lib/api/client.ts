@@ -185,8 +185,8 @@ export interface CreateCoinParams {
   account_address: string;
   name: string;
   decimals: number;
-  /** Decimal-Digit-String in atomaren Einheiten (beliebige Präzision).
-   *  NIEMALS durch Number()/String(number) geschickt — siehe Fix 1. */
+  /** Decimal digit string in atomic units (arbitrary precision). Never converted through
+   *  Number()/String(number). */
   amount: string;
   mnemonic: string;
   /** 32-byte nk_commit hex — required for the ownership pull in the sign handshake. */
@@ -358,6 +358,41 @@ async function runTransitionHandshake(
     pinOnFirstUse?: boolean;
   } = {},
 ): Promise<V1Job> {
+  const signal = AbortSignal.timeout(WAIT_TIMEOUT_MS);
+  const abortableSleep = (ms: number): Promise<void> =>
+    new Promise<void>((resolve, reject) => {
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      function cleanup() {
+        if (timer !== undefined) {
+          clearTimeout(timer);
+          timer = undefined;
+        }
+        signal.removeEventListener('abort', onAbort);
+      }
+      function onAbort() {
+        cleanup();
+        reject(
+          signal.reason instanceof Error
+            ? signal.reason
+            : new Error('runTransitionHandshake: wait aborted'),
+        );
+      }
+
+      if (signal.aborted) {
+        onAbort();
+        return;
+      }
+
+      timer = setTimeout(
+        () => {
+          cleanup();
+          resolve();
+        },
+        Math.max(POLL_FLOOR_MS, ms),
+      );
+      signal.addEventListener('abort', onAbort, { once: true });
+    });
+
   const accepted = await client.submitTransition(body, {
     idempotencyKey: newIdempotencyKey(),
     ...(opts.confirmPinMismatch !== undefined
@@ -370,11 +405,11 @@ async function runTransitionHandshake(
   let awaiting: V1Job;
   try {
     awaiting = await client.waitForAwaitingSignature(jobId, {
-      sleep: (ms) => delay(Math.max(POLL_FLOOR_MS, ms)),
-      signal: AbortSignal.timeout(WAIT_TIMEOUT_MS),
+      sleep: abortableSleep,
+      signal,
     });
   } catch (err) {
-    if (err instanceof Error && err.name === 'AbortError') {
+    if (signal.aborted) {
       throw new JobFailedError(
         jobId,
         'failed',
@@ -610,6 +645,13 @@ export const api = {
     opts: { onPhase?: (status: V1Job) => void } = {},
   ): Promise<V1Job> => {
     try {
+      if (!/^(0|[1-9][0-9]*)$/.test(params.amount)) {
+        throw new Error(
+          `createCoin: amount must be a non-empty unsigned decimal digit string, got ${JSON.stringify(params.amount)}`,
+        );
+      }
+      const amountStr = params.amount;
+
       const client = v1Client();
       const accountIndex = params.accountIndex ?? 0;
       const npkRand = freshNpkRand();
@@ -636,12 +678,6 @@ export const api = {
 
       const next = spendKeyAt(params.mnemonic, sendCounter + 1, accountIndex);
       const assetId = params.asset_id ?? '00'.repeat(32);
-      if (!/^[0-9]+$/.test(params.amount)) {
-        throw new Error(
-          `createCoin: amount must be a non-empty unsigned decimal digit string, got ${JSON.stringify(params.amount)}`,
-        );
-      }
-      const amountStr = params.amount;
 
       let output = {
         recipient: params.account_address,
@@ -697,7 +733,7 @@ export const api = {
       mnemonic: string;
       nkCommit: string;
     },
-    amount: number = 10_000,
+    amount: string = '10000',
     opts: { onPhase?: (status: V1Job) => void } = {},
   ): Promise<V1Job> =>
     api.createCoin(
@@ -705,7 +741,7 @@ export const api = {
         account_address: params.account_address,
         name: `FAUCET-${Date.now()}`,
         decimals: 0,
-        amount: String(amount),
+        amount,
         mnemonic: params.mnemonic,
         nkCommit: params.nkCommit,
       },

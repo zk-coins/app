@@ -208,7 +208,16 @@ All backend communication goes through `src/lib/api/client.ts`:
 import { api } from '@/lib/api/client';
 
 await api.createCoin({ account_address, name, decimals, amount, mnemonic, nkCommit });
-await api.send({ account_address, recipient, amount, asset_id, mnemonic, nkCommit, delivery, input_coins });
+await api.send({
+  account_address,
+  recipient,
+  amount,
+  asset_id,
+  mnemonic,
+  nkCommit,
+  delivery,
+  input_coins,
+});
 const state = await api.accountState({ address, mnemonic, nkCommit });
 ```
 

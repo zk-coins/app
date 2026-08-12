@@ -50,13 +50,12 @@ test.describe('Transaction detail', () => {
     await openFirstTxDetail(page);
 
     // v1 history never carries a real per-record status (the pull record has
-    // no status/confirmation field) — the UI fails closed to "pending" rather
-    // than inventing a verified claim (see src/lib/api/client.ts::getHistory).
+    // no status/confirmation field), so the UI reports pending and awaiting confirmation.
     await expect(page.getByTestId('tx-detail-label')).toHaveText('Faucet');
     await expect(page.getByTestId('tx-detail-status')).toContainText('pending');
     await expect(page.getByTestId('tx-detail-direction')).toContainText('Faucet');
     await expect(page.getByTestId('tx-detail-account')).toBeVisible();
-    await expect(page.getByTestId('tx-detail-verification')).toBeVisible();
+    await expect(page.getByTestId('tx-detail-confirmation')).toHaveText('Awaiting confirmation');
     await expect(page.getByTestId('tx-detail-counterparty')).toContainText('Private');
     await expect(page.getByTestId('tx-detail-memo')).toBeVisible();
     await expect(page.getByTestId('tx-detail-source')).toContainText('Your node');
