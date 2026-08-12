@@ -15,10 +15,11 @@ import { ApiError, api, type OwnerBalanceResponse } from '@/lib/api/client';
 
 const ASSET_ID = 'c'.repeat(64);
 let mockParamId = ASSET_ID;
+const routerReplace = vi.fn();
 
 vi.mock('next/navigation', () => ({
   useParams: () => ({ id: mockParamId }),
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
   // `notFound` stub kept for next/navigation module-surface completeness; the
   // route is default-active now and no longer guards with it.
   notFound: vi.fn(),
@@ -57,6 +58,8 @@ let historySpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   mockParamId = ASSET_ID;
+  routerReplace.mockClear();
+  FEATURES_STATE.MULTI_ASSET = true;
   useWalletStore.setState({
     account: ALICE,
     isLoading: false,
@@ -124,6 +127,15 @@ describe('AssetDetailPage', () => {
     expect(screen.queryByTestId('asset-detail-missing')).not.toBeInTheDocument();
   });
 
+  it('uses translated unavailable copy when a failed portfolio read has an empty message', async () => {
+    ownerSpy.mockRejectedValue(new Error(''));
+
+    render(<AssetDetailPage />);
+    expect(await screen.findByTestId('asset-detail-unavailable')).toHaveTextContent(
+      'Portfolio-Reads sind in diesem Build nicht verfügbar',
+    );
+  });
+
   it('shows error (not missing) when portfolio read fails for other reasons', async () => {
     ownerSpy.mockRejectedValue(new Error('network down'));
 
@@ -153,5 +165,54 @@ describe('AssetDetailPage', () => {
 
     render(<AssetDetailPage />);
     expect(await screen.findByTestId('asset-tx-row')).toBeInTheDocument();
+  });
+
+  it('renders send, receive, and amount-less owner-history rows', async () => {
+    ownerSpy.mockResolvedValue(
+      portfolio([{ asset_id: ASSET_ID, name: 'MyCoin', decimals: 0, balance: 100, num_sends: 1 }]),
+    );
+    historySpy.mockResolvedValue({
+      items: [
+        { id: 1, kind: 'send', amount: 5, created_at: 1_780_000_000 },
+        { id: 2, kind: 'receive', amount: 5, created_at: 1_780_000_001 },
+        { id: 3, kind: 'mint', amount: undefined, created_at: 1_780_000_002 },
+      ],
+      total: 3,
+      limit: 50,
+      offset: 0,
+    });
+    render(<AssetDetailPage />);
+    const rows = await screen.findAllByTestId('asset-tx-row');
+    expect(rows).toHaveLength(3);
+    expect(rows[2]).toHaveTextContent('—');
+  });
+
+  it('shows no terminal state while the first portfolio request is pending', () => {
+    ownerSpy.mockReturnValue(new Promise<never>(() => {}));
+    render(<AssetDetailPage />);
+    expect(screen.queryByTestId('asset-detail-body')).toBeNull();
+    expect(screen.queryByTestId('asset-detail-missing')).toBeNull();
+  });
+
+  it('redirects when runtime multi-asset support is absent', () => {
+    FEATURES_STATE.MULTI_ASSET = false;
+    ownerSpy.mockResolvedValue(portfolio([]));
+    render(<AssetDetailPage />);
+    expect(routerReplace).toHaveBeenCalledWith('/');
+  });
+
+  it('parks account-scoped reads when no wallet is present', () => {
+    useWalletStore.setState({ account: null });
+    render(<AssetDetailPage />);
+    expect(ownerSpy).not.toHaveBeenCalled();
+    expect(historySpy).not.toHaveBeenCalled();
+  });
+
+  it('parks history when signing material is incomplete while portfolio still loads', async () => {
+    useWalletStore.setState({ account: { ...ALICE, nkCommit: '' } });
+    ownerSpy.mockResolvedValue(portfolio([]));
+    render(<AssetDetailPage />);
+    expect(await screen.findByTestId('asset-detail-missing')).toBeInTheDocument();
+    expect(historySpy).not.toHaveBeenCalled();
   });
 });

@@ -25,14 +25,22 @@ export default function CreateCoinPage() {
   // single-asset node has no create-coin flow — redirect home, mirroring the
   // `!account` redirect below.
   useEffect(() => {
-    if (!multiAssetRuntime && typeof window !== 'undefined') {
+    if (
+      !multiAssetRuntime &&
+      /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+      typeof window !== 'undefined'
+    ) {
       router.replace('/');
     }
   }, [multiAssetRuntime, router]);
 
   // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {
-    if (!account && typeof window !== 'undefined') {
+    if (
+      !account &&
+      /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+      typeof window !== 'undefined'
+    ) {
       const id = setTimeout(() => {
         if (!useWalletStore.getState().account) router.replace('/');
       }, 100);
@@ -51,6 +59,7 @@ export default function CreateCoinPage() {
   );
 
   const create = useCallback(async () => {
+    /* v8 ignore next -- The form and its submit callback unmount synchronously whenever account becomes null. */
     if (!account) return;
     const trimmedName = name.trim();
     if (!trimmedName) {

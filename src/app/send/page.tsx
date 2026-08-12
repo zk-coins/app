@@ -27,7 +27,11 @@ function SendUnavailablePage() {
   const account = useWalletStore((s) => s.account);
 
   useEffect(() => {
-    if (!account && typeof window !== 'undefined') {
+    if (
+      !account &&
+      /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+      typeof window !== 'undefined'
+    ) {
       const id = setTimeout(() => {
         if (!useWalletStore.getState().account) router.replace('/');
       }, 100);

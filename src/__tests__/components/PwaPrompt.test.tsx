@@ -163,6 +163,24 @@ describe('PwaPrompt — native install flow', () => {
     expect(bip.prompt).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the install button busy until the browser prompt settles', async () => {
+    let resolvePrompt!: () => void;
+    render(<PwaPrompt />);
+    await act(async () => {});
+    const bipEvent = new Event('beforeinstallprompt') as Event & {
+      prompt: () => Promise<void>;
+      userChoice: Promise<{ outcome: 'accepted' }>;
+    };
+    bipEvent.prompt = vi.fn(() => new Promise<void>((resolve) => (resolvePrompt = resolve)));
+    bipEvent.userChoice = Promise.resolve({ outcome: 'accepted' });
+    await act(async () => window.dispatchEvent(bipEvent));
+    fireEvent.click(screen.getByTestId('pwa-install-btn'));
+    expect(screen.getByTestId('pwa-install-btn')).toHaveTextContent('Installing…');
+    resolvePrompt();
+    await act(async () => {});
+    expect(screen.getByTestId('pwa-install-btn')).toHaveTextContent('Install');
+  });
+
   it('persists the dismissed flag when the user rejects the OS prompt', async () => {
     await renderNative('dismissed');
     const user = userEvent.setup();
@@ -216,6 +234,16 @@ describe('PwaPrompt — dismiss + appinstalled lifecycle', () => {
     });
 
     expect(localStorage.getItem('zkcoins_pwa_prompt_dismissed')).toBeNull();
+  });
+
+  it('still marks the app installed when localStorage cleanup throws', async () => {
+    render(<PwaPrompt />);
+    await act(async () => {});
+    vi.spyOn(Storage.prototype, 'removeItem').mockImplementation(() => {
+      throw new Error('storage disabled');
+    });
+    await act(async () => window.dispatchEvent(new Event('appinstalled')));
+    expect(screen.queryByTestId('pwa-prompt-manual')).not.toBeInTheDocument();
   });
 
   it('removes its beforeinstallprompt listener on unmount', async () => {

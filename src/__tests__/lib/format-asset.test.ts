@@ -35,6 +35,26 @@ describe('formatAssetAmountString', () => {
   it('preserves every digit above the safe integer range', () => {
     expect(formatAssetAmountString('9223372036854775807', 0)).toBe('9,223,372,036,854,775,807');
   });
+
+  it('rejects empty, signed, and non-decimal atomic-unit strings', () => {
+    expect(() => formatAssetAmountString('', 0)).toThrow(/non-empty unsigned decimal/);
+    expect(() => formatAssetAmountString('-1', 0)).toThrow(/non-empty unsigned decimal/);
+    expect(() => formatAssetAmountString('1.5', 0)).toThrow(/non-empty unsigned decimal/);
+  });
+
+  it('rejects negative and fractional decimal counts', () => {
+    expect(() => formatAssetAmountString('1', -1)).toThrow(/non-negative integer/);
+    expect(() => formatAssetAmountString('1', 1.5)).toThrow(/non-negative integer/);
+  });
+
+  it('normalizes leading zeros and pads fractions smaller than one unit', () => {
+    expect(formatAssetAmountString('000123', 5)).toBe('0.00123');
+    expect(formatAssetAmountString('0000', 3)).toBe('0');
+  });
+
+  it('trims an all-zero fractional suffix back to the grouped integer', () => {
+    expect(formatAssetAmountString('123000', 3)).toBe('123');
+  });
 });
 
 describe('shortAssetId', () => {

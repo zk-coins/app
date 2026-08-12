@@ -16,6 +16,7 @@ type Mode =
   | { kind: 'manual'; body: string }; // Desktop without BIP — show address-bar hint
 
 function detectMode(): Mode {
+  /* v8 ignore next -- The happy-dom unit environment always defines window; retain this fallback for server pre-rendering. */
   if (typeof window === 'undefined') {
     return { kind: 'manual', body: 'Install zkCoins for the smoothest experience.' };
   }
@@ -44,6 +45,7 @@ export function PwaPrompt() {
   const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
+    /* v8 ignore next -- React effects never execute during SSR, so window is necessarily defined whenever this callback runs. */
     if (typeof window === 'undefined') return;
     setDismissed(localStorage.getItem(KEY) === '1');
     setInstalled(
@@ -80,12 +82,14 @@ export function PwaPrompt() {
 
   const dismiss = () => {
     setDismissed(true);
+    /* v8 ignore next -- Dismiss is reachable only from browser-rendered buttons in this client component. */
     if (typeof window !== 'undefined') {
       localStorage.setItem(KEY, '1');
     }
   };
 
   const install = async () => {
+    /* v8 ignore next -- The install callback is attached only in the native-mode render branch and cannot be invoked by another mode. */
     if (mode.kind !== 'native') return;
     setInstalling(true);
     try {

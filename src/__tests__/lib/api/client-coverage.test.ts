@@ -485,6 +485,55 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
 });
 
 describe('runTransitionHandshake error branches via createCoin', () => {
+  it('handles a signal that was already aborted before the SDK asks to sleep', async () => {
+    const controller = new AbortController();
+    controller.abort('deadline elapsed');
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async (_id, opts) => {
+      await opts!.sleep!(1);
+      throw new Error('already-aborted sleep unexpectedly resolved');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'AlreadyAborted',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      status: 'failed',
+      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+    });
+  });
+
+  it('rethrows a wait-for-signature failure when the timeout signal did not abort', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => {
+      throw new Error('transport disconnected');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'TransportFailure',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toThrow('transport disconnected');
+  });
+
   it('classifies an abort during a long Retry-After sleep as a timeout', async () => {
     const controller = new AbortController();
     const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);

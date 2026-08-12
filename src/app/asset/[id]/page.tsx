@@ -24,7 +24,11 @@ export default function AssetDetailPage() {
   // Runtime gate: a capability-adaptive bundle talking to a single-asset
   // node has no per-asset detail — redirect home.
   useEffect(() => {
-    if (!multiAssetRuntime && typeof window !== 'undefined') {
+    if (
+      !multiAssetRuntime &&
+      /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+      typeof window !== 'undefined'
+    ) {
       router.replace('/');
     }
   }, [multiAssetRuntime, router]);
@@ -79,7 +83,7 @@ export default function AssetDetailPage() {
             {portfolioError ? t('errorTitle') : t('unavailableTitle')}
           </p>
           <p className="mt-1 max-w-[280px] text-[13px] leading-relaxed text-ink3">
-            {portfolioError ? portfolioError : (unavailableReason ?? t('unavailableBody'))}
+            {portfolioError ? portfolioError : unavailableReason ?? t('unavailableBody')}
           </p>
           <Link
             href="/"

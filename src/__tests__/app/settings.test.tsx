@@ -134,6 +134,26 @@ describe('SettingsPage', () => {
     expect(routerReplace).toHaveBeenCalledWith('/');
   });
 
+  it('does not redirect when the store reports an account when the grace callback fires', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null, hasStoredWallet: false });
+    render(<SettingsPage />);
+    const stateWithAccount = { ...useWalletStore.getState(), account: ALICE };
+    const getStateSpy = vi.spyOn(useWalletStore, 'getState').mockReturnValue(stateWithAccount);
+    await act(async () => vi.advanceTimersByTimeAsync(100));
+    expect(routerReplace).not.toHaveBeenCalled();
+    getStateSpy.mockRestore();
+  });
+
+  it('clears the redirect timeout on unmount', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null, hasStoredWallet: false });
+    const { unmount } = render(<SettingsPage />);
+    unmount();
+    await act(async () => vi.advanceTimersByTimeAsync(100));
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+
   it('shows Privacy toggles when ADDRESS_ROTATION / TOR_ROUTING are on', () => {
     Object.assign(FEATURES_STATE, { ADDRESS_ROTATION: true, TOR_ROUTING: true });
     render(<SettingsPage />);
@@ -143,5 +163,14 @@ describe('SettingsPage', () => {
     // Planned toggles ship disabled
     const buttons = screen.getAllByRole('button', { pressed: false });
     expect(buttons.some((b) => (b as HTMLButtonElement).disabled)).toBe(true);
+  });
+
+  it.each([
+    [true, false, 'Auto-rotate receive address'],
+    [false, true, 'Tor routing'],
+  ])('renders each privacy capability independently', (rotation, tor, visible) => {
+    Object.assign(FEATURES_STATE, { ADDRESS_ROTATION: rotation, TOR_ROUTING: tor });
+    render(<SettingsPage />);
+    expect(screen.getByText(visible)).toBeInTheDocument();
   });
 });

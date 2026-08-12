@@ -85,7 +85,9 @@ export function WalletScreen() {
     : '';
 
   const copyAddress = useCallback(() => {
+    /* v8 ignore start -- copyAddress is attached only on the account-gated claim-row copy button, which renders only when displayName is truthy; both !account and !displayName are unreachable from any rendered control. */
     if (!account || !displayName) return;
+    /* v8 ignore stop */
     navigator.clipboard.writeText(displayName).then(
       () => {
         setCopied(true);
@@ -302,7 +304,7 @@ export function WalletScreen() {
           <UnavailableBanner
             testId="history-error-banner"
             title={t('historyErrorTitle')}
-            body={historyError ?? t('historyErrorBody')}
+            body={historyError ? historyError : t('historyErrorBody')}
           />
         ) : !account || historyEmpty ? (
           <EmptyTransactions

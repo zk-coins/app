@@ -183,5 +183,7 @@ describe('Onboarding — reimportRequired', () => {
     render(<Onboarding reimportRequired />);
     await user.click(screen.getByTestId('onboarding-restore-btn'));
     expect(screen.getByTestId('seed-import-textarea')).toBeInTheDocument();
+    expect(screen.queryByTestId('seed-flow')).not.toBeInTheDocument();
+    expect(screen.queryByText('Use a passkey')).not.toBeInTheDocument();
   });
 });

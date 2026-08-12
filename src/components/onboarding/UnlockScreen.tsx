@@ -101,7 +101,9 @@ export function UnlockScreen({
   }, [credentialId, onUnlockPrf]);
 
   const handleReset = useCallback(async () => {
+    /* v8 ignore start -- handleReset is invoked only by a click on a button rendered after this client component mounts in a browser realm; the SSR guard and its return cannot run in that realm. */
     if (typeof window === 'undefined') return;
+    /* v8 ignore stop */
     if (!window.confirm(UNLOCK_RESET_CONFIRM)) {
       // User backed out — clear any previous "Incorrect password" /
       // "Reset failed" banner so the screen is back to its idle state.

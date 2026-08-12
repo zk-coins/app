@@ -8,13 +8,17 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {
   UnlockScreen,
   UNLOCK_RESET_CONFIRM,
   UNLOCK_RESET_ERROR,
 } from '@/components/onboarding/UnlockScreen';
+import { useAuthStore } from '@/stores/auth';
+
+const authenticatePasskey = vi.hoisted(() => vi.fn());
+vi.mock('@/lib/crypto/passkey', () => ({ authenticatePasskey }));
 
 // Toggle the PASSKEY feature flag from individual tests. The
 // component imports `FEATURES.PASSKEY` synchronously at render
@@ -33,6 +37,8 @@ vi.mock('@/lib/features', () => ({
 // across tests.
 beforeEach(() => {
   window.confirm = () => false;
+  authenticatePasskey.mockReset();
+  useAuthStore.setState({ credentialId: 'stored-credential' });
 });
 
 afterEach(() => {
@@ -69,6 +75,14 @@ describe('UnlockScreen — password flow', () => {
     expect(screen.getByTestId('unlock-submit-btn')).toBeDisabled();
   });
 
+  it('ignores a direct form submit while the password is empty', () => {
+    const { onUnlockPassword } = renderUnlock();
+    const form = screen.getByTestId('unlock-password-input').closest('form');
+    expect(form).not.toBeNull();
+    fireEvent.submit(form!);
+    expect(onUnlockPassword).not.toHaveBeenCalled();
+  });
+
   it('enables unlock button once a password is typed', async () => {
     const user = userEvent.setup();
     renderUnlock();
@@ -99,6 +113,80 @@ describe('UnlockScreen — password flow', () => {
     const input = screen.getByTestId('unlock-password-input');
     await user.type(input, 'goodpassword{enter}');
     expect(onUnlockPassword).toHaveBeenCalledWith('goodpassword');
+  });
+
+  it('surfaces an incompatible-wallet password error with recovery guidance', async () => {
+    const user = userEvent.setup();
+    const failure = Object.assign(new Error('Legacy payload'), {
+      name: 'IncompatibleWalletError',
+    });
+    renderUnlock({ onUnlockPassword: vi.fn().mockRejectedValue(failure) });
+    await user.type(screen.getByTestId('unlock-password-input'), 'password123');
+    await user.click(screen.getByTestId('unlock-submit-btn'));
+    expect(await screen.findByTestId('unlock-error')).toHaveTextContent(/Legacy payload.*12-word/);
+  });
+
+  it('keeps the loading label visible while password unlock is pending', async () => {
+    const user = userEvent.setup();
+    let resolve!: () => void;
+    renderUnlock({
+      onUnlockPassword: vi.fn(() => new Promise<void>((done) => (resolve = done))),
+    });
+    await user.type(screen.getByTestId('unlock-password-input'), 'password123');
+    await user.click(screen.getByTestId('unlock-submit-btn'));
+    expect(screen.getByTestId('unlock-submit-btn')).toHaveTextContent('Unlocking…');
+    resolve();
+    await waitFor(() => expect(screen.getByTestId('unlock-submit-btn')).toHaveTextContent('Unlock'));
+  });
+});
+
+describe('UnlockScreen — passkey flow', () => {
+  beforeEach(() => {
+    FEATURES_STATE.PASSKEY = true;
+  });
+
+  it('authenticates the stored credential and forwards its PRF output', async () => {
+    const user = userEvent.setup();
+    const prf = new Uint8Array([7, 8]);
+    authenticatePasskey.mockResolvedValue({ credentialId: 'stored-credential', prfOutput: prf });
+    const { onUnlockPrf } = renderUnlock({ authMethod: 'passkey' });
+    await user.click(screen.getByTestId('unlock-passkey-btn'));
+    await waitFor(() => expect(onUnlockPrf).toHaveBeenCalledWith(prf));
+    expect(authenticatePasskey).toHaveBeenCalledWith('stored-credential');
+  });
+
+  it('passes undefined when no credential id is stored', async () => {
+    useAuthStore.setState({ credentialId: null });
+    authenticatePasskey.mockResolvedValue({ credentialId: 'discovered', prfOutput: new Uint8Array() });
+    const user = userEvent.setup();
+    renderUnlock({ authMethod: 'passkey' });
+    await user.click(screen.getByTestId('unlock-passkey-btn'));
+    await waitFor(() => expect(authenticatePasskey).toHaveBeenCalledWith(undefined));
+  });
+
+  it.each([
+    [Object.assign(new Error('cancel'), { name: 'NotAllowedError' }), 'Authentication cancelled.'],
+    [Object.assign(new Error('abort'), { name: 'AbortError' }), 'Authentication cancelled.'],
+    [new Error('device failed'), 'Failed to unlock wallet'],
+    ['opaque failure', 'Failed to unlock wallet'],
+  ])('maps passkey failure %# to safe copy', async (failure, message) => {
+    authenticatePasskey.mockRejectedValue(failure);
+    const user = userEvent.setup();
+    renderUnlock({ authMethod: 'passkey' });
+    await user.click(screen.getByTestId('unlock-passkey-btn'));
+    expect(await screen.findByTestId('unlock-error')).toHaveTextContent(message);
+  });
+
+  it('surfaces incompatible passkey storage and always clears loading state', async () => {
+    const failure = Object.assign(new Error('Old encrypted wallet'), {
+      name: 'IncompatibleWalletError',
+    });
+    authenticatePasskey.mockRejectedValue(failure);
+    const user = userEvent.setup();
+    renderUnlock({ authMethod: 'passkey' });
+    await user.click(screen.getByTestId('unlock-passkey-btn'));
+    expect(await screen.findByTestId('unlock-error')).toHaveTextContent(/Old encrypted wallet.*12-word/);
+    expect(screen.getByTestId('unlock-passkey-btn')).toBeEnabled();
   });
 });
 

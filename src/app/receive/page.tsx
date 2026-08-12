@@ -22,7 +22,11 @@ export default function ReceivePage() {
   const { account } = useWalletStore();
 
   useEffect(() => {
-    if (!account && typeof window !== 'undefined') {
+    if (
+      !account &&
+      /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+      typeof window !== 'undefined'
+    ) {
       const t = setTimeout(() => {
         if (!useWalletStore.getState().account) router.replace('/');
       }, 100);

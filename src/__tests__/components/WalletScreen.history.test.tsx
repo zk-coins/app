@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { render } from '@/__tests__/_helpers/intl';
 import { WalletScreen } from '@/components/screens/WalletScreen';
 import { useWalletStore } from '@/stores/wallet';
@@ -153,6 +153,26 @@ describe('WalletScreen — transaction list from server history', () => {
     expect(screen.queryByText('Noch keine Transaktionen')).not.toBeInTheDocument();
   });
 
+  it('shows the first portfolio error message when no stale assets exist', async () => {
+    vi.mocked(api.ownerBalances).mockRejectedValue(new Error('network down'));
+    historySpy.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+
+    render(<WalletScreen />);
+
+    expect(await screen.findByTestId('portfolio-error-banner')).toHaveTextContent('network down');
+  });
+
+  it('uses translated portfolio copy when a failed read has no message', async () => {
+    vi.mocked(api.ownerBalances).mockRejectedValue(new Error(''));
+    historySpy.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+
+    render(<WalletScreen />);
+
+    expect(await screen.findByTestId('portfolio-unavailable-banner')).toHaveTextContent(
+      'Asset-Guthaben sind in diesem Build noch nicht verfügbar',
+    );
+  });
+
   it('holds the empty state back while the first history fetch is in flight', async () => {
     historySpy.mockReturnValue(new Promise<never>(() => {}));
 
@@ -171,5 +191,56 @@ describe('WalletScreen — transaction list from server history', () => {
 
     expect(await screen.findByText('Erstelle ein Wallet, um zu starten.')).toBeInTheDocument();
     expect(historySpy).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('create-coin-btn'));
+    fireEvent.click(screen.getByTestId('wallet-send-btn'));
+    fireEvent.click(screen.getByTestId('wallet-receive-btn'));
+    expect(screen.getByTestId('create-coin-btn')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('renders unknown asset metadata, missing transaction amount, and invalid time defensively', async () => {
+    vi.mocked(api.ownerBalances).mockResolvedValue({
+      address: ALICE.address,
+      assets: [{ asset_id: 'd'.repeat(64), balance: 7, num_sends: 0 }],
+    });
+    historySpy.mockResolvedValue({
+      items: [row({ amount: undefined, created_at: 'not-a-date' })],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    render(<WalletScreen />);
+    expect(await screen.findByTestId('asset-row-name')).toHaveTextContent('Erstellt');
+    expect(screen.getByTestId('tx-row-amount')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-row-time')).toHaveTextContent('—');
+  });
+
+  it('marks retained portfolio and history data stale after later poll failures', async () => {
+    vi.useFakeTimers();
+    historySpy.mockResolvedValueOnce({ items: [row()], total: 1, limit: 50, offset: 0 });
+    vi.mocked(api.ownerBalances).mockResolvedValueOnce(FUNDED);
+    render(<WalletScreen />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    historySpy.mockRejectedValue(new Error('history refresh failed'));
+    vi.mocked(api.ownerBalances).mockRejectedValue(new Error('portfolio refresh failed'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(screen.getByTestId('history-stale-note')).toBeInTheDocument();
+    // usePortfolio couples stale:true to available:false after a failed poll,
+    // so portfolio staleness is rendered in the blocking error-banner body.
+    expect(screen.getByTestId('portfolio-error-banner')).toHaveTextContent(/Letzte bekannte Assets|fehlgeschlagen|last known assets|latest refresh failed/i);
+  });
+
+  it('renders unavailable and history banners for API errors with no server message', async () => {
+    vi.mocked(api.ownerBalances).mockRejectedValue(
+      new (await import('@/lib/api/client')).ApiError(501),
+    );
+    historySpy.mockRejectedValue(new (await import('@/lib/api/client')).ApiError(500, ''));
+    render(<WalletScreen />);
+    expect(await screen.findByTestId('portfolio-unavailable-banner')).toBeInTheDocument();
+    expect(await screen.findByTestId('history-error-banner')).toBeInTheDocument();
   });
 });

@@ -3,14 +3,15 @@
  */
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { screen } from '@testing-library/react';
+import { act, screen } from '@testing-library/react';
 import { render } from '@/__tests__/_helpers/intl';
 import SendPage from '@/app/send/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useCapabilities } from '@/stores/capabilities';
 
+const routerReplace = vi.fn();
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
 
@@ -22,6 +23,7 @@ const ALICE = {
 };
 
 beforeEach(() => {
+  routerReplace.mockClear();
   useCapabilities.setState({
     capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: true },
     loaded: true,
@@ -47,5 +49,36 @@ describe('SendPage edge cases — unavailable', () => {
   it('never mounts a confirm dialog', () => {
     render(<SendPage />);
     expect(screen.queryByTestId('send-confirm-card')).toBeNull();
+  });
+
+  it('redirects after the no-account grace period', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null });
+    render(<SendPage />);
+    await act(async () => vi.advanceTimersByTimeAsync(100));
+    expect(routerReplace).toHaveBeenCalledWith('/');
+    vi.useRealTimers();
+  });
+
+  it('does not redirect when the store reports an account when the grace callback fires', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null });
+    render(<SendPage />);
+    const stateWithAccount = { ...useWalletStore.getState(), account: ALICE };
+    const getStateSpy = vi.spyOn(useWalletStore, 'getState').mockReturnValue(stateWithAccount);
+    await act(async () => vi.advanceTimersByTimeAsync(100));
+    expect(routerReplace).not.toHaveBeenCalled();
+    getStateSpy.mockRestore();
+    vi.useRealTimers();
+  });
+
+  it('clears the redirect timer on unmount', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null });
+    const { unmount } = render(<SendPage />);
+    unmount();
+    await act(async () => vi.advanceTimersByTimeAsync(100));
+    expect(routerReplace).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });

@@ -121,6 +121,55 @@ describe('TransactionDetailPage', () => {
     expect(await screen.findByTestId('tx-detail-label')).toHaveTextContent('Received');
   });
 
+  it('renders a sparse record with every unavailable-field fallback and invalid date', async () => {
+    spy.mockResolvedValue({
+      id: 'sparse',
+      kind: 'receive',
+      created_at: 'invalid-date',
+      status: 'mystery',
+    } as TxDetail);
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-v-amount')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-time')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-account')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-amount-full')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-balance-after')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-num-sends')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-block-height')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-commit-value')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-memo')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-status')).toHaveTextContent('mystery');
+  });
+
+  it('defaults a detail without status to pending', async () => {
+    const { status: _status, ...withoutStatus } = MINT;
+    void _status;
+    spy.mockResolvedValue(withoutStatus as TxDetail);
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-status')).toHaveTextContent('pending');
+  });
+
+  it.each(['failed', 'cancelled'])('renders %s as not confirmed', async (status) => {
+    spy.mockResolvedValue({ ...MINT, status });
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-confirmation')).toHaveTextContent('Not confirmed');
+  });
+
+  it('treats completed as confirmed and renders supplied privacy fields', async () => {
+    spy.mockResolvedValue({
+      ...MINT,
+      status: 'completed',
+      address: 'alice',
+      counterparty: 'bob',
+      memo: 'invoice 7',
+    });
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-confirmation')).toHaveTextContent('Confirmed');
+    expect(screen.getByTestId('tx-detail-account')).toHaveTextContent('alice@dev.zkcoins.app');
+    expect(screen.getByTestId('tx-detail-counterparty')).toHaveTextContent('bob');
+    expect(screen.getByTestId('tx-detail-memo')).toHaveTextContent('invoice 7');
+  });
+
   it('falls back to a truncated raw address when the username domain is unset', async () => {
     useNetworkStore.setState({ usernameDomain: '' });
     spy.mockResolvedValue(MINT);
@@ -148,12 +197,26 @@ describe('TransactionDetailPage', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
+  it('rejects a non-string route id without fetching', async () => {
+    (route as { id: unknown }).id = 7;
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent('Transaction not found');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
   it('shows not-found when there is no unlocked account', async () => {
     useWalletStore.setState({ account: null });
     render(<TransactionDetailPage />);
     expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
       'Transaction not found',
     );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('does not fetch when the account lacks mnemonic or nkCommit signing material', async () => {
+    useWalletStore.setState({ account: { ...ALICE, mnemonic: '' } });
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent('Transaction not found');
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -182,7 +245,7 @@ describe('TransactionDetailPage — explorer link', () => {
   });
 
   it('links the txid to the configured block explorer', async () => {
-    vi.stubEnv('NEXT_PUBLIC_EXPLORER_URL', 'https://zkcoins.space');
+    vi.stubEnv('NEXT_PUBLIC_EXPLORER_URL', 'https://zkcoins.space/');
     vi.resetModules();
     const { default: FreshPage } = await import('@/app/tx/[id]/page');
     const freshApi = (await import('@/lib/api/client')).api;

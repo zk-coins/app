@@ -60,6 +60,10 @@ export interface OnboardingProps {
 export function Onboarding({ reimportRequired = false, onDiscardLegacy }: OnboardingProps = {}) {
   const [step, setStep] = useState<Step>('welcome');
 
+  /* v8 ignore start -- Welcome with reimportRequired renders only onRestore; this function is never invoked from a control. */
+  const onNextWhenReimport = () => setStep('seed-import');
+  /* v8 ignore stop */
+
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-bg">
       {/* Desktop bg pattern */}
@@ -77,7 +81,7 @@ export function Onboarding({ reimportRequired = false, onDiscardLegacy }: Onboar
             reimportRequired={reimportRequired}
             onNext={
               reimportRequired
-                ? () => setStep('seed-import')
+                ? onNextWhenReimport
                 : () => setStep(FEATURES.PASSKEY ? 'passkey' : 'seed')
             }
             onRestore={() => setStep('seed-import')}

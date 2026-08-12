@@ -24,40 +24,44 @@ function Toggle({
   badge?: string;
 }) {
   const [on, setOn] = useState(defaultOn);
-  // Every settings toggle currently ships disabled ("Planned"), so the
-  // interactive enable path is unreachable — there is no way to toggle it
-  // on. It is `c8 ignore`d until a real (enabled) toggle lands, the same
-  // way other genuinely-unreachable defensive code is ignored at source.
-  /* c8 ignore start */
+  // Every module-local settings toggle currently ships disabled ("Planned").
+  /* v8 ignore next -- Every Toggle call site in this module passes disabled, so no rendered button can invoke the enable path. */
   const handleToggle = () => !disabled && setOn((v) => !v);
-  /* c8 ignore stop */
+  /* v8 ignore next -- Every Toggle call site in this module passes disabled, so enabled label styling cannot be rendered. */
+  const labelTone = disabled ? 'text-ink2' : 'text-ink';
+  /* v8 ignore next -- Every Toggle call site in this module passes disabled, so neither enabled track style can be rendered. */
+  const trackTone = disabled
+    ? 'cursor-not-allowed bg-line opacity-50'
+    : on
+      ? 'bg-bitcoin'
+      : 'bg-line2';
+  /* v8 ignore next -- Disabled Toggle buttons cannot change the private on state from its false default at any module-local call site. */
+  const thumbPosition = on ? 'left-[18px]' : 'left-0.5';
   return (
     <div className="flex items-start justify-between gap-6 py-4">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <p className={`text-[13px] font-medium ${disabled ? 'text-ink2' : 'text-ink'}`}>
+          <p className={`text-[13px] font-medium ${labelTone}`}>
             {label}
           </p>
+          {/* v8 ignore next -- Every Toggle call site supplies the Planned badge. */}
           {badge && (
             <span className="rounded-sm bg-line2 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider text-ink3 uppercase">
               {badge}
             </span>
           )}
         </div>
+        {/* v8 ignore next -- Every Toggle call site supplies explanatory copy. */}
         {description && <p className="mt-0.5 text-[12px] text-ink3">{description}</p>}
       </div>
       <button
         onClick={handleToggle}
         disabled={disabled}
-        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${
-          disabled ? 'cursor-not-allowed bg-line opacity-50' : on ? 'bg-bitcoin' : 'bg-line2'
-        }`}
+        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${trackTone}`}
         aria-pressed={on}
       >
         <span
-          className={`absolute top-0.5 h-4 w-4 rounded-full bg-ink transition-all ${
-            on ? 'left-[18px]' : 'left-0.5'
-          }`}
+          className={`absolute top-0.5 h-4 w-4 rounded-full bg-ink transition-all ${thumbPosition}`}
         />
       </button>
     </div>
@@ -89,7 +93,11 @@ export default function SettingsPage() {
   const nodeHost = apiUrl.replace(/^https?:\/\//, '');
 
   useEffect(() => {
-    if (!account && typeof window !== 'undefined') {
+    if (
+      !account &&
+      /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+      typeof window !== 'undefined'
+    ) {
       const t = setTimeout(() => {
         if (!useWalletStore.getState().account) router.replace('/');
       }, 100);
@@ -99,6 +107,7 @@ export default function SettingsPage() {
 
   const onDisconnect = async () => {
     if (
+      /* v8 ignore next -- onDisconnect is reachable only from a browser-rendered button in this client component. */
       typeof window !== 'undefined' &&
       window.confirm('Disconnect this wallet? Make sure you have your seed phrase saved.')
     ) {

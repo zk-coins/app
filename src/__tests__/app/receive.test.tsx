@@ -104,4 +104,15 @@ describe('ReceivePage — send acceptance contract', () => {
     });
     expect(routerReplace).not.toHaveBeenCalled();
   });
+
+  it('does not redirect when the store reports an account when the grace callback fires', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null, hasStoredWallet: false });
+    render(<ReceivePage />);
+    const stateWithAccount = { ...useWalletStore.getState(), account: ALICE };
+    const getStateSpy = vi.spyOn(useWalletStore, 'getState').mockReturnValue(stateWithAccount);
+    await act(async () => vi.advanceTimersByTimeAsync(100));
+    expect(routerReplace).not.toHaveBeenCalled();
+    getStateSpy.mockRestore();
+  });
 });

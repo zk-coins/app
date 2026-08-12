@@ -6,6 +6,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import { WalletScreen } from '@/components/screens/WalletScreen';
@@ -50,6 +51,7 @@ beforeEach(() => {
     network: 'regtest',
     infoError: null,
     infoLoaded: true,
+    usernameDomain: 'local.zkcoins.test',
   });
   useWalletStore.setState({
     account: ALICE,
@@ -107,5 +109,86 @@ describe('WalletScreen — single-asset balance unavailable', () => {
     expect(await findByTestId('name-claim-unavailable')).toBeInTheDocument();
     expect(queryByTestId('username-claim-btn')).toBeNull();
     expect(queryByTestId('name-setup-input')).toBeNull();
+  });
+
+  it('copies a configured display name, shows feedback, then clears it', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: { ...ALICE, username: 'alice' } });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
+    });
+    render(<WalletScreen />);
+    await vi.runAllTicks();
+    fireEvent.click(screen.getByTestId('address-copy-btn'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(writeText).toHaveBeenCalledWith('alice@local.zkcoins.test');
+    expect(screen.getByTestId('address-copied-feedback')).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(screen.queryByTestId('address-copied-feedback')).not.toBeInTheDocument();
+  });
+
+  it('leaves copy feedback hidden when clipboard access rejects', async () => {
+    useWalletStore.setState({ account: { ...ALICE, username: 'alice' } });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+      configurable: true,
+    });
+    render(<WalletScreen />);
+    fireEvent.click(await screen.findByTestId('address-copy-btn'));
+    await waitFor(() => expect(screen.queryByTestId('address-copied-feedback')).toBeNull());
+  });
+
+  it('removes the copy button when the account-gated claim row unmounts', async () => {
+    useWalletStore.setState({ account: { ...ALICE, username: 'alice' } });
+    render(<WalletScreen />);
+    await screen.findByTestId('address-copy-btn');
+
+    act(() => useWalletStore.setState({ account: null }));
+
+    expect(screen.queryByTestId('address-copy-btn')).not.toBeInTheDocument();
+  });
+
+  it('formats a numeric history amount as BTC in single-asset mode', async () => {
+    historySpy.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          kind: 'send',
+          amount: 50_000,
+          status: 'pending',
+          created_at: 1_780_000_000,
+        },
+      ],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+
+    render(<WalletScreen />);
+    expect(await screen.findByTestId('tx-row-amount')).toHaveTextContent('BTC');
+  });
+
+  it('maps a non-Error info rejection to the fail-closed fallback message', async () => {
+    infoSpy.mockRejectedValue('offline');
+    render(<WalletScreen />);
+    expect(await screen.findByTestId('network-info-error')).toHaveTextContent(
+      'failed to load /v1/info',
+    );
+  });
+
+  it('runs disabled and enabled primary-button click handlers', async () => {
+    render(<WalletScreen />);
+    const send = await screen.findByTestId('wallet-send-btn');
+    const receive = screen.getByTestId('wallet-receive-btn');
+    fireEvent.click(send);
+    fireEvent.click(receive);
+    expect(send).toHaveAttribute('aria-disabled', 'true');
+    expect(receive).toHaveAttribute('aria-disabled', 'false');
   });
 });
