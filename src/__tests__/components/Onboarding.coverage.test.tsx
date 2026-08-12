@@ -212,17 +212,17 @@ describe('Onboarding passkey restore', () => {
 });
 
 describe('Onboarding seed failure paths', () => {
-  it.each([[new Error('entropy unavailable'), /entropy unavailable/], ['opaque', /Failed to generate/]])(
-    'surfaces mnemonic generation failure %#',
-    async (failure, message) => {
-      mocks.createMnemonic.mockRejectedValue(failure);
-      const user = userEvent.setup();
-      render(<Onboarding />);
-      await user.click(screen.getByTestId('onboarding-create-btn'));
-      await user.click(screen.getByTestId('passkey-other-options-btn'));
-      expect(await screen.findByTestId('seed-error')).toHaveTextContent(message);
-    },
-  );
+  it.each([
+    [new Error('entropy unavailable'), /entropy unavailable/],
+    ['opaque', /Failed to generate/],
+  ])('surfaces mnemonic generation failure %#', async (failure, message) => {
+    mocks.createMnemonic.mockRejectedValue(failure);
+    const user = userEvent.setup();
+    render(<Onboarding />);
+    await user.click(screen.getByTestId('onboarding-create-btn'));
+    await user.click(screen.getByTestId('passkey-other-options-btn'));
+    expect(await screen.findByTestId('seed-error')).toHaveTextContent(message);
+  });
 
   it('does not update an unmounted seed flow after mnemonic generation resolves', async () => {
     const mnemonic = deferred<string>();
@@ -251,52 +251,52 @@ describe('Onboarding seed failure paths', () => {
     expect(screen.queryByTestId('seed-error')).not.toBeInTheDocument();
   });
 
-  it.each([[new Error('disk full'), /disk full/], ['opaque', /Failed to create wallet/]])(
-    'surfaces seed persistence failure %#',
-    async (failure, message) => {
-      useWalletStore.setState({ saveWithPassword: vi.fn().mockRejectedValue(failure) } as never);
-      const user = await openPasskeyCreate();
-      await user.click(screen.getByTestId('passkey-other-options-btn'));
-      await user.click(await screen.findByTestId('seed-reveal-btn'));
-      await user.click(screen.getByTestId('seed-written-btn'));
-      await user.click(screen.getByTestId('seed-confirm-btn'));
-      await user.type(screen.getByTestId('seed-password-input'), 'password123');
-      await user.type(screen.getByTestId('seed-password-confirm-input'), 'password123');
-      await user.click(screen.getByTestId('seed-create-btn'));
-      expect(await screen.findByTestId('seed-error')).toHaveTextContent(message);
-      expect(screen.getByTestId('seed-password-stage')).toBeInTheDocument();
-    },
-  );
+  it.each([
+    [new Error('disk full'), /disk full/],
+    ['opaque', /Failed to create wallet/],
+  ])('surfaces seed persistence failure %#', async (failure, message) => {
+    useWalletStore.setState({ saveWithPassword: vi.fn().mockRejectedValue(failure) } as never);
+    const user = await openPasskeyCreate();
+    await user.click(screen.getByTestId('passkey-other-options-btn'));
+    await user.click(await screen.findByTestId('seed-reveal-btn'));
+    await user.click(screen.getByTestId('seed-written-btn'));
+    await user.click(screen.getByTestId('seed-confirm-btn'));
+    await user.type(screen.getByTestId('seed-password-input'), 'password123');
+    await user.type(screen.getByTestId('seed-password-confirm-input'), 'password123');
+    await user.click(screen.getByTestId('seed-create-btn'));
+    expect(await screen.findByTestId('seed-error')).toHaveTextContent(message);
+    expect(screen.getByTestId('seed-password-stage')).toBeInTheDocument();
+  });
 
-  it.each([[new Error('dictionary failed'), /dictionary failed/], ['opaque', /Validation failed/]])(
-    'surfaces seed validation failure %#',
-    async (failure, message) => {
-      mocks.isValidMnemonic.mockRejectedValue(failure);
-      const user = userEvent.setup();
-      render(<Onboarding />);
-      await user.click(screen.getByTestId('onboarding-restore-btn'));
-      await user.type(screen.getByTestId('seed-import-textarea'), FIXTURE);
-      await user.click(screen.getByTestId('seed-import-continue-btn'));
-      expect(await screen.findByTestId('seed-import-error')).toHaveTextContent(message);
-    },
-  );
+  it.each([
+    [new Error('dictionary failed'), /dictionary failed/],
+    ['opaque', /Validation failed/],
+  ])('surfaces seed validation failure %#', async (failure, message) => {
+    mocks.isValidMnemonic.mockRejectedValue(failure);
+    const user = userEvent.setup();
+    render(<Onboarding />);
+    await user.click(screen.getByTestId('onboarding-restore-btn'));
+    await user.type(screen.getByTestId('seed-import-textarea'), FIXTURE);
+    await user.click(screen.getByTestId('seed-import-continue-btn'));
+    expect(await screen.findByTestId('seed-import-error')).toHaveTextContent(message);
+  });
 
-  it.each([[new Error('write failed'), /write failed/], ['opaque', /Failed to restore wallet/]])(
-    'surfaces seed restore persistence failure %#',
-    async (failure, message) => {
-      useWalletStore.setState({ saveWithPassword: vi.fn().mockRejectedValue(failure) } as never);
-      const user = userEvent.setup();
-      render(<Onboarding />);
-      await user.click(screen.getByTestId('onboarding-restore-btn'));
-      await user.type(screen.getByTestId('seed-import-textarea'), FIXTURE);
-      await user.click(screen.getByTestId('seed-import-continue-btn'));
-      await user.type(screen.getByTestId('seed-import-password-input'), 'password123');
-      await user.type(screen.getByTestId('seed-import-password-confirm-input'), 'password123');
-      await user.click(screen.getByTestId('seed-import-submit-btn'));
-      expect(await screen.findByTestId('seed-import-error')).toHaveTextContent(message);
-      expect(screen.getByTestId('seed-import-password-stage')).toBeInTheDocument();
-    },
-  );
+  it.each([
+    [new Error('write failed'), /write failed/],
+    ['opaque', /Failed to restore wallet/],
+  ])('surfaces seed restore persistence failure %#', async (failure, message) => {
+    useWalletStore.setState({ saveWithPassword: vi.fn().mockRejectedValue(failure) } as never);
+    const user = userEvent.setup();
+    render(<Onboarding />);
+    await user.click(screen.getByTestId('onboarding-restore-btn'));
+    await user.type(screen.getByTestId('seed-import-textarea'), FIXTURE);
+    await user.click(screen.getByTestId('seed-import-continue-btn'));
+    await user.type(screen.getByTestId('seed-import-password-input'), 'password123');
+    await user.type(screen.getByTestId('seed-import-password-confirm-input'), 'password123');
+    await user.click(screen.getByTestId('seed-import-submit-btn'));
+    expect(await screen.findByTestId('seed-import-error')).toHaveTextContent(message);
+    expect(screen.getByTestId('seed-import-password-stage')).toBeInTheDocument();
+  });
 
   it('allows backing out of seed import and safely discarding without a callback', async () => {
     const user = userEvent.setup();

@@ -41,9 +41,7 @@ function Toggle({
     <div className="flex items-start justify-between gap-6 py-4">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <p className={`text-[13px] font-medium ${labelTone}`}>
-            {label}
-          </p>
+          <p className={`text-[13px] font-medium ${labelTone}`}>{label}</p>
           {/* v8 ignore next -- Every Toggle call site supplies the Planned badge. */}
           {badge && (
             <span className="rounded-sm bg-line2 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider text-ink3 uppercase">

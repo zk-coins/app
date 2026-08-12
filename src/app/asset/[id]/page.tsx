@@ -83,7 +83,7 @@ export default function AssetDetailPage() {
             {portfolioError ? t('errorTitle') : t('unavailableTitle')}
           </p>
           <p className="mt-1 max-w-[280px] text-[13px] leading-relaxed text-ink3">
-            {portfolioError ? portfolioError : unavailableReason ?? t('unavailableBody')}
+            {portfolioError ? portfolioError : (unavailableReason ?? t('unavailableBody'))}
           </p>
           <Link
             href="/"

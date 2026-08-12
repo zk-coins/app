@@ -200,7 +200,9 @@ describe('TransactionDetailPage', () => {
   it('rejects a non-string route id without fetching', async () => {
     (route as { id: unknown }).id = 7;
     render(<TransactionDetailPage />);
-    expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent('Transaction not found');
+    expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
+      'Transaction not found',
+    );
     expect(spy).not.toHaveBeenCalled();
   });
 
@@ -216,7 +218,9 @@ describe('TransactionDetailPage', () => {
   it('does not fetch when the account lacks mnemonic or nkCommit signing material', async () => {
     useWalletStore.setState({ account: { ...ALICE, mnemonic: '' } });
     render(<TransactionDetailPage />);
-    expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent('Transaction not found');
+    expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
+      'Transaction not found',
+    );
     expect(spy).not.toHaveBeenCalled();
   });
 

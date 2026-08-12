@@ -213,7 +213,10 @@ describe('CreateCoinPage — happy path', () => {
 
   it('accepts a job update without a phase and keeps the phase indicator hidden', async () => {
     let finish!: (job: JobStatus) => void;
-    createSpy.mockImplementation((async (_req: unknown, opts: { onPhase?: (s: JobStatus) => void }) => {
+    createSpy.mockImplementation((async (
+      _req: unknown,
+      opts: { onPhase?: (s: JobStatus) => void },
+    ) => {
       opts.onPhase?.({ ...completed, phase: undefined });
       return new Promise<JobStatus>((resolve) => (finish = resolve));
     }) as unknown as typeof api.createCoin);

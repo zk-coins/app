@@ -136,7 +136,9 @@ describe('UnlockScreen — password flow', () => {
     await user.click(screen.getByTestId('unlock-submit-btn'));
     expect(screen.getByTestId('unlock-submit-btn')).toHaveTextContent('Unlocking…');
     resolve();
-    await waitFor(() => expect(screen.getByTestId('unlock-submit-btn')).toHaveTextContent('Unlock'));
+    await waitFor(() =>
+      expect(screen.getByTestId('unlock-submit-btn')).toHaveTextContent('Unlock'),
+    );
   });
 });
 
@@ -157,7 +159,10 @@ describe('UnlockScreen — passkey flow', () => {
 
   it('passes undefined when no credential id is stored', async () => {
     useAuthStore.setState({ credentialId: null });
-    authenticatePasskey.mockResolvedValue({ credentialId: 'discovered', prfOutput: new Uint8Array() });
+    authenticatePasskey.mockResolvedValue({
+      credentialId: 'discovered',
+      prfOutput: new Uint8Array(),
+    });
     const user = userEvent.setup();
     renderUnlock({ authMethod: 'passkey' });
     await user.click(screen.getByTestId('unlock-passkey-btn'));
@@ -185,7 +190,9 @@ describe('UnlockScreen — passkey flow', () => {
     const user = userEvent.setup();
     renderUnlock({ authMethod: 'passkey' });
     await user.click(screen.getByTestId('unlock-passkey-btn'));
-    expect(await screen.findByTestId('unlock-error')).toHaveTextContent(/Old encrypted wallet.*12-word/);
+    expect(await screen.findByTestId('unlock-error')).toHaveTextContent(
+      /Old encrypted wallet.*12-word/,
+    );
     expect(screen.getByTestId('unlock-passkey-btn')).toBeEnabled();
   });
 });

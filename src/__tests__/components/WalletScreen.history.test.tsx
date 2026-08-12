@@ -231,7 +231,9 @@ describe('WalletScreen — transaction list from server history', () => {
     expect(screen.getByTestId('history-stale-note')).toBeInTheDocument();
     // usePortfolio couples stale:true to available:false after a failed poll,
     // so portfolio staleness is rendered in the blocking error-banner body.
-    expect(screen.getByTestId('portfolio-error-banner')).toHaveTextContent(/Letzte bekannte Assets|fehlgeschlagen|last known assets|latest refresh failed/i);
+    expect(screen.getByTestId('portfolio-error-banner')).toHaveTextContent(
+      /Letzte bekannte Assets|fehlgeschlagen|last known assets|latest refresh failed/i,
+    );
   });
 
   it('renders unavailable and history banners for API errors with no server message', async () => {
