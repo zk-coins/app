@@ -185,7 +185,9 @@ export interface CreateCoinParams {
   account_address: string;
   name: string;
   decimals: number;
-  amount: number;
+  /** Decimal-Digit-String in atomaren Einheiten (beliebige Präzision).
+   *  NIEMALS durch Number()/String(number) geschickt — siehe Fix 1. */
+  amount: string;
   mnemonic: string;
   /** 32-byte nk_commit hex — required for the ownership pull in the sign handshake. */
   nkCommit: string;
@@ -265,16 +267,18 @@ function mapV1Error(err: unknown): never {
 }
 
 /**
- * True only for an unambiguously typed "account does not exist yet" signal
- * (HTTP 404). Network/auth/parse/5xx failures must NOT be treated as a new
- * account with sendCounter=0 — that would risk a double-spend nonce reuse.
+ * True only for an unambiguously typed "account does not exist yet" signal:
+ * HTTP 404 with the generic `not_found` machine code. Other 404s (e.g.
+ * `job_not_found`) and network/auth/parse/5xx failures must NOT be treated
+ * as a new account with sendCounter=0 — that would risk a double-spend
+ * nonce reuse.
  */
 export function isAccountNotFoundError(err: unknown): boolean {
   if (err instanceof V1ApiError) {
-    return err.status === 404;
+    return err.status === 404 && err.machineCode === 'not_found';
   }
   if (err instanceof ApiError) {
-    return err.status === 404;
+    return err.status === 404 && err.code === 'not_found';
   }
   return false;
 }
@@ -363,9 +367,22 @@ async function runTransitionHandshake(
   });
   const jobId = accepted.job_id;
 
-  const awaiting = await client.waitForAwaitingSignature(jobId, {
-    sleep: (ms) => delay(Math.max(POLL_FLOOR_MS, ms)),
-  });
+  let awaiting: V1Job;
+  try {
+    awaiting = await client.waitForAwaitingSignature(jobId, {
+      sleep: (ms) => delay(Math.max(POLL_FLOOR_MS, ms)),
+      signal: AbortSignal.timeout(WAIT_TIMEOUT_MS),
+    });
+  } catch (err) {
+    if (err instanceof Error && err.name === 'AbortError') {
+      throw new JobFailedError(
+        jobId,
+        'failed',
+        `timed out waiting for awaiting_signature after ${WAIT_TIMEOUT_MS}ms`,
+      );
+    }
+    throw err;
+  }
   if (opts.onPhase) opts.onPhase(awaiting);
 
   if (awaiting.status !== 'awaiting_signature') {
@@ -619,7 +636,12 @@ export const api = {
 
       const next = spendKeyAt(params.mnemonic, sendCounter + 1, accountIndex);
       const assetId = params.asset_id ?? '00'.repeat(32);
-      const amountStr = String(params.amount);
+      if (!/^[0-9]+$/.test(params.amount)) {
+        throw new Error(
+          `createCoin: amount must be a non-empty unsigned decimal digit string, got ${JSON.stringify(params.amount)}`,
+        );
+      }
+      const amountStr = params.amount;
 
       let output = {
         recipient: params.account_address,
@@ -683,7 +705,7 @@ export const api = {
         account_address: params.account_address,
         name: `FAUCET-${Date.now()}`,
         decimals: 0,
-        amount,
+        amount: String(amount),
         mnemonic: params.mnemonic,
         nkCommit: params.nkCommit,
       },
@@ -777,12 +799,10 @@ export const api = {
       const limit = opts.limit ?? 50;
       const offset = opts.offset ?? 0;
       const slice = pull.records.slice(offset, offset + limit);
-      const items: HistoryItem[] = slice.map((r, i) => ({
+      const items: HistoryItem[] = slice.map((r) => ({
         id: r.record_id,
         kind: r.transition_kind ?? r.record_type,
-        status: 'completed',
         created_at: r.occurred_at,
-        index: offset + i,
       }));
       return {
         items,
@@ -799,7 +819,10 @@ export const api = {
     id: number | string,
     params: { address: string; mnemonic: string; nkCommit: string },
   ): Promise<TxDetail> => {
-    const history = await api.getHistory(params);
+    // pull.records is already fully resident after a single pull session —
+    // request everything so a deep link past the default page size never
+    // false-404s.
+    const history = await api.getHistory(params, { limit: Number.MAX_SAFE_INTEGER });
     const found = history.items.find((item) => String(item.id) === String(id));
     if (!found) {
       throw new ApiError(404, 'not_found');

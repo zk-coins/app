@@ -178,7 +178,7 @@ describe('api.createCoin with delivery', () => {
       account_address: ADDR,
       name: 'Deliv',
       decimals: 0,
-      amount: 1,
+      amount: '1',
       mnemonic: MNEMONIC,
       nkCommit: NK,
       delivery: invoiceDelivery,

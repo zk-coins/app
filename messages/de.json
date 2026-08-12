@@ -55,6 +55,8 @@
     "errInvalidName": "Bitte gib einen Namen ein.",
     "errInvalidDecimals": "Nachkommastellen müssen zwischen 0 und 18 liegen.",
     "errInvalidAmount": "Bitte gib eine Menge größer als 0 ein.",
+    "errMissingSigningMaterial": "Deinem Wallet fehlen Signaturdaten. Bitte entsperre oder importiere dein Wallet erneut.",
+    "errUnexpected": "Etwas ist schiefgelaufen. Bitte versuche es erneut.",
     "errPrefix": "Fehler:"
   },
   "send": {

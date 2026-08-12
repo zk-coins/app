@@ -27,11 +27,10 @@ npm run dev    # http://localhost:3090
 
 ## Prerequisites
 
-| Tool    | Version | Purpose                             |
-| ------- | ------- | ----------------------------------- |
-| Node.js | 20+     | Runtime                             |
-| npm     | 10+     | Package manager                     |
-| Node    | ≥22     | App + `@zkcoins/sdk` pure-TS crypto |
+| Tool | Version | Purpose                                 |
+| ---- | ------- | --------------------------------------- |
+| Node | 22+     | Runtime + `@zkcoins/sdk` pure-TS crypto |
+| npm  | 10+     | Package manager                         |
 
 ## Project Structure
 
@@ -197,9 +196,9 @@ export function MyComponent() {
 ### State Management
 
 - **Zustand** for transient UI state and the cryptographic identity only — see the [Thin Client](#architecture-principle--thin-client) rule above for what must NOT live in the store.
-- **Encrypted IndexedDB persistence** via `saveEncryptedWallet()` / `loadEncryptedWallet()` (AES-GCM) — for the xpriv and the unlocked-state flags, not for server-owned values.
+- **Encrypted IndexedDB persistence** via `saveEncryptedWallet()` / `loadEncryptedWallet()` (AES-GCM) — versioned payload `version: 2` with `mnemonic` + `nkCommit` (and address / optional username), not for server-owned values.
 - **No React Context** for state — Zustand stores are global singletons.
-- Wallet store fields: `account` (`xpriv`, `address`), `isLoading`, `isLocked`, `hasStoredWallet`, `storedAddress`, `storedAuthMethod`, `error`. Anything that the node can recompute (balance, `num_sends`, transaction history) is **read from the node on demand**, not cached as ground truth in the store.
+- Wallet store fields (`WalletState` in `src/stores/wallet.ts`): `account: Account | null` where `Account = { address, mnemonic, nkCommit, username? }`, plus `isLoading`, `isLocked`, `hasStoredWallet`, `storedAddress`, `storedAuthMethod`, `needsSeedReimport`, `error`. No balance state lives in the store. Anything the node can recompute (balance, send-counter, transaction history) is **read from the node on demand**, not cached as ground truth in the store.
 
 ### API Client
 
@@ -208,9 +207,9 @@ All backend communication goes through `src/lib/api/client.ts`:
 ```typescript
 import { api } from '@/lib/api/client';
 
-await api.mint(address);
-await api.send({ account_address, recipient, amount, public_key, next_public_key });
-const { balance } = await api.balance(address);
+await api.createCoin({ account_address, name, decimals, amount, mnemonic, nkCommit });
+await api.send({ account_address, recipient, amount, asset_id, mnemonic, nkCommit, delivery, input_coins });
+const state = await api.accountState({ address, mnemonic, nkCommit });
 ```
 
 Never call `fetch()` directly — always use the `api` object.

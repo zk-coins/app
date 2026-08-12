@@ -160,9 +160,16 @@ describe('name endpoints refuse closed surface gaps', () => {
 });
 
 describe('isAccountNotFoundError', () => {
-  it('is true only for typed HTTP 404', () => {
-    expect(isAccountNotFoundError(new ApiError(404, 'not_found'))).toBe(true);
+  it('is true only for a typed 404 carrying the generic not_found machine code', () => {
+    expect(isAccountNotFoundError(new ApiError(404, 'not_found', undefined, 'not_found'))).toBe(
+      true,
+    );
     expect(isAccountNotFoundError(new V1ApiError(404, 'not_found', 'missing'))).toBe(true);
+    // A 404 without the not_found machine code (e.g. a different resource's
+    // 404, or one relayed without a code) must NOT be treated as
+    // "account does not exist" — this is the narrowing this fix adds.
+    expect(isAccountNotFoundError(new ApiError(404, 'not_found'))).toBe(false);
+    expect(isAccountNotFoundError(new V1ApiError(404, 'job_not_found', 'missing'))).toBe(false);
     expect(isAccountNotFoundError(new ApiError(500, 'boom'))).toBe(false);
     expect(isAccountNotFoundError(new ApiError(401, 'unauthorized'))).toBe(false);
     expect(isAccountNotFoundError(new Error('network'))).toBe(false);
@@ -185,7 +192,7 @@ describe('api.createCoin account-state fail-loud', () => {
         account_address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
         name: 'Test',
         decimals: 0,
-        amount: 100,
+        amount: '100',
         mnemonic:
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
         nkCommit: '00'.repeat(32),

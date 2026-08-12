@@ -46,7 +46,7 @@ export default function CreateCoinPage() {
   const [creating, setCreating] = useState(false);
   const [phase, setPhase] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ name: string; amount: number; decimals: number } | null>(
+  const [success, setSuccess] = useState<{ name: string; amount: string; decimals: number } | null>(
     null,
   );
 
@@ -62,13 +62,13 @@ export default function CreateCoinPage() {
       setError(t('errInvalidDecimals'));
       return;
     }
-    const amt = Number(amount);
-    if (!Number.isInteger(amt) || amt <= 0) {
+    const trimmedAmount = amount.trim();
+    if (!/^[0-9]+$/.test(trimmedAmount) || trimmedAmount === '0') {
       setError(t('errInvalidAmount'));
       return;
     }
     if (!account.mnemonic || !account.nkCommit) {
-      setError(t('errInvalidName'));
+      setError(t('errMissingSigningMaterial'));
       return;
     }
 
@@ -81,20 +81,20 @@ export default function CreateCoinPage() {
           account_address: account.address,
           name: trimmedName,
           decimals: dec,
-          amount: amt,
+          amount: trimmedAmount,
           mnemonic: account.mnemonic,
           nkCommit: account.nkCommit,
         },
         { onPhase: (job: JobStatus) => setPhase(job.phase ?? null) },
       );
-      setSuccess({ name: trimmedName, amount: amt, decimals: dec });
+      setSuccess({ name: trimmedName, amount: trimmedAmount, decimals: dec });
     } catch (err) {
       if (err instanceof ApiError || err instanceof JobFailedError) {
         setError(userMessageFor(err, tErrors));
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError(t('errInvalidAmount'));
+        setError(t('errUnexpected'));
       }
     } finally {
       setCreating(false);
@@ -130,7 +130,9 @@ export default function CreateCoinPage() {
           </h1>
           <p className="mt-2 text-[14px] text-ink2">
             {t('successBody', {
-              amount: formatAssetAmount(success.amount, success.decimals),
+              // Display-only conversion — the mint request itself already went out
+              // with the raw, unrounded amount string (see api.createCoin).
+              amount: formatAssetAmount(Number(success.amount), success.decimals),
               name: success.name,
             })}
           </p>
@@ -232,7 +234,11 @@ export default function CreateCoinPage() {
             type="text"
             inputMode="numeric"
             value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))}
+            onChange={(e) => {
+              const digitsOnly = e.target.value.replace(/[^0-9]/g, '');
+              const normalized = digitsOnly.replace(/^0+(?=\d)/, '');
+              setAmount(normalized);
+            }}
             spellCheck={false}
             autoComplete="off"
             placeholder={t('amountPlaceholder')}

@@ -58,7 +58,7 @@ export interface OnboardingProps {
 }
 
 export function Onboarding({ reimportRequired = false, onDiscardLegacy }: OnboardingProps = {}) {
-  const [step, setStep] = useState<Step>(reimportRequired ? 'welcome' : 'welcome');
+  const [step, setStep] = useState<Step>('welcome');
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-bg">

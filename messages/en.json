@@ -55,6 +55,8 @@
     "errInvalidName": "Please enter a name.",
     "errInvalidDecimals": "Decimals must be between 0 and 18.",
     "errInvalidAmount": "Please enter an amount greater than 0.",
+    "errMissingSigningMaterial": "Your wallet is missing signing data. Please unlock or re-import your wallet.",
+    "errUnexpected": "Something went wrong. Please try again.",
     "errPrefix": "err:"
   },
   "send": {

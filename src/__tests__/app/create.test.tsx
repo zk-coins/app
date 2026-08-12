@@ -137,7 +137,7 @@ describe('CreateCoinPage — happy path', () => {
         account_address: ALICE.address,
         name: 'MyCoin',
         decimals: 2,
-        amount: 1000,
+        amount: '1000',
         mnemonic: ALICE.mnemonic,
         nkCommit: ALICE.nkCommit,
       }),

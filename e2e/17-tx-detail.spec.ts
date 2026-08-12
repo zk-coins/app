@@ -49,10 +49,11 @@ test.describe('Transaction detail', () => {
     await setViewport(page, 'desktop');
     await openFirstTxDetail(page);
 
-    // Alice's seeded row is a faucet mint. v1 history maps pull records to
-    // `status: completed` (see src/lib/api/client.ts::getHistory).
+    // v1 history never carries a real per-record status (the pull record has
+    // no status/confirmation field) — the UI fails closed to "pending" rather
+    // than inventing a verified claim (see src/lib/api/client.ts::getHistory).
     await expect(page.getByTestId('tx-detail-label')).toHaveText('Faucet');
-    await expect(page.getByTestId('tx-detail-status')).toContainText('completed');
+    await expect(page.getByTestId('tx-detail-status')).toContainText('pending');
     await expect(page.getByTestId('tx-detail-direction')).toContainText('Faucet');
     await expect(page.getByTestId('tx-detail-account')).toBeVisible();
     await expect(page.getByTestId('tx-detail-verification')).toBeVisible();
