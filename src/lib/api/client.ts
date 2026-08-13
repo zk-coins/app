@@ -639,7 +639,8 @@ async function runTransitionHandshake(
     mapHandshakeAbort(err, jobId, signal);
   }
 
-  return waitForJob(client, jobId, TERMINAL, { ...opts, signal, deadline });
+  // Signature POST accepted — never wait with the original handshake abort signal.
+  return reconcileSignedJob(client, jobId, opts);
 }
 
 function hexToBytesExact(hex: string, len: number, label: string): Uint8Array {
@@ -671,6 +672,8 @@ export function capabilitiesFromV1Features(features: string[]): Capabilities {
 // ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
+
+const MAX_ISSUANCE_DECIMALS = 18;
 
 export const api = {
   newIdempotencyKey,
@@ -818,10 +821,27 @@ export const api = {
     opts: { onPhase?: (status: V1Job) => void } = {},
   ): Promise<V1Job> => {
     try {
+      if (typeof params.name !== 'string' || params.name.trim() === '') {
+        throw new Error(
+          `createCoin: name must be a non-empty string, got ${JSON.stringify(params.name)}`,
+        );
+      }
+      if (
+        !Number.isInteger(params.decimals) ||
+        params.decimals < 0 ||
+        params.decimals > MAX_ISSUANCE_DECIMALS
+      ) {
+        throw new Error(
+          `createCoin: decimals must be an integer in 0..18, got ${JSON.stringify(params.decimals)}`,
+        );
+      }
       if (typeof params.amount !== 'string' || !/^(0|[1-9][0-9]*)$/.test(params.amount)) {
         throw new Error(
           `createCoin: amount must be a non-empty unsigned decimal digit string, got ${JSON.stringify(params.amount)}`,
         );
+      }
+      if (params.amount === '0') {
+        throw new Error('createCoin: amount must be a positive unsigned decimal digit string, got "0"');
       }
       const amountStr = params.amount;
 

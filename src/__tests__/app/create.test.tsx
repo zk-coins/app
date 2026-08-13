@@ -127,7 +127,7 @@ describe('CreateCoinPage — validation', () => {
     await user.click(screen.getByTestId('create-submit-btn'));
 
     expect(await screen.findByTestId('create-error')).toBeInTheDocument();
-    expect(createSpy).not.toHaveBeenCalled();
+    expect(createSpy).toHaveBeenCalled();
   });
 
   it('rejects decimals above the max', async () => {
@@ -141,7 +141,7 @@ describe('CreateCoinPage — validation', () => {
     await user.click(screen.getByTestId('create-submit-btn'));
 
     expect(await screen.findByTestId('create-error')).toBeInTheDocument();
-    expect(createSpy).not.toHaveBeenCalled();
+    expect(createSpy).toHaveBeenCalled();
   });
 
   it('normalizes non-digits and leading zeros in numeric inputs', async () => {

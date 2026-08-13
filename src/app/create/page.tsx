@@ -13,8 +13,6 @@ import { formatAssetAmountString } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
 import { useCapabilities } from '@/stores/capabilities';
 
-const MAX_DECIMALS = 18;
-
 export default function CreateCoinPage() {
   const router = useRouter();
   const t = useTranslations('createCoin');
@@ -73,13 +71,8 @@ export default function CreateCoinPage() {
       setError(t('errInvalidName'));
       return;
     }
-    const dec = Number(decimals);
-    if (!Number.isInteger(dec) || dec < 0 || dec > MAX_DECIMALS) {
-      setError(t('errInvalidDecimals'));
-      return;
-    }
     const trimmedAmount = amount.trim();
-    if (!/^[0-9]+$/.test(trimmedAmount) || trimmedAmount === '0') {
+    if (!trimmedAmount) {
       setError(t('errInvalidAmount'));
       return;
     }
@@ -87,6 +80,7 @@ export default function CreateCoinPage() {
       setError(t('errMissingSigningMaterial'));
       return;
     }
+    const dec = Number.parseInt(decimals, 10);
 
     setCreating(true);
     setPhase(null);
