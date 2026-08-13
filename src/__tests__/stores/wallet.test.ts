@@ -340,6 +340,36 @@ describe('wallet store — password encryption', () => {
     expect(state.isLocked).toBe(true);
   });
 
+  it('refuses unlock when only nkCommit drifts from the mnemonic', async () => {
+    const driftedNkCommitAccount: Account = {
+      address: consistentAccount.address,
+      mnemonic: consistentAccount.mnemonic,
+      nkCommit: '11'.repeat(32),
+    };
+    await useWalletStore.getState().saveWithPassword('testpassword123', driftedNkCommitAccount);
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
+  it('marks needsSeedReimport when mnemonic derivation throws', async () => {
+    const invalidMnemonicAccount: Account = {
+      address: consistentAccount.address,
+      mnemonic: ('notavalidmnemonicword '.repeat(12)).trim(),
+      nkCommit: '00'.repeat(32),
+    };
+    await useWalletStore.getState().saveWithPassword('testpassword123', invalidMnemonicAccount);
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
   it('fails to unlock with wrong password', async () => {
     useWalletStore.getState().setAccount(testAccount);
     await useWalletStore.getState().saveWithPassword('correctpassword');
