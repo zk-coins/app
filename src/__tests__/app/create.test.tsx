@@ -471,7 +471,7 @@ describe('CreateCoinPage — lock', () => {
     }
   });
 
-  it('lets create succeed when setItem throws', async () => {
+  it('does not start create when setItem throws', async () => {
     const throwingSet: Storage = {
       get length() {
         return 0;
@@ -500,7 +500,10 @@ describe('CreateCoinPage — lock', () => {
       await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
       await user.type(screen.getByTestId('create-amount-input'), '1000');
       await user.click(screen.getByTestId('create-submit-btn'));
-      expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
+      expect(createSpy).not.toHaveBeenCalled();
+      expect(screen.queryByTestId('create-success-heading')).not.toBeInTheDocument();
+      expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+      expect(await screen.findByTestId('create-error')).toBeInTheDocument();
     } finally {
       vi.unstubAllGlobals();
     }

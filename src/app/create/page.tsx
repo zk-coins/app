@@ -27,12 +27,13 @@ function readCreateLock(address: string): boolean {
   }
 }
 
-/** Fail-closed: write error ignored; React state stays locked. */
-function writeCreateLock(address: string): void {
+/** Fail-closed: returns false on write error; caller must keep React state locked. */
+function writeCreateLock(address: string): boolean {
   try {
     sessionStorage.setItem(createLockKey(address), '1');
+    return true;
   } catch {
-    // leave React state locked
+    return false;
   }
 }
 
@@ -129,8 +130,12 @@ export default function CreateCoinPage() {
     setCreating(true);
     setPhase(null);
     setError(null);
-    writeCreateLock(account.address);
     let keepCreatingLocked = false;
+    if (!writeCreateLock(account.address)) {
+      keepCreatingLocked = true;
+      setError(t('errUnexpected'));
+      return;
+    }
     try {
       await api.createCoin(
         {
