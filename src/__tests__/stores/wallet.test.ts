@@ -213,16 +213,18 @@ describe('parseWalletPayload — versioned persistence', () => {
   });
 });
 
-describe('wallet store — defensive returns when no account', () => {
-  it('saveWithPassword silently returns when no account is set', async () => {
-    await expect(useWalletStore.getState().saveWithPassword('pw12345678')).resolves.toBeUndefined();
+describe('wallet store — throws when no account', () => {
+  it('saveWithPassword throws when no account is set', async () => {
+    await expect(useWalletStore.getState().saveWithPassword('pw12345678')).rejects.toThrow(
+      'No account to save',
+    );
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     expect(await loadEncryptedWallet()).toBeNull();
   });
 
-  it('saveWithPrf silently returns when no account is set', async () => {
+  it('saveWithPrf throws when no account is set', async () => {
     const prf = crypto.getRandomValues(new Uint8Array(32));
-    await expect(useWalletStore.getState().saveWithPrf(prf)).resolves.toBeUndefined();
+    await expect(useWalletStore.getState().saveWithPrf(prf)).rejects.toThrow('No account to save');
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     expect(await loadEncryptedWallet()).toBeNull();
   });

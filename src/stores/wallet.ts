@@ -170,11 +170,13 @@ interface WalletState {
    * Encrypt and persist. When `accountToSave` is provided, activate that
    * account only after a successful v2 write (atomic create/reimport —
    * never expose an in-memory account that did not survive IDB).
+   * Throws if neither `accountToSave` nor a live store account is present.
    */
   saveWithPassword: (password: string, accountToSave?: Account) => Promise<void>;
   /**
    * Encrypt and persist with PRF. Same atomic activation rule as
    * `saveWithPassword` when `accountToSave` is provided.
+   * Throws if neither `accountToSave` nor a live store account is present.
    */
   saveWithPrf: (prfOutput: Uint8Array, accountToSave?: Account) => Promise<void>;
   unlockWithPassword: (password: string) => Promise<void>;
@@ -210,7 +212,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   saveWithPassword: async (password: string, accountToSave?: Account) => {
     const account = accountToSave ?? get().account;
-    if (!account) return;
+    if (!account) {
+      throw new Error('No account to save');
+    }
 
     assertCustodyTriple(account);
 
@@ -241,7 +245,9 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   saveWithPrf: async (prfOutput: Uint8Array, accountToSave?: Account) => {
     const account = accountToSave ?? get().account;
-    if (!account) return;
+    if (!account) {
+      throw new Error('No account to save');
+    }
 
     assertCustodyTriple(account);
 
