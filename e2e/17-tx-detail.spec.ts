@@ -112,6 +112,7 @@ test.describe('Transaction detail', () => {
     await expect(page.getByTestId('tx-detail-wallet-unavailable')).toBeVisible({
       timeout: 15_000,
     });
+    await expect(page.getByTestId('tx-detail-missing')).toHaveCount(0);
     await snap(page, '17-tx-detail-missing', { fullPage: true });
   });
 });
