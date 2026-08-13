@@ -13,6 +13,7 @@ import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import CreateCoinPage from '@/app/create/page';
 import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 import { api, JobFailedError, type JobStatus } from '@/lib/api/client';
 
 const routerReplace = vi.fn();
@@ -57,6 +58,7 @@ beforeEach(() => {
   routerPush.mockClear();
   FEATURES_STATE.MULTI_ASSET = true;
   FEATURES_STATE.loaded = true;
+  useNetworkStore.setState({ infoError: null });
   useWalletStore.setState({
     account: ALICE,
     isLoading: false,
@@ -115,6 +117,18 @@ describe('CreateCoinPage — validation', () => {
     await user.type(screen.getByTestId('create-amount-input'), '1');
     await user.click(screen.getByTestId('create-submit-btn'));
     expect(await screen.findByTestId('create-error')).toBeInTheDocument();
+    expect(createSpy).not.toHaveBeenCalled();
+  });
+
+  it('rejects an empty amount', async () => {
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    // amount empty → submit stays disabled; force onSubmit via the form
+    fireEvent.submit(screen.getByTestId('create-submit-btn').closest('form')!);
+    expect(await screen.findByTestId('create-error')).toHaveTextContent(
+      'Bitte gib eine Menge größer als 0 ein.',
+    );
     expect(createSpy).not.toHaveBeenCalled();
   });
 
@@ -310,6 +324,14 @@ describe('CreateCoinPage — redirect guard', () => {
     FEATURES_STATE.loaded = true;
     render(<CreateCoinPage />);
     expect(routerReplace).toHaveBeenCalledWith('/');
+  });
+
+  it('does not redirect when multi-asset is fail-closed after infoError', () => {
+    FEATURES_STATE.MULTI_ASSET = false;
+    FEATURES_STATE.loaded = true;
+    useNetworkStore.setState({ infoError: 'GET /v1/info failed' });
+    render(<CreateCoinPage />);
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 
   it('does not redirect when capabilities have not loaded yet', () => {

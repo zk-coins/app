@@ -17,18 +17,12 @@ test.describe('View balance — not available in this build', () => {
     await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({
       timeout: 30_000,
     });
-    await expect(page.getByTestId('account-display-name')).toBeVisible();
-    await expect(page.getByTestId('address-copy-btn')).toBeVisible();
+    // Alice fixtures have no username: claim banner only, no display-name/copy chrome.
     await expect(page.getByTestId('name-claim-unavailable')).toBeVisible();
+    await expect(page.getByTestId('account-display-name')).toHaveCount(0);
+    await expect(page.getByTestId('address-copy-btn')).toHaveCount(0);
     await expect(page.getByTestId('wallet-empty-banner')).toHaveCount(0);
-    // Multi-asset wallet chrome: name claim not wired on closed /v1; address chip present.
-    await expect(page.getByTestId('name-claim-unavailable')).toBeVisible();
-    await expect(page.getByTestId('account-display-name')).toBeVisible();
-    await expect(page.getByTestId('address-copy-btn')).toBeVisible();
     await snap(page, '06-balance-funded-desktop');
-    // Click changes pixels (copied feedback) — run after the funded-desktop snap.
-    await page.getByTestId('address-copy-btn').click();
-    await expect(page.getByTestId('address-copied-feedback')).toBeVisible();
   });
 
   test('balance-unavailable-mobile', async ({ page }) => {
@@ -38,6 +32,8 @@ test.describe('View balance — not available in this build', () => {
       timeout: 30_000,
     });
     await expect(page.getByTestId('name-claim-unavailable')).toBeVisible();
+    await expect(page.getByTestId('account-display-name')).toHaveCount(0);
+    await expect(page.getByTestId('address-copy-btn')).toHaveCount(0);
     await snap(page, '06-balance-funded-mobile');
   });
 
@@ -49,7 +45,9 @@ test.describe('View balance — not available in this build', () => {
     });
     // Must not claim a confirmed empty wallet when the read path is down.
     await expect(page.getByTestId('wallet-empty-banner')).toHaveCount(0);
-    await expect(page.getByTestId('address-copy-btn')).toBeVisible();
+    await expect(page.getByTestId('name-claim-unavailable')).toBeVisible();
+    await expect(page.getByTestId('account-display-name')).toHaveCount(0);
+    await expect(page.getByTestId('address-copy-btn')).toHaveCount(0);
     await snap(page, '06-balance-zero-empty-banner', { fullPage: true });
   });
 });

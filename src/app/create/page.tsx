@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { ArrowLeft, Check, CircleDollarSign, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { formatAssetAmountString } from '@/lib/format';
@@ -18,6 +19,7 @@ export default function CreateCoinPage() {
   const t = useTranslations('createCoin');
   const tErrors = useTranslations('errors');
   const account = useWalletStore((s) => s.account);
+  const infoError = useNetworkStore((s) => s.infoError);
   const { MULTI_ASSET: multiAssetRuntime, loaded } = useFeatures();
 
   useEffect(() => {
@@ -27,17 +29,19 @@ export default function CreateCoinPage() {
   // Runtime gate: a capability-adaptive bundle (build flag ON) talking to a
   // single-asset node has no create-coin flow — redirect home, mirroring the
   // `!account` redirect below. Wait for capabilities so fail-closed defaults
-  // do not bounce before /v1/info lands.
+  // do not bounce before /v1/info lands. Do not redirect on infoError: fail-closed
+  // multi_asset:false after a failed GET /v1/info is not "feature missing".
   useEffect(() => {
     if (
       loaded &&
       !multiAssetRuntime &&
+      !infoError &&
       /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
       typeof window !== 'undefined'
     ) {
       router.replace('/');
     }
-  }, [loaded, multiAssetRuntime, router]);
+  }, [loaded, multiAssetRuntime, infoError, router]);
 
   // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {

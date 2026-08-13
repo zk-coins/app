@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl';
 import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Plus, Receipt, Info } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { useHistory } from '@/hooks/useHistory';
 import type { HistoryItem } from '@/lib/api/client';
@@ -20,6 +21,7 @@ export default function AssetDetailPage() {
   const t = useTranslations('asset');
   const tWallet = useTranslations('wallet');
   const account = useWalletStore((s) => s.account);
+  const infoError = useNetworkStore((s) => s.infoError);
   const { MULTI_ASSET: multiAssetRuntime, loaded: featuresLoaded } = useFeatures();
 
   useEffect(() => {
@@ -28,17 +30,20 @@ export default function AssetDetailPage() {
 
   // Runtime gate: a capability-adaptive bundle talking to a single-asset
   // node has no per-asset detail — redirect home. Wait for capabilities so
-  // fail-closed defaults do not bounce before /v1/info lands.
+  // fail-closed defaults do not bounce before /v1/info lands. Do not redirect
+  // on infoError: fail-closed multi_asset:false after a failed GET /v1/info is
+  // not "feature missing".
   useEffect(() => {
     if (
       featuresLoaded &&
       !multiAssetRuntime &&
+      !infoError &&
       /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
       typeof window !== 'undefined'
     ) {
       router.replace('/');
     }
-  }, [featuresLoaded, multiAssetRuntime, router]);
+  }, [featuresLoaded, multiAssetRuntime, infoError, router]);
 
   const assetId = params.id;
   const {

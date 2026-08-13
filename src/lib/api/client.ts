@@ -632,14 +632,9 @@ async function runTransitionHandshake(
       nodeNetwork,
       signal,
     });
-  } catch (err) {
-    if (isAbortLike(err, signal)) {
-      return reconcileSignedJob(client, jobId, opts);
-    }
-    mapHandshakeAbort(err, jobId, signal);
+  } catch {
+    return reconcileSignedJob(client, jobId, opts);
   }
-
-  // Signature POST accepted — never wait with the original handshake abort signal.
   return reconcileSignedJob(client, jobId, opts);
 }
 
@@ -841,7 +836,9 @@ export const api = {
         );
       }
       if (params.amount === '0') {
-        throw new Error('createCoin: amount must be a positive unsigned decimal digit string, got "0"');
+        throw new Error(
+          'createCoin: amount must be a positive unsigned decimal digit string, got "0"',
+        );
       }
       const amountStr = params.amount;
 

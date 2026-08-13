@@ -11,6 +11,7 @@ import { screen } from '@testing-library/react';
 import { render } from '@/__tests__/_helpers/intl';
 import AssetDetailPage from '@/app/asset/[id]/page';
 import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 import { ApiError, api, type OwnerBalanceResponse } from '@/lib/api/client';
 
 const ASSET_ID = 'c'.repeat(64);
@@ -63,6 +64,7 @@ beforeEach(() => {
   routerReplace.mockClear();
   FEATURES_STATE.MULTI_ASSET = true;
   FEATURES_STATE.loaded = true;
+  useNetworkStore.setState({ infoError: null });
   useWalletStore.setState({
     account: ALICE,
     isLoading: false,
@@ -235,6 +237,15 @@ describe('AssetDetailPage', () => {
     ownerSpy.mockResolvedValue(portfolio([]));
     render(<AssetDetailPage />);
     expect(routerReplace).toHaveBeenCalledWith('/');
+  });
+
+  it('does not redirect when multi-asset is fail-closed after infoError', () => {
+    FEATURES_STATE.MULTI_ASSET = false;
+    FEATURES_STATE.loaded = true;
+    useNetworkStore.setState({ infoError: 'GET /v1/info failed' });
+    ownerSpy.mockResolvedValue(portfolio([]));
+    render(<AssetDetailPage />);
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 
   it('does not redirect when capabilities have not loaded yet', () => {

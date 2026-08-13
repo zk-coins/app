@@ -1351,6 +1351,71 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     expect(submit).toHaveBeenCalledTimes(1);
   });
 
+  it('reconciles non-abort Error during refuseOrSignAndSubmit via getJob to completed', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    const submit = spyProto('submitTransition', async () => ({
+      job_id: JOB_ID,
+      status: 'accepted',
+    }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('refuseOrSignAndSubmit', async () => {
+      throw new Error('sign post network blip');
+    });
+    spyProto('getJob', async () => ({
+      job: completedJob(),
+      retryAfterMs: null,
+    }));
+
+    const job = await api.createCoin({
+      account_address: ADDR,
+      name: 'RefuseNonAbortReconcileOk',
+      decimals: 0,
+      amount: '1',
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+    });
+    expect(job.status).toBe('completed');
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('maps non-abort Error during refuseOrSignAndSubmit to unknown when getJob fails', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    const submit = spyProto('submitTransition', async () => ({
+      job_id: JOB_ID,
+      status: 'accepted',
+    }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('refuseOrSignAndSubmit', async () => {
+      throw new Error('sign post network blip');
+    });
+    spyProto('getJob', async () => {
+      throw new Error('network down');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'RefuseNonAbortReconcileUnknown',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'unknown',
+      message: expect.stringMatching(
+        /signature submit outcome unknown.*do not retry as a new transition/i,
+      ),
+    });
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
   it('throws JobFailedError when wait returns cancelled with error.error only', async () => {
     spyProto('openOwnershipPullSession', async () => {
       throw new V1ApiError(404, 'not_found', '');
