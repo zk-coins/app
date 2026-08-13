@@ -436,6 +436,14 @@ function isAbortLike(err: unknown, signal: AbortSignal): boolean {
   );
 }
 
+/** 4xx that prove the node refused the request before admitting a job. */
+function isProvenPreAdmitRejection(err: unknown): boolean {
+  const status =
+    err instanceof V1ApiError ? err.status : err instanceof ApiError ? err.status : undefined;
+  if (status === undefined) return false;
+  return status >= 400 && status < 500 && status !== 408 && status !== 409 && status !== 429;
+}
+
 /**
  * Map handshake abort/deadline to JobFailedError(status: 'timeout').
  * Existing JobFailedError instances pass through unchanged.
@@ -456,7 +464,14 @@ function mapHandshakeAbort(
       `timed out waiting for ${phase} after ${WAIT_TIMEOUT_MS}ms`,
     );
   }
-  throw err;
+  if (jobId === '' && isProvenPreAdmitRejection(err)) {
+    throw err;
+  }
+  throw new JobFailedError(
+    jobId,
+    'unknown',
+    'submit outcome unknown, do not retry as a new transition',
+  );
 }
 
 /**
@@ -551,7 +566,11 @@ async function runTransitionHandshake(
     if (err instanceof Error && err.message.includes('without Retry-After')) {
       throw new JobFailedError(jobId, 'protocol', err.message);
     }
-    throw err;
+    throw new JobFailedError(
+      jobId,
+      'unknown',
+      'submit outcome unknown, do not retry as a new transition',
+    );
   }
   if (opts.onPhase) opts.onPhase(awaiting);
 

@@ -84,9 +84,8 @@ test.describe('Create coin', () => {
 
   test('Visual Regression — create-in-progress', async ({ page }) => {
     await setViewport(page, 'mobile');
-    // Delay POST /v1/tx so the button parks in its "Creating coin…"
-    // disabled state long enough to capture (it never resolves within the
-    // shot window — the snapshot is taken while the request is in flight).
+    // Hang POST /v1/tx so the button parks in its "Creating coin…" disabled
+    // state (request never settles — snapshot while Creating).
     let txPosts = 0;
     await page.context().route(/\/v1\/tx(?:\?|$)/, async (route) => {
       if (route.request().method() !== 'POST') {
@@ -94,12 +93,7 @@ test.describe('Create coin', () => {
         return;
       }
       txPosts += 1;
-      await new Promise((r) => setTimeout(r, 5_000));
-      await route.fulfill({
-        status: 202,
-        contentType: 'application/json',
-        body: JSON.stringify({ job_id: 'e2e-pending', status: 'queued' }),
-      });
+      await new Promise(() => {});
     });
     await aliceGoToCreate(page);
     await fillForm(page);

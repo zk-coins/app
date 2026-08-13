@@ -638,7 +638,12 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         nkCommit: NK,
         accountIndex: 0,
       }),
-    ).rejects.toMatchObject({ status: 500 });
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'unknown',
+      serverError: 'submit outcome unknown, do not retry as a new transition',
+    });
     expect(pullCalls).toBe(2);
     expect(getState).not.toHaveBeenCalled();
     expect(signAwaiting).not.toHaveBeenCalled();
@@ -895,7 +900,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     });
   });
 
-  it('rethrows a wait-for-signature failure when the timeout signal did not abort', async () => {
+  it('maps a wait-for-signature transport failure to unknown', async () => {
     spyProto('openOwnershipPullSession', async () => {
       throw new V1ApiError(404, 'not_found', '');
     });
@@ -914,7 +919,12 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         nkCommit: NK,
         accountIndex: 0,
       }),
-    ).rejects.toThrow('transport disconnected');
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'unknown',
+      serverError: 'submit outcome unknown, do not retry as a new transition',
+    });
   });
 
   it('classifies an abort during a long Retry-After sleep as a timeout', async () => {
@@ -1154,6 +1164,52 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     });
   });
 
+  it('maps a generic submitTransition transport failure to unknown', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => {
+      throw new Error('Failed to fetch');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'SubmitFetchFail',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      status: 'unknown',
+      serverError: 'submit outcome unknown, do not retry as a new transition',
+    });
+  });
+
+  it('rethrows a proven pre-admit 4xx from submitTransition', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => {
+      throw new V1ApiError(400, 'invalid_request', '');
+    });
+
+    const rejection = api.createCoin({
+      account_address: ADDR,
+      name: 'SubmitPreAdmit400',
+      decimals: 0,
+      amount: '1',
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+      accountIndex: 0,
+    });
+    await expect(rejection).rejects.toBeInstanceOf(ApiError);
+    await expect(rejection).rejects.toMatchObject({ status: 400 });
+  });
+
   it('maps AbortError during waitForAwaitingSignature without signal abort to timeout', async () => {
     spyProto('openOwnershipPullSession', async () => {
       throw new V1ApiError(404, 'not_found', '');
@@ -1309,6 +1365,47 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       jobId: JOB_ID,
       status: 'timeout',
       serverError: 'timed out waiting for rehydrate after 180000ms',
+    });
+    expect(signAwaiting).not.toHaveBeenCalled();
+    expect(signJob).not.toHaveBeenCalled();
+  });
+
+  it('maps 401 during rehydration pull to unknown, not remintable ApiError', async () => {
+    let pullCalls = 0;
+    spyProto('openOwnershipPullSession', async () => {
+      pullCalls += 1;
+      if (pullCalls === 1) {
+        throw new V1ApiError(404, 'not_found', '');
+      }
+      throw new V1ApiError(401, 'unauthorized', '');
+    });
+    spyProto('getAccountState', async () => {
+      throw new Error('getAccountState must not run when rehydration pull returns 401');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    const signAwaiting = spyProto('signAwaiting', () => {
+      throw new Error('must not run after rehydration 401');
+    });
+    const signJob = spyProto('signJob', async () => {
+      throw new Error('must not run after rehydration 401');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'Rehydrate401',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'unknown',
+      serverError: 'submit outcome unknown, do not retry as a new transition',
     });
     expect(signAwaiting).not.toHaveBeenCalled();
     expect(signJob).not.toHaveBeenCalled();
