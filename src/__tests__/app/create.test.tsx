@@ -440,22 +440,44 @@ describe('CreateCoinPage — error surfacing', () => {
 
 describe('CreateCoinPage — lock', () => {
   it('starts createCoin only once when submit fires twice in the same tick', async () => {
-    let resolveCreate!: (job: JobStatus) => void;
-    createSpy.mockImplementation(
-      () =>
-        new Promise<JobStatus>((resolve) => {
+    const noLockStorage: Storage = {
+      get length() {
+        return 0;
+      },
+      clear() {},
+      getItem() {
+        return null;
+      },
+      key() {
+        return null;
+      },
+      removeItem() {},
+      setItem() {},
+    };
+    vi.stubGlobal('sessionStorage', noLockStorage);
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      value: noLockStorage,
+    });
+    try {
+      let resolveCreate!: (job: JobStatus) => void;
+      render(<CreateCoinPage />);
+      fireEvent.change(screen.getByTestId('create-name-input'), { target: { value: 'MyCoin' } });
+      fireEvent.change(screen.getByTestId('create-amount-input'), { target: { value: '1000' } });
+      const form = screen.getByTestId('create-submit-btn').closest('form')!;
+      createSpy.mockImplementation(() => {
+        fireEvent.submit(form);
+        return new Promise<JobStatus>((resolve) => {
           resolveCreate = resolve;
-        }),
-    );
-    render(<CreateCoinPage />);
-    fireEvent.change(screen.getByTestId('create-name-input'), { target: { value: 'MyCoin' } });
-    fireEvent.change(screen.getByTestId('create-amount-input'), { target: { value: '1000' } });
-    const form = screen.getByTestId('create-submit-btn').closest('form')!;
-    fireEvent.submit(form);
-    fireEvent.submit(form);
-    expect(createSpy).toHaveBeenCalledTimes(1);
-    resolveCreate(completed);
-    expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
+        });
+      });
+      fireEvent.submit(form);
+      expect(createSpy).toHaveBeenCalledTimes(1);
+      resolveCreate(completed);
+      expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 
   it('treats getItem throw as locked and keeps submit disabled', async () => {
