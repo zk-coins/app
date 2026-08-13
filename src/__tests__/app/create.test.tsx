@@ -438,6 +438,110 @@ describe('CreateCoinPage — error surfacing', () => {
   });
 });
 
+describe('CreateCoinPage — lock', () => {
+  it('treats getItem throw as locked and keeps submit disabled', async () => {
+    const throwingGet: Storage = {
+      get length() {
+        return 0;
+      },
+      clear() {},
+      getItem() {
+        throw new Error('quota');
+      },
+      key() {
+        return null;
+      },
+      removeItem() {},
+      setItem() {},
+    };
+    vi.stubGlobal('sessionStorage', throwingGet);
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      value: throwingGet,
+    });
+    try {
+      const user = userEvent.setup();
+      render(<CreateCoinPage />);
+      await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+      await user.type(screen.getByTestId('create-amount-input'), '1000');
+      expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+      expect(createSpy).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('lets create succeed when setItem throws', async () => {
+    const throwingSet: Storage = {
+      get length() {
+        return 0;
+      },
+      clear() {},
+      getItem() {
+        return null;
+      },
+      key() {
+        return null;
+      },
+      removeItem() {},
+      setItem() {
+        throw new Error('quota');
+      },
+    };
+    vi.stubGlobal('sessionStorage', throwingSet);
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      value: throwingSet,
+    });
+    try {
+      createSpy.mockResolvedValue(completed);
+      const user = userEvent.setup();
+      render(<CreateCoinPage />);
+      await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+      await user.type(screen.getByTestId('create-amount-input'), '1000');
+      await user.click(screen.getByTestId('create-submit-btn'));
+      expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('keeps success visible when removeItem throws', async () => {
+    const throwingRemove: Storage = {
+      get length() {
+        return 0;
+      },
+      clear() {},
+      getItem() {
+        return null;
+      },
+      key() {
+        return null;
+      },
+      removeItem() {
+        throw new Error('quota');
+      },
+      setItem() {},
+    };
+    vi.stubGlobal('sessionStorage', throwingRemove);
+    Object.defineProperty(window, 'sessionStorage', {
+      configurable: true,
+      value: throwingRemove,
+    });
+    try {
+      createSpy.mockResolvedValue(completed);
+      const user = userEvent.setup();
+      render(<CreateCoinPage />);
+      await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+      await user.type(screen.getByTestId('create-amount-input'), '1000');
+      await user.click(screen.getByTestId('create-submit-btn'));
+      expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('CreateCoinPage — redirect guard', () => {
   it('redirects immediately when the runtime node lacks multi-asset support', () => {
     FEATURES_STATE.MULTI_ASSET = false;
