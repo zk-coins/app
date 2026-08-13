@@ -271,7 +271,6 @@ describe('PwaPrompt — dismiss + appinstalled lifecycle', () => {
 
   it('dismisses the card when localStorage.setItem throws', async () => {
     localStorage.clear();
-    vi.restoreAllMocks();
     render(<PwaPrompt />);
     expect(await screen.findByTestId('pwa-prompt-manual')).toBeInTheDocument();
     vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
