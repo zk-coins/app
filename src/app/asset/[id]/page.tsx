@@ -160,9 +160,7 @@ export default function AssetDetailPage() {
               data-testid="asset-detail-balance"
               className="mt-1 mono text-[34px] font-bold tabular-nums text-ink"
             >
-              {validDecimals !== null &&
-              Number.isSafeInteger(asset.balance) &&
-              asset.balance >= 0
+              {validDecimals !== null && Number.isSafeInteger(asset.balance) && asset.balance >= 0
                 ? formatAssetAmount(asset.balance, validDecimals)
                 : t('unknownAmount')}
             </p>
