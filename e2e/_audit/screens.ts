@@ -98,7 +98,7 @@ export const SCREENS: readonly Screen[] = [
     id: 'send',
     title: 'Send Bitcoin',
     reach: { kind: 'route', path: '/send' },
-    baselines: [{ spec: '07-send', name: '07-send-default' }],
+    baselines: [{ spec: '07-send', name: '07-send-unavailable' }],
   },
   {
     id: 'tx-detail',
@@ -153,10 +153,7 @@ export const SCREENS: readonly Screen[] = [
     id: 'asset-detail',
     title: 'Per-asset detail',
     reach: { kind: 'route', path: '/asset/[id]' },
-    baselines: [
-      { spec: '21-asset-detail', name: '21-asset-detail-desktop' },
-      { spec: '21-asset-detail', name: '21-asset-detail-mobile' },
-    ],
+    baselines: [{ spec: '21-asset-detail', name: '21-asset-detail-unavailable' }],
   },
   // ── Env-gated routes (dead-stripped from the bundle — no golden) ────
   {

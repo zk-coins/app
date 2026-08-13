@@ -1027,24 +1027,77 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     expect(refuse).not.toHaveBeenCalled();
   });
 
-  it('maps abort during refuseOrSignAndSubmit to timeout', async () => {
+  it('reconciles abort during refuseOrSignAndSubmit via getJob to completed', async () => {
     const controller = new AbortController();
-    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+    let timeoutCalls = 0;
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => {
+      timeoutCalls += 1;
+      if (timeoutCalls === 1) return controller.signal;
+      return new AbortController().signal;
+    });
 
     spyProto('openOwnershipPullSession', async () => {
       throw new V1ApiError(404, 'not_found', '');
     });
-    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    const submit = spyProto('submitTransition', async () => ({
+      job_id: JOB_ID,
+      status: 'accepted',
+    }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
     spyProto('refuseOrSignAndSubmit', async () => {
       controller.abort();
       throw new Error('sign submit aborted by deadline');
     });
+    spyProto('getJob', async () => ({
+      job: completedJob(),
+      retryAfterMs: null,
+    }));
+
+    const job = await api.createCoin({
+      account_address: ADDR,
+      name: 'RefuseReconcileOk',
+      decimals: 0,
+      amount: '1',
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+    });
+    expect(job.status).toBe('completed');
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconciles abort during refuseOrSignAndSubmit via getJob to failed', async () => {
+    const controller = new AbortController();
+    let timeoutCalls = 0;
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => {
+      timeoutCalls += 1;
+      if (timeoutCalls === 1) return controller.signal;
+      return new AbortController().signal;
+    });
+
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    const submit = spyProto('submitTransition', async () => ({
+      job_id: JOB_ID,
+      status: 'accepted',
+    }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('refuseOrSignAndSubmit', async () => {
+      controller.abort();
+      throw new Error('sign submit aborted by deadline');
+    });
+    spyProto('getJob', async () => ({
+      job: completedJob({
+        status: 'failed',
+        error: { message: 'prove failed after sign' },
+      }),
+      retryAfterMs: null,
+    }));
 
     await expect(
       api.createCoin({
         account_address: ADDR,
-        name: 'RefuseTimeout',
+        name: 'RefuseReconcileFailed',
         decimals: 0,
         amount: '1',
         mnemonic: MNEMONIC,
@@ -1053,36 +1106,83 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     ).rejects.toMatchObject({
       name: 'JobFailedError',
       jobId: JOB_ID,
-      status: 'timeout',
-      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+      status: 'failed',
     });
+    expect(submit).toHaveBeenCalledTimes(1);
   });
 
-  it('maps AbortError during refuseOrSignAndSubmit without signal abort to timeout', async () => {
+  it('maps unknown when post-sign reconcile cannot learn terminal status', async () => {
+    const controller = new AbortController();
+    let timeoutCalls = 0;
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => {
+      timeoutCalls += 1;
+      if (timeoutCalls === 1) return controller.signal;
+      return new AbortController().signal;
+    });
+
     spyProto('openOwnershipPullSession', async () => {
       throw new V1ApiError(404, 'not_found', '');
     });
-    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    const submit = spyProto('submitTransition', async () => ({
+      job_id: JOB_ID,
+      status: 'accepted',
+    }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('refuseOrSignAndSubmit', async () => {
+      controller.abort();
+      throw new Error('sign submit aborted by deadline');
+    });
+    spyProto('getJob', async () => {
+      throw new Error('network down during reconcile');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'RefuseReconcileUnknown',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'unknown',
+      message: expect.stringMatching(
+        /signature submit outcome unknown.*do not retry as a new transition/i,
+      ),
+    });
+    expect(submit).toHaveBeenCalledTimes(1);
+  });
+
+  it('reconciles AbortError during refuseOrSignAndSubmit via getJob', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    const submit = spyProto('submitTransition', async () => ({
+      job_id: JOB_ID,
+      status: 'accepted',
+    }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
     spyProto('refuseOrSignAndSubmit', async () => {
       throw Object.assign(new Error('aborted'), { name: 'AbortError' });
     });
+    spyProto('getJob', async () => ({
+      job: completedJob(),
+      retryAfterMs: null,
+    }));
 
-    await expect(
-      api.createCoin({
-        account_address: ADDR,
-        name: 'RefuseAbortError',
-        decimals: 0,
-        amount: '1',
-        mnemonic: MNEMONIC,
-        nkCommit: NK,
-      }),
-    ).rejects.toMatchObject({
-      name: 'JobFailedError',
-      jobId: JOB_ID,
-      status: 'timeout',
-      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+    const job = await api.createCoin({
+      account_address: ADDR,
+      name: 'RefuseAbortError',
+      decimals: 0,
+      amount: '1',
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
     });
+    expect(job.status).toBe('completed');
+    expect(submit).toHaveBeenCalledTimes(1);
   });
 
   it('throws JobFailedError when wait returns cancelled with error.error only', async () => {

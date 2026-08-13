@@ -32,7 +32,7 @@ test.describe('Send — not available in this build', () => {
     // Submit control is present but permanently disabled (a11y / product).
     await expect(page.getByTestId('send-submit-btn')).toBeVisible();
     await expect(page.getByTestId('send-submit-btn')).toBeDisabled();
-    await snap(page, '07-send-default');
+    await snap(page, '07-send-unavailable');
   });
 
   test('send page does not POST /v1/tx', async ({ page }) => {

@@ -91,6 +91,7 @@ export default function CreateCoinPage() {
     setCreating(true);
     setPhase(null);
     setError(null);
+    let keepCreatingLocked = false;
     try {
       await api.createCoin(
         {
@@ -105,6 +106,10 @@ export default function CreateCoinPage() {
       );
       setSuccess({ name: trimmedName, amount: trimmedAmount, decimals: dec });
     } catch (err) {
+      // Signature submit may already have been accepted; block a new transition.
+      if (err instanceof JobFailedError && err.status === 'unknown') {
+        keepCreatingLocked = true;
+      }
       if (err instanceof ApiError || err instanceof JobFailedError) {
         setError(userMessageFor(err, tErrors));
       } else if (err instanceof Error) {
@@ -113,7 +118,9 @@ export default function CreateCoinPage() {
         setError(t('errUnexpected'));
       }
     } finally {
-      setCreating(false);
+      if (!keepCreatingLocked) {
+        setCreating(false);
+      }
       setPhase(null);
     }
   }, [account, name, decimals, amount, t, tErrors]);

@@ -52,7 +52,7 @@ export class ApiError extends Error {
   }
 }
 
-/** Terminal job failure (`failed` / `cancelled` / timeout). */
+/** Terminal job failure (`failed` / `cancelled` / timeout / unknown). */
 export class JobFailedError extends Error {
   readonly jobId: string;
   readonly status: string;
@@ -454,6 +454,36 @@ function mapHandshakeAbort(err: unknown, jobId: string, signal: AbortSignal): ne
 }
 
 /**
+ * After signature submit was attempted, abort/timeout must not discard the job:
+ * re-poll the same jobId with a fresh deadline until a terminal status is known.
+ * Non-terminal failures surface as `unknown` so callers do not start a new mint.
+ */
+async function reconcileSignedJob(
+  client: ZkCoinsV1Client,
+  jobId: string,
+  opts: { onPhase?: (status: V1Job) => void },
+): Promise<V1Job> {
+  const reconcileSignal = AbortSignal.timeout(WAIT_TIMEOUT_MS);
+  const reconcileDeadline = Date.now() + WAIT_TIMEOUT_MS;
+  try {
+    return await waitForJob(client, jobId, TERMINAL, {
+      ...opts,
+      signal: reconcileSignal,
+      deadline: reconcileDeadline,
+    });
+  } catch (err) {
+    if (err instanceof JobFailedError && (err.status === 'failed' || err.status === 'cancelled')) {
+      throw err;
+    }
+    throw new JobFailedError(
+      jobId,
+      'unknown',
+      'signature submit outcome unknown, do not retry as a new transition',
+    );
+  }
+}
+
+/**
  * Full §7.5 handshake: submit → await signature → refuse-or-sign → POST /sign
  * → wait for terminal. Custody signature is produced only after SDK refusals.
  */
@@ -603,6 +633,9 @@ async function runTransitionHandshake(
       signal,
     });
   } catch (err) {
+    if (isAbortLike(err, signal)) {
+      return reconcileSignedJob(client, jobId, opts);
+    }
     mapHandshakeAbort(err, jobId, signal);
   }
 

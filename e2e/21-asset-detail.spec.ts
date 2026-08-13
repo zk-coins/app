@@ -19,6 +19,6 @@ test.describe('Asset detail — not available in this build', () => {
     await expect(page.getByTestId('asset-detail-back')).toBeVisible();
     await expect(page.getByTestId('asset-detail-missing')).toHaveCount(0);
     await expect(page.getByTestId('asset-detail-body')).toHaveCount(0);
-    await snap(page, '21-asset-detail-missing', { fullPage: true });
+    await snap(page, '21-asset-detail-unavailable', { fullPage: true });
   });
 });

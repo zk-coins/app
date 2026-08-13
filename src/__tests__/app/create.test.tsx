@@ -262,6 +262,25 @@ describe('CreateCoinPage — error surfacing', () => {
     );
   });
 
+  it('keeps submit disabled when signature outcome is unknown', async () => {
+    createSpy.mockRejectedValue(
+      new JobFailedError(
+        'mint-x',
+        'unknown',
+        'signature submit outcome unknown, do not retry as a new transition',
+      ),
+    );
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+
+    expect(await screen.findByTestId('create-error')).toBeInTheDocument();
+    expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+  });
+
   it('surfaces a non-API Error message', async () => {
     createSpy.mockRejectedValue(new Error('boom local'));
     const user = userEvent.setup();

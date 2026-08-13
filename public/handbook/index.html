@@ -644,7 +644,7 @@
               <a href="#spec-06"><span class="spec-num">06</span>Balance &amp; wallet home</a>
             </li>
             <li>
-              <a href="#spec-07"><span class="spec-num">07</span>Send Bitcoin (2-phase)</a>
+              <a href="#spec-07"><span class="spec-num">07</span>Send Bitcoin</a>
             </li>
             <li>
               <a href="#spec-08"><span class="spec-num">08</span>Receive Bitcoin</a>
@@ -1741,11 +1741,11 @@
           <summary>
             <div class="spec-head">
               <div class="lhs">
-                <h2><span class="num">07</span>Send Bitcoin — 2-phase proof</h2>
+                <h2><span class="num">07</span>Send Bitcoin — unavailable</h2>
                 <div class="file">e2e/07-send.spec.ts</div>
               </div>
               <div class="rhs">
-                <b>12 tests · 11 baselines</b>
+                <b>3 tests · 1 baseline</b>
                 <div class="links">
                   <a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts"
                     >Spec ↗</a
@@ -1759,210 +1759,67 @@
             </div>
           </summary>
           <p class="spec-intro">
-            The most central and complex spec. Real Alice → Bob transaction:
-            <code>signSendRequest</code> produces a Schnorr signature →
-            <code>POST /api/send</code> reserves output coins → the client computes
-            <code>Schnorr(hash(state || coins))</code> → <code>POST /api/commit</code> confirms.
-            Recipient is a 64-hex address.
+            Send requires input-coin selection from AccountState inventory, which is not wired in
+            this build. The product fails closed: wallet Send is disabled, and
+            <code>/send</code> shows an unavailable banner with a permanently disabled submit
+            control. No <code>POST /v1/tx</code>.
             <span class="tag mvp">MVP · Send</span>
           </p>
 
-          <div class="tests cols-2">
+          <div class="tests">
             <div class="test">
               <div class="head">
-                <span class="name">send-default</span
+                <span class="name">wallet-send-disabled</span
                 ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L56"
-                    >L56</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/07-send-default.png" alt="send default" />
-              </div>
-              <div class="desc">
-                Initial: empty recipient + amount, "Set MAX" link, disabled submit. Placeholder
-                "0x…".
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">send-no-funds-banner</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L63"
-                    >L63</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/07-send-no-funds-banner.png" alt="no funds" />
-              </div>
-              <div class="desc">
-                Send at balance 0: top banner "Wallet is empty". Send via Receive link only — faucet
-                and DFX links are gated and stripped from the bundle.
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">recipient-valid-hex</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L71"
-                    >L71</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/07-recipient-valid-hex.png" alt="valid hex" />
-              </div>
-              <div class="desc">64-hex string accepted, no resolve needed, "Continue" enabled.</div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">amount-typed</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L92"
-                    >L92</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/07-amount-typed.png" alt="amount typed" />
-              </div>
-              <div class="desc">Valid sats input. Live BTC + USD equivalent.</div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">amount-set-max-clicked</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L104"
-                    >L104</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/07-amount-set-max-clicked.png" alt="set max" />
-              </div>
-              <div class="desc">
-                "Set MAX" fills the field with the full balance minus the minimum fee.
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">amount-invalid-text</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L118"
-                    >L118</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/07-amount-invalid-text.png" alt="amount invalid" />
-              </div>
-              <div class="desc">Letters/special characters → immediate error, submit blocked.</div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">amount-insufficient</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L131"
-                    >L131</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/07-amount-insufficient.png" alt="insufficient" />
-              </div>
-              <div class="desc">More than balance → "Exceeds available balance".</div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">confirm-dialog</span>
-                <div class="vp-toggle" data-vp-toggle>
-                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
-                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
-                </div>
-                <span class="src">
-                  <a
-                    data-vp-target="mobile"
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L157"
-                    >L157</a
-                  >
-                  <a
-                    data-vp-target="desktop"
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L144"
-                    hidden
-                    >L144</a
-                  >
-                </span>
-              </div>
-              <div class="img">
-                <img
-                  data-vp-target="mobile"
-                  src="/handbook/screenshots/07-confirm-dialog-mobile.png"
-                  alt="confirm mobile"
-                />
-                <img
-                  data-vp-target="desktop"
-                  src="/handbook/screenshots/07-confirm-dialog-desktop.png"
-                  alt="confirm desktop"
-                  hidden
-                />
-              </div>
-              <div class="desc">
-                <span data-vp-target="mobile">Bottom-sheet variant at 375×812.</span>
-                <span data-vp-target="desktop" hidden>
-                  Confirmation dialog at 1440×900. Recipient + amount + fee shown one more time.
-                  Cancel + "Send now".
-                </span>
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">confirm-cancel-back</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L170"
-                    >L170</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/07-confirm-cancel-back.png" alt="cancel back" />
-              </div>
-              <div class="desc">Cancel closes the dialog, form stays pre-filled.</div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">send-success</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L193"
-                    >L193</a
-                  ></span
-                >
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/07-send-success.png" alt="send success" />
-              </div>
-              <div class="desc">
-                After a successful 2-phase commit: proof ID + link back to the wallet. Tx row
-                appears in the local list immediately.
-              </div>
-            </div>
-            <div class="test">
-              <div class="head">
-                <span class="name">recovering-banner</span
-                ><span class="src"
-                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L217"
-                    >L217</a
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L16"
+                    >L16</a
                   ></span
                 >
               </div>
               <div class="img no-shot">
                 <p>
-                  Functional test with no screenshot — confirms that an aborted commit is retried on
-                  the next app start (in-flight recovery, 3 attempts).
+                  Functional check: the wallet Send button stays
+                  <code>aria-disabled="true"</code> so users cannot open a live send form.
                 </p>
               </div>
-              <div class="desc">No-shot: in-flight recovery logic, no new screen.</div>
+              <div class="desc">No-shot: wallet CTA disabled, no navigation into a live form.</div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">send-unavailable</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L23"
+                    >L23</a
+                  ></span
+                >
+              </div>
+              <div class="img">
+                <img
+                  src="/handbook/screenshots/07-send-unavailable.png"
+                  alt="send unavailable"
+                />
+              </div>
+              <div class="desc">
+                Direct <code>/send</code>: unavailable banner, no recipient/amount form, submit
+                permanently disabled.
+              </div>
+            </div>
+            <div class="test">
+              <div class="head">
+                <span class="name">no-v1-tx-post</span
+                ><span class="src"
+                  ><a href="https://github.com/zk-coins/app/blob/develop/e2e/07-send.spec.ts#L38"
+                    >L38</a
+                  ></span
+                >
+              </div>
+              <div class="img no-shot">
+                <p>
+                  Force-clicking the disabled submit must not issue
+                  <code>POST /v1/tx</code>.
+                </p>
+              </div>
+              <div class="desc">No-shot: no send network path while unavailable.</div>
             </div>
           </div>
         </details>
@@ -2928,7 +2785,7 @@
                 <div class="file">e2e/19-portfolio.spec.ts</div>
               </div>
               <div class="rhs">
-                <b>4 tests · 4 baselines</b>
+                <b>3 tests · 2 baselines</b>
                 <div class="links">
                   <a href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts"
                     >Spec ↗</a
@@ -2942,91 +2799,67 @@
             </div>
           </summary>
           <p class="spec-intro">
-            The wallet home on a <code>multi_asset:true</code> node renders the per-asset
-            <b>portfolio</b> list instead of the single-asset balance hero — one row per held asset
-            with its name, masked balance, and a tap-through to the asset detail.
+            Portfolio reads refuse until AccountState balances decode ships. The wallet must show
+            <code>portfolio-unavailable-banner</code> — never a funded list and never a confirmed
+            empty wallet for a failed/unavailable read.
           </p>
 
           <div class="tests">
             <div class="test">
               <div class="head">
-                <span class="name">portfolio-funded</span>
-                <div class="vp-toggle" data-vp-toggle>
-                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
-                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
-                </div>
+                <span class="name">portfolio-unavailable</span>
                 <span class="src">
-                  <a
-                    data-vp-target="mobile"
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L72"
-                    >L72</a
-                  >
-                  <a
-                    data-vp-target="desktop"
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L64"
-                    hidden
-                    >L64</a
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L14"
+                    >L14</a
                   >
                 </span>
               </div>
               <div class="img">
                 <img
-                  data-vp-target="mobile"
-                  src="/handbook/screenshots/19-portfolio-funded-mobile.png"
-                  alt="portfolio funded mobile"
+                  src="/handbook/screenshots/19-portfolio-unavailable.png"
+                  alt="portfolio unavailable mobile"
                 />
+              </div>
+              <div class="desc">
+                Alice mobile: unavailable banner; no asset list and no empty-wallet confirmation.
+              </div>
+            </div>
+
+            <div class="test">
+              <div class="head">
+                <span class="name">portfolio-unavailable-bob</span>
+                <span class="src">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L25"
+                    >L25</a
+                  >
+                </span>
+              </div>
+              <div class="img no-shot">
+                <p>
+                  Bob mobile: same unavailable banner; never
+                  <code>wallet-empty-banner</code> for a failed read.
+                </p>
+              </div>
+              <div class="desc">No-shot: second fixture, same fail-closed surface.</div>
+            </div>
+
+            <div class="test">
+              <div class="head">
+                <span class="name">portfolio-unavailable-desktop</span>
+                <span class="src">
+                  <a href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L34"
+                    >L34</a
+                  >
+                </span>
+              </div>
+              <div class="img">
                 <img
-                  data-vp-target="desktop"
-                  src="/handbook/screenshots/19-portfolio-funded-desktop.png"
-                  alt="portfolio funded desktop"
-                  hidden
+                  src="/handbook/screenshots/19-portfolio-unavailable-desktop.png"
+                  alt="portfolio unavailable desktop"
                 />
               </div>
               <div class="desc">
-                <span data-vp-target="mobile">
-                  Mobile: Alice's portfolio with her seeded fixture asset — name + masked per-asset
-                  balance row.
-                </span>
-                <span data-vp-target="desktop" hidden>
-                  Desktop 1440 × 900: the same portfolio list, framed; balances masked.
-                </span>
-              </div>
-            </div>
-
-            <div class="test">
-              <div class="head">
-                <span class="name">portfolio-empty</span>
-                <span class="src">
-                  <a
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L56"
-                    >L56</a
-                  >
-                </span>
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/19-portfolio-empty.png" alt="portfolio empty" />
-              </div>
-              <div class="desc">
-                A wallet holding no assets — the empty-portfolio state with a prompt to receive or
-                create one.
-              </div>
-            </div>
-
-            <div class="test">
-              <div class="head">
-                <span class="name">portfolio-loading</span>
-                <span class="src">
-                  <a
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/19-portfolio.spec.ts#L101"
-                    >L101</a
-                  >
-                </span>
-              </div>
-              <div class="img">
-                <img src="/handbook/screenshots/19-portfolio-loading.png" alt="portfolio loading" />
-              </div>
-              <div class="desc">
-                The skeleton shown while the per-owner portfolio is fetched from the node.
+                Desktop 1440 × 900: unavailable banner, never a funded portfolio list.
               </div>
             </div>
           </div>
@@ -3176,7 +3009,7 @@
                 <div class="file">e2e/21-asset-detail.spec.ts</div>
               </div>
               <div class="rhs">
-                <b>4 tests · 4 baselines</b>
+                <b>1 test · 1 baseline</b>
                 <div class="links">
                   <a href="https://github.com/zk-coins/app/blob/develop/e2e/21-asset-detail.spec.ts"
                     >Spec ↗</a
@@ -3190,96 +3023,31 @@
             </div>
           </summary>
           <p class="spec-intro">
-            <code>/asset/[id]</code> is the per-asset detail page reached from a portfolio row: the
-            asset's name, masked balance, metadata, and a send action scoped to that asset.
+            Without a successful portfolio read, deep-links to <code>/asset/[id]</code> show
+            <code>asset-detail-unavailable</code> — never <code>asset-detail-missing</code> (which
+            would imply a confirmed empty hold list).
           </p>
 
           <div class="tests">
             <div class="test">
               <div class="head">
-                <span class="name">asset-detail</span>
-                <div class="vp-toggle" data-vp-toggle>
-                  <button type="button" data-vp="mobile" aria-pressed="true">Mobile</button>
-                  <button type="button" data-vp="desktop" aria-pressed="false">Desktop</button>
-                </div>
+                <span class="name">asset-detail-unavailable</span>
                 <span class="src">
                   <a
-                    data-vp-target="mobile"
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/21-asset-detail.spec.ts#L80"
-                    >L80</a
-                  >
-                  <a
-                    data-vp-target="desktop"
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/21-asset-detail.spec.ts#L73"
-                    hidden
-                    >L73</a
+                    href="https://github.com/zk-coins/app/blob/develop/e2e/21-asset-detail.spec.ts#L14"
+                    >L14</a
                   >
                 </span>
               </div>
               <div class="img">
                 <img
-                  data-vp-target="mobile"
-                  src="/handbook/screenshots/21-asset-detail-mobile.png"
-                  alt="asset detail mobile"
-                />
-                <img
-                  data-vp-target="desktop"
-                  src="/handbook/screenshots/21-asset-detail-desktop.png"
-                  alt="asset detail desktop"
-                  hidden
+                  src="/handbook/screenshots/21-asset-detail-unavailable.png"
+                  alt="asset detail unavailable"
                 />
               </div>
               <div class="desc">
-                <span data-vp-target="mobile">
-                  Mobile: the asset hero with name + masked balance, the metadata rows, and the
-                  scoped "Send" action.
-                </span>
-                <span data-vp-target="desktop" hidden>
-                  Desktop 1440 × 900: the same detail, framed; per-asset values masked.
-                </span>
-              </div>
-            </div>
-
-            <div class="test">
-              <div class="head">
-                <span class="name">asset-detail-loading</span>
-                <span class="src">
-                  <a
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/21-asset-detail.spec.ts#L126"
-                    >L126</a
-                  >
-                </span>
-              </div>
-              <div class="img">
-                <img
-                  src="/handbook/screenshots/21-asset-detail-loading.png"
-                  alt="asset detail loading"
-                />
-              </div>
-              <div class="desc">
-                The skeleton shown while the asset's portfolio entry is fetched.
-              </div>
-            </div>
-
-            <div class="test">
-              <div class="head">
-                <span class="name">asset-detail-missing</span>
-                <span class="src">
-                  <a
-                    href="https://github.com/zk-coins/app/blob/develop/e2e/21-asset-detail.spec.ts#L106"
-                    >L106</a
-                  >
-                </span>
-              </div>
-              <div class="img">
-                <img
-                  src="/handbook/screenshots/21-asset-detail-missing.png"
-                  alt="asset detail not found"
-                />
-              </div>
-              <div class="desc">
-                An unknown asset id (or one not held by this wallet) renders the not-found surface
-                with a back-to-wallet action.
+                Deep-link surface: unavailable banner + back control; no held-asset hero and no
+                missing-as-empty hold.
               </div>
             </div>
           </div>
@@ -3340,15 +3108,15 @@
               </tr>
               <tr>
                 <td>Tx history</td>
-                <td><code>07-send</code> (post-send rows)</td>
+                <td>not via <code>07-send</code> post-send rows</td>
                 <td>—</td>
-                <td><span class="ok">in 11</span></td>
+                <td>—</td>
               </tr>
               <tr>
-                <td>Send Bitcoin (2-phase)</td>
+                <td>Send Bitcoin — unavailable</td>
                 <td><code>07-send</code></td>
-                <td>12</td>
-                <td><span class="ok">11</span></td>
+                <td>3</td>
+                <td><span class="ok">1</span></td>
               </tr>
               <tr>
                 <td>Receive Bitcoin</td>
@@ -3370,8 +3138,8 @@
               </tr>
               <tr>
                 <td colspan="2"><strong>Σ MVP</strong></td>
-                <td><strong>61</strong></td>
-                <td><strong class="ok">58</strong></td>
+                <td><strong>52</strong></td>
+                <td><strong class="ok">48</strong></td>
               </tr>
               <tr>
                 <td>+ Welcome / onboarding</td>
@@ -3387,8 +3155,8 @@
               </tr>
               <tr>
                 <td colspan="2"><strong>Σ total</strong></td>
-                <td><strong>68</strong></td>
-                <td><strong class="ok">65</strong></td>
+                <td><strong>59</strong></td>
+                <td><strong class="ok">55</strong></td>
               </tr>
             </tbody>
           </table>
