@@ -1210,6 +1210,27 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     await expect(rejection).rejects.toMatchObject({ status: 400 });
   });
 
+  it('rethrows a proven pre-admit app ApiError from submitTransition', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => {
+      throw new ApiError(403, 'forbidden');
+    });
+
+    const rejection = api.createCoin({
+      account_address: ADDR,
+      name: 'SubmitPreAdmitAppApiError403',
+      decimals: 0,
+      amount: '1',
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+      accountIndex: 0,
+    });
+    await expect(rejection).rejects.toBeInstanceOf(ApiError);
+    await expect(rejection).rejects.toMatchObject({ status: 403, name: 'ApiError' });
+  });
+
   it('maps AbortError during waitForAwaitingSignature without signal abort to timeout', async () => {
     spyProto('openOwnershipPullSession', async () => {
       throw new V1ApiError(404, 'not_found', '');
