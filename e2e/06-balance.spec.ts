@@ -17,8 +17,14 @@ test.describe('View balance — not available in this build', () => {
     await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({
       timeout: 30_000,
     });
+    await expect(page.getByTestId('account-display-name')).toBeVisible();
+    await expect(page.getByTestId('address-copy-btn')).toBeVisible();
+    await expect(page.getByTestId('name-claim-unavailable')).toBeVisible();
     await expect(page.getByTestId('wallet-empty-banner')).toHaveCount(0);
     await snap(page, '06-balance-funded-desktop');
+    // Click changes pixels (copied feedback) — run after the funded-desktop snap.
+    await page.getByTestId('address-copy-btn').click();
+    await expect(page.getByTestId('address-copied-feedback')).toBeVisible();
   });
 
   test('balance-unavailable-mobile', async ({ page }) => {

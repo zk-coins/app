@@ -69,6 +69,52 @@ const EXEMPT_TESTIDS = new Set([
   // returns an ApiError; covered by the unit-level mapping tests, not
   // reachable in the happy-path E2E flow.
   'wallet-mint-error',
+  // Not rendered while portfolio is unavailable / multi-asset CI surface
+  // (body only after a successful portfolio read).
+  'asset-detail-balance',
+  // Error-banner twin of asset-detail-unavailable; this suite drives the
+  // unavailable (not error) portfolio-blocked path.
+  'asset-detail-error',
+  'asset-detail-id-short',
+  'asset-detail-name',
+  'asset-history-note',
+  'asset-row',
+  'asset-row-decimals',
+  'asset-row-id',
+  'asset-row-name',
+  'asset-row-sends',
+  'asset-send-btn',
+  'asset-tx-row',
+  // Single-asset-only chrome (CI info-proxy forces multi_asset; the
+  // single-asset branch is not driven).
+  'balance-toggle-btn',
+  'balance-value',
+  // Stale/error-only notes (need a successful-then-stale or info-error
+  // fixture this suite does not have).
+  // Only renders on a history-read error; the suite has no such fixture
+  // (same ground as history-stale-note).
+  'history-error-banner',
+  'history-stale-note',
+  'portfolio-stale-note',
+  'network-info-error',
+  // Legacy onboarding (discard/reimport of a pre-v1 stored seed; not in
+  // the current create/restore path).
+  'onboarding-discard-legacy-btn',
+  'seed-reimport-required',
+  // Transient generating flash (02-create-seed.spec.ts already documents
+  // that pure-TS generation is too fast to catch; same ground as
+  // seed-creating-btn).
+  'seed-generating',
+  // QR scanner internals (send is hardcoded unavailable; 15/16 only assert
+  // the modal is absent).
+  'qr-scan-camera-error',
+  'qr-scan-close-btn',
+  'qr-scan-file-error',
+  'qr-scan-file-input',
+  'qr-scan-invalid',
+  'qr-scan-starting',
+  'qr-scan-upload-btn',
+  'qr-scan-video',
 ]);
 
 // Generic wrapper components are allowed to expose <button> without testid
@@ -141,9 +187,9 @@ function rel(file) {
 
 // --- Section A + B: testid universe ---------------------------------------
 
-const SRC_LITERAL_RE = /(?:data-)?testid=["']([a-z0-9-]+)["']/g;
+const SRC_LITERAL_RE = /(?:data-)?testid=["']([a-z0-9-]+)["']/gi;
 // Capture the full template content; the variable parts ${...} become wildcards.
-const SRC_TEMPLATE_RE = /(?:data-)?testid=\{`([^`]+)`\}/g;
+const SRC_TEMPLATE_RE = /(?:data-)?testid=\{`([^`]+)`\}/gi;
 const E2E_GETBY_RE = /getByTestId\(['"]([a-z0-9-]+)['"]\)/g;
 const E2E_LOCATOR_RE = /\[data-testid=["']([a-z0-9-]+)["']\]/g;
 const E2E_STRING_RE = /['"]([a-z][a-z0-9-]{3,})['"]/g; // fallback: any quoted token
@@ -172,6 +218,15 @@ for (const file of walk(srcDir, ['.ts', '.tsx'])) {
     for (const m of line.matchAll(SRC_TEMPLATE_RE)) {
       const template = m[1];
       srcTemplatePatterns.push({ template, regex: templateToRegex(template) });
+    }
+    // Ternary `testid={cond ? 'a' : 'b'}` (any case): register each quoted
+    // kebab-case token on the same line as a src literal.
+    if (/(?:data-)?testid=\{/i.test(line)) {
+      for (const m of line.matchAll(/['"]([a-z0-9-]+)['"]/g)) {
+        const id = m[1];
+        if (!srcLiteralIds.has(id)) srcLiteralIds.set(id, []);
+        srcLiteralIds.get(id).push({ file: rel(file), line: i + 1 });
+      }
     }
   }
 }

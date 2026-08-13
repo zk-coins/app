@@ -32,6 +32,10 @@ const VALUE_TESTIDS = [
   'tx-detail-v-txid',
   'tx-detail-v-block-height',
   'tx-detail-v-commit-value',
+  // Non-masked locator ids referenced for audit coverage (explorer-link
+  // may be absent when there is no explorerHref).
+  'tx-detail-txid',
+  'tx-detail-explorer-link',
 ];
 
 /** Log Alice in and open the detail page for her first (newest) tx. */
@@ -63,6 +67,7 @@ test.describe('Transaction detail', () => {
     // pull record has no decoded snapshot — still present for layout).
     await expect(page.getByTestId('tx-detail-v-balance-after')).toBeVisible();
     await expect(page.getByTestId('tx-detail-v-num-sends')).toBeVisible();
+    await expect(page.getByTestId('tx-detail-txid')).toBeVisible();
     // The loading frame has resolved.
     await expect(page.getByTestId('tx-detail-loading')).toHaveCount(0);
 
