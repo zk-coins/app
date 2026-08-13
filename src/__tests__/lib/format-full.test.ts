@@ -11,6 +11,8 @@ import {
   formatRelative,
   formatTimeOnly,
   isNonNegativeSafeInteger,
+  formatAssetAmount,
+  formatAssetAmountString,
 } from '@/lib/format';
 
 describe('isNonNegativeSafeInteger', () => {
@@ -27,6 +29,15 @@ describe('isNonNegativeSafeInteger', () => {
     expect(isNonNegativeSafeInteger('1')).toBe(false);
     expect(isNonNegativeSafeInteger(null)).toBe(false);
     expect(isNonNegativeSafeInteger(undefined)).toBe(false);
+  });
+});
+
+describe('formatAssetAmount unsafe decimals', () => {
+  it('rejects unsafe decimals in formatAssetAmount and formatAssetAmountString', () => {
+    expect(() => formatAssetAmount(1, Number.MAX_SAFE_INTEGER + 1)).toThrow(/non-negative integer/);
+    expect(() => formatAssetAmountString('1', Number.MAX_SAFE_INTEGER + 1)).toThrow(
+      /non-negative integer/,
+    );
   });
 });
 

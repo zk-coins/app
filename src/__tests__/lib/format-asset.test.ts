@@ -41,6 +41,10 @@ describe('formatAssetAmount', () => {
     expect(() => formatAssetAmount(Number.MAX_SAFE_INTEGER + 1, 0)).toThrow(/non-negative integer/);
   });
 
+  it('rejects unsafe decimals so they are not silently rounded', () => {
+    expect(() => formatAssetAmount(1, Number.MAX_SAFE_INTEGER + 1)).toThrow(/non-negative integer/);
+  });
+
   it('formats Number.MAX_SAFE_INTEGER with decimals 0', () => {
     expect(formatAssetAmount(Number.MAX_SAFE_INTEGER, 0)).toBe('9,007,199,254,740,991');
   });
@@ -64,6 +68,12 @@ describe('formatAssetAmountString', () => {
   it('rejects negative and fractional decimal counts', () => {
     expect(() => formatAssetAmountString('1', -1)).toThrow(/non-negative integer/);
     expect(() => formatAssetAmountString('1', 1.5)).toThrow(/non-negative integer/);
+  });
+
+  it('rejects unsafe decimals so they are not silently rounded', () => {
+    expect(() => formatAssetAmountString('1', Number.MAX_SAFE_INTEGER + 1)).toThrow(
+      /non-negative integer/,
+    );
   });
 
   it('normalizes leading zeros and pads fractions smaller than one unit', () => {

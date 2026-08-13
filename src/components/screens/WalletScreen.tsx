@@ -397,7 +397,7 @@ function AssetList({
         const decimals = asset.decimals;
         const amountText =
           typeof decimals === 'number' &&
-          Number.isInteger(decimals) &&
+          Number.isSafeInteger(decimals) &&
           decimals >= 0 &&
           Number.isSafeInteger(asset.balance) &&
           asset.balance >= 0

@@ -98,7 +98,7 @@ export function isNonNegativeSafeInteger(value: unknown): value is number {
  * must show an unavailable label rather than invent a scale.
  */
 export function formatAssetAmount(amount: number, decimals: number): string {
-  if (!Number.isInteger(decimals) || decimals < 0) {
+  if (!Number.isSafeInteger(decimals) || decimals < 0) {
     throw new Error(
       `formatAssetAmount: decimals must be a non-negative integer, got ${JSON.stringify(decimals)}`,
     );
@@ -118,7 +118,7 @@ export function formatAssetAmountString(atomicDigits: string, decimals: number):
       `formatAssetAmountString: atomicDigits must be a non-empty unsigned decimal digit string, got ${JSON.stringify(atomicDigits)}`,
     );
   }
-  if (!Number.isInteger(decimals) || decimals < 0) {
+  if (!Number.isSafeInteger(decimals) || decimals < 0) {
     throw new Error(
       `formatAssetAmountString: decimals must be a non-negative integer, got ${JSON.stringify(decimals)}`,
     );

@@ -296,6 +296,21 @@ describe('CreateCoinPage — error surfacing', () => {
     expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
   });
 
+  it('keeps submit disabled when create job fails with timeout', async () => {
+    createSpy.mockRejectedValue(
+      new JobFailedError('mint-x', 'timeout', 'job timed out after signature submit'),
+    );
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+
+    expect(await screen.findByTestId('create-error')).toBeInTheDocument();
+    expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+  });
+
   it('surfaces a non-API Error message', async () => {
     createSpy.mockRejectedValue(new Error('boom local'));
     const user = userEvent.setup();

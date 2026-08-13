@@ -69,7 +69,7 @@ export default function AssetDetailPage() {
   const walletUnavailable = account == null && !isLoading;
   const rawDecimals = asset?.decimals;
   const validDecimals =
-    typeof rawDecimals === 'number' && Number.isInteger(rawDecimals) && rawDecimals >= 0
+    typeof rawDecimals === 'number' && Number.isSafeInteger(rawDecimals) && rawDecimals >= 0
       ? rawDecimals
       : null;
 

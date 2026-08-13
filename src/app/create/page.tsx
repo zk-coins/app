@@ -106,7 +106,10 @@ export default function CreateCoinPage() {
       setSuccess({ name: trimmedName, amount: trimmedAmount, decimals: dec });
     } catch (err) {
       // Signature submit may already have been accepted; block a new transition.
-      if (err instanceof JobFailedError && err.status === 'unknown') {
+      if (
+        err instanceof JobFailedError &&
+        (err.status === 'unknown' || err.status === 'timeout' || err.status === 'protocol')
+      ) {
         keepCreatingLocked = true;
       }
       if (err instanceof ApiError || err instanceof JobFailedError) {
