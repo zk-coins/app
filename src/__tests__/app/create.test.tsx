@@ -56,6 +56,7 @@ let infoSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   routerReplace.mockClear();
   routerPush.mockClear();
+  sessionStorage.clear();
   FEATURES_STATE.MULTI_ASSET = true;
   FEATURES_STATE.loaded = true;
   useNetworkStore.setState({ infoError: null });
@@ -309,6 +310,87 @@ describe('CreateCoinPage — error surfacing', () => {
 
     expect(await screen.findByTestId('create-error')).toBeInTheDocument();
     expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+  });
+
+  it('persists timeout lock across unmount/remount via sessionStorage', async () => {
+    createSpy.mockRejectedValue(
+      new JobFailedError('mint-x', 'timeout', 'job timed out after signature submit'),
+    );
+    const user = userEvent.setup();
+    const { unmount } = render(<CreateCoinPage />);
+
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+
+    expect(await screen.findByTestId('create-error')).toBeInTheDocument();
+    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+
+    unmount();
+    render(<CreateCoinPage />);
+
+    // Form fields reset on remount; refill so disabled is not due to empty inputs.
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+  });
+
+  it('writes sessionStorage lock on unknown and protocol JobFailedError', async () => {
+    const user = userEvent.setup();
+
+    createSpy.mockRejectedValue(
+      new JobFailedError(
+        'mint-x',
+        'unknown',
+        'signature submit outcome unknown, do not retry as a new transition',
+      ),
+    );
+    const { unmount: unmountUnknown } = render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+    expect(await screen.findByTestId('create-error')).toBeInTheDocument();
+    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+    unmountUnknown();
+    sessionStorage.clear();
+
+    createSpy.mockRejectedValue(
+      new JobFailedError('mint-x', 'protocol', 'protocol error after signature submit'),
+    );
+    render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+    expect(await screen.findByTestId('create-error')).toBeInTheDocument();
+    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+  });
+
+  it('removes sessionStorage lock on definite failed JobFailedError', async () => {
+    createSpy.mockRejectedValue(new JobFailedError('mint-x', 'failed', 'prove failed'));
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+
+    expect(await screen.findByTestId('create-error')).toBeInTheDocument();
+    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
+  });
+
+  it('removes sessionStorage lock on successful create', async () => {
+    createSpy.mockResolvedValue(completed);
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+
+    expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
+    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
   });
 
   it('surfaces a non-API Error message', async () => {

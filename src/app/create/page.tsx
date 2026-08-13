@@ -14,6 +14,36 @@ import { formatAssetAmountString } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
 import { useCapabilities } from '@/stores/capabilities';
 
+function createLockKey(address: string): string {
+  return `zkcoins.create.lock.${address}`;
+}
+
+/** Fail-closed: storage read error → treat as locked. */
+function readCreateLock(address: string): boolean {
+  try {
+    return sessionStorage.getItem(createLockKey(address)) === '1';
+  } catch {
+    return true;
+  }
+}
+
+/** Fail-closed: write error ignored; React state stays locked. */
+function writeCreateLock(address: string): void {
+  try {
+    sessionStorage.setItem(createLockKey(address), '1');
+  } catch {
+    // leave React state locked
+  }
+}
+
+function clearCreateLock(address: string): void {
+  try {
+    sessionStorage.removeItem(createLockKey(address));
+  } catch {
+    // ignore clear failures
+  }
+}
+
 export default function CreateCoinPage() {
   const router = useRouter();
   const t = useTranslations('createCoin');
@@ -60,12 +90,22 @@ export default function CreateCoinPage() {
   const [name, setName] = useState('');
   const [decimals, setDecimals] = useState('0');
   const [amount, setAmount] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(() =>
+    account ? readCreateLock(account.address) : false,
+  );
   const [phase, setPhase] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ name: string; amount: string; decimals: number } | null>(
     null,
   );
+
+  // Restore remount lock from sessionStorage (survives Back navigation).
+  useEffect(() => {
+    if (!account) return;
+    if (readCreateLock(account.address)) {
+      setCreating(true);
+    }
+  }, [account]);
 
   const create = useCallback(async () => {
     /* v8 ignore next -- The form and its submit callback unmount synchronously whenever account becomes null. */
@@ -103,6 +143,7 @@ export default function CreateCoinPage() {
         },
         { onPhase: (job: JobStatus) => setPhase(job.phase ?? null) },
       );
+      clearCreateLock(account.address);
       setSuccess({ name: trimmedName, amount: trimmedAmount, decimals: dec });
     } catch (err) {
       // Signature submit may already have been accepted; block a new transition.
@@ -111,6 +152,7 @@ export default function CreateCoinPage() {
         (err.status === 'unknown' || err.status === 'timeout' || err.status === 'protocol')
       ) {
         keepCreatingLocked = true;
+        writeCreateLock(account.address);
       }
       if (err instanceof ApiError || err instanceof JobFailedError) {
         setError(userMessageFor(err, tErrors));
@@ -121,6 +163,7 @@ export default function CreateCoinPage() {
       }
     } finally {
       if (!keepCreatingLocked) {
+        clearCreateLock(account.address);
         setCreating(false);
       }
       setPhase(null);

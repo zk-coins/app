@@ -21,7 +21,6 @@ import * as path from 'node:path';
 import type { BrowserContext, FullConfig, Page } from '@playwright/test';
 import { chromium } from '@playwright/test';
 import { api } from './_helpers/api';
-import { isReMintRejection } from './_helpers/remint';
 import { createSeedWallet, DEFAULT_PASSWORD, clearWalletState } from './_helpers/wallet';
 import type { Accounts } from './_helpers/fixtures';
 
@@ -47,52 +46,17 @@ async function noteFundingUnavailable(address: string): Promise<null> {
   return null;
 }
 
-/** Run the creator-signed create-coin flow for `mnemonic`'s wallet, with a
- *  small retry on transient admit/proof failures. Without `opts.name` each
- *  call mints a fresh, uniquely-named asset (the helper auto-generates the
- *  name); the single-asset leg passes a deterministic fixture name instead
- *  so re-runs produce identical metadata. Returns the wallet's Poseidon
- *  owner address — the one the node credits and the one the balance poll
- *  must query. */
+/** Run the creator-signed create-coin flow for `mnemonic`'s wallet.
+ *  Pre-sign retries live in `api.createCoin` (same name, no post-submit
+ *  remint). Without `opts.name` the helper generates a unique name once;
+ *  the single-asset leg passes a deterministic fixture name instead.
+ *  Returns the wallet's Poseidon owner address. */
 async function createCoinWithRetry(
   mnemonic: string,
   opts: { name?: string } = {},
-  attempt = 1,
 ): Promise<string> {
-  const maxAttempts = 3;
-  try {
-    const { address } = await api.createCoin(mnemonic, opts);
-    return address;
-  } catch (err) {
-    // Idempotency guard (deterministic `opts.name` only): a PREVIOUS attempt
-    // may have minted successfully server-side while this client's
-    // completed-poll blipped (a single fetch error, or the 240 s poll
-    // timeout). Re-admitting the same name then makes the node
-    // deterministically reject the duplicate ("Re-mint into an existing
-    // asset account is not supported", node/src/account_node.rs) — so on
-    // attempt >= 2 that rejection is evidence the seed already landed:
-    // return the wallet address and fall through to the caller's balance
-    // poll, which verifies the funding independently. On attempt 1 the
-    // rejection is a genuine collision and must stay fatal. Auto-generated
-    // names regenerate per attempt and never take this path.
-    // Re-mint rejection is NOT independent proof the fixture funded:
-    // portfolio/balance reads are unavailable in this build, so we cannot
-    // verify funding. Surface the error instead of pretending success.
-    if (attempt > 1 && opts.name !== undefined && isReMintRejection(err)) {
-      throw new Error(
-        `globalSetup: create-coin for "${opts.name}" hit re-mint rejection on attempt ${attempt}, ` +
-          `but no independent funding verification is available (read path not wired). ` +
-          `Original error: ${String(err)}`,
-      );
-    }
-    if (attempt >= maxAttempts) throw err;
-    const wait = 1_000 * 2 ** (attempt - 1);
-    console.warn(
-      `globalSetup: create-coin failed (attempt ${attempt}/${maxAttempts}), retrying in ${wait}ms`,
-    );
-    await new Promise((r) => setTimeout(r, wait));
-    return createCoinWithRetry(mnemonic, opts, attempt + 1);
-  }
+  const { address } = await api.createCoin(mnemonic, opts);
+  return address;
 }
 
 /**

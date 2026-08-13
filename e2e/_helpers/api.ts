@@ -191,11 +191,15 @@ export const api = {
    * Creator-signed mint via `POST /v1/tx` kind=mint. Returns the minted
    * amount plus the wallet address so callers can track the fixture.
    * Does NOT poll portfolio (read path unavailable).
+   *
+   * Pre-sign transients may retry (same name). Once submitTransition has
+   * returned, failures rethrow — never start a second mint handshake.
    */
   createCoin: async (
     mnemonic: string,
     opts: { name?: string; decimals?: number; amount?: string } = {},
   ): Promise<{ name: string; decimals: number; amount: string; address: string }> => {
+    // Hoist once so pre-sign retries never invent a new random name.
     const name = opts.name ?? `E2E-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const decimals = opts.decimals ?? FIXTURE_DECIMALS;
     const amount = opts.amount !== undefined ? opts.amount : MINT_AMOUNT;
@@ -206,122 +210,151 @@ export const api = {
     }
 
     const keys = accountFromMnemonic(mnemonic);
-    const network = await resolveNetwork();
-    const client = v1Client(network);
-    const seed = seedFromMnemonicV1(mnemonic);
-    const npkRand = freshNpkRand();
+    const maxAttempts = 3;
+    let lastErr: unknown;
 
-    // One deadline/signal for the whole handshake — waitForJob reuses it.
-    const deadline = Date.now() + WAIT_TIMEOUT_MS;
-    const signal = AbortSignal.timeout(WAIT_TIMEOUT_MS);
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      let handshakeSubmitted = false;
+      try {
+        const network = await resolveNetwork();
+        const client = v1Client(network);
+        const seed = seedFromMnemonicV1(mnemonic);
+        const npkRand = freshNpkRand();
 
-    let sendCounter = 0;
-    try {
-      const sk0 = deriveSpendKey(seed, 0, 0);
-      const pull = await client.openOwnershipPullSession(
-        {
+        // One deadline/signal for the whole handshake — waitForJob reuses it.
+        const deadline = Date.now() + WAIT_TIMEOUT_MS;
+        const signal = AbortSignal.timeout(WAIT_TIMEOUT_MS);
+
+        let sendCounter = 0;
+        try {
+          const sk0 = deriveSpendKey(seed, 0, 0);
+          const pull = await client.openOwnershipPullSession(
+            {
+              subject: keys.address,
+              sk0: sk0.secretKey,
+              nkCommit: hexToBytesExact(keys.nkCommit, 32, 'nkCommit'),
+            },
+            signal,
+          );
+          const head = await client.getAccountState(pull.session, signal);
+          sendCounter = head.send_counter;
+        } catch (err) {
+          // Only typed HTTP 404 + machineCode not_found means "account does not
+          // exist yet". Network/auth/parse/5xx and untyped wrappers must abort
+          // before /v1/tx — never invent sendCounter=0 for a live account.
+          if (
+            !(err instanceof V1ApiError) ||
+            err.status !== 404 ||
+            err.machineCode !== 'not_found'
+          ) {
+            throw err;
+          }
+          sendCounter = 0;
+        }
+
+        const next = deriveSpendKey(seed, 0, sendCounter + 1);
+        const body: TransitionRequest = {
+          kind: 'mint',
           subject: keys.address,
-          sk0: sk0.secretKey,
-          nkCommit: hexToBytesExact(keys.nkCommit, 32, 'nkCommit'),
-        },
-        signal,
-      );
-      const head = await client.getAccountState(pull.session, signal);
-      sendCounter = head.send_counter;
-    } catch (err) {
-      // Only typed HTTP 404 + machineCode not_found means "account does not
-      // exist yet". Network/auth/parse/5xx and untyped wrappers must abort
-      // before /v1/tx — never invent sendCounter=0 for a live account.
-      if (!(err instanceof V1ApiError) || err.status !== 404 || err.machineCode !== 'not_found') {
-        throw err;
-      }
-      sendCounter = 0;
-    }
+          next_pubkey: encodeHexLower(next.publicKey),
+          npk_rand: encodeHexLower(npkRand),
+          output_templates: [
+            {
+              recipient: keys.address,
+              asset_id: '00'.repeat(32),
+              amount,
+            },
+          ],
+          issuance: {
+            name,
+            decimals,
+            issuance_version: 1,
+            amount,
+            creator_pubkey: keys.pk0,
+          },
+        };
 
-    const next = deriveSpendKey(seed, 0, sendCounter + 1);
-    const body: TransitionRequest = {
-      kind: 'mint',
-      subject: keys.address,
-      next_pubkey: encodeHexLower(next.publicKey),
-      npk_rand: encodeHexLower(npkRand),
-      output_templates: [
-        {
-          recipient: keys.address,
-          asset_id: '00'.repeat(32),
-          amount,
-        },
-      ],
-      issuance: {
-        name,
-        decimals,
-        issuance_version: 1,
-        amount,
-        creator_pubkey: keys.pk0,
-      },
-    };
+        const accepted = await client.submitTransition(body, {
+          idempotencyKey: crypto.randomUUID(),
+          signal,
+        });
+        // Transition admitted — do not retry as a new handshake from here on.
+        handshakeSubmitted = true;
+        const jobId = accepted.job_id;
 
-    const accepted = await client.submitTransition(body, {
-      idempotencyKey: crypto.randomUUID(),
-      signal,
-    });
-    const jobId = accepted.job_id;
+        const awaiting = await client.waitForAwaitingSignature(jobId, {
+          sleep: (ms) => delay(Math.max(POLL_FLOOR_MS, ms), signal),
+          signal,
+        });
+        if (awaiting.status !== 'awaiting_signature' || !awaiting.awaiting_signature) {
+          throw new Error(`createCoin: job ${jobId} ended in ${awaiting.status} before signature`);
+        }
 
-    const awaiting = await client.waitForAwaitingSignature(jobId, {
-      sleep: (ms) => delay(Math.max(POLL_FLOOR_MS, ms), signal),
-      signal,
-    });
-    if (awaiting.status !== 'awaiting_signature' || !awaiting.awaiting_signature) {
-      throw new Error(`createCoin: job ${jobId} ended in ${awaiting.status} before signature`);
-    }
+        let accountState: { current_pubkey: string; send_counter: number };
+        try {
+          const sk0 = deriveSpendKey(seed, 0, 0);
+          const pull = await client.openOwnershipPullSession(
+            {
+              subject: keys.address,
+              sk0: sk0.secretKey,
+              nkCommit: hexToBytesExact(keys.nkCommit, 32, 'nkCommit'),
+            },
+            signal,
+          );
+          accountState = await client.getAccountState(pull.session, signal);
+        } catch (err) {
+          if (
+            !(err instanceof V1ApiError) ||
+            err.status !== 404 ||
+            err.machineCode !== 'not_found'
+          ) {
+            throw err;
+          }
+          const jobCounter = awaiting.awaiting_signature.send_counter;
+          if (jobCounter !== 0) {
+            throw new Error(
+              `createCoin: account not found but job awaiting_signature.send_counter is ${jobCounter} (non-genesis); refusing to sign`,
+            );
+          }
+          accountState = {
+            send_counter: jobCounter,
+            current_pubkey: keys.pk0, // already lowercase hex
+          };
+        }
+        const sendCounterFromAwaiting = awaiting.awaiting_signature.send_counter;
+        const spend = deriveSpendKey(seed, 0, sendCounterFromAwaiting);
+        const nextAfter = deriveSpendKey(seed, 0, sendCounterFromAwaiting + 1);
 
-    let accountState: { current_pubkey: string; send_counter: number };
-    try {
-      const sk0 = deriveSpendKey(seed, 0, 0);
-      const pull = await client.openOwnershipPullSession(
-        {
-          subject: keys.address,
-          sk0: sk0.secretKey,
-          nkCommit: hexToBytesExact(keys.nkCommit, 32, 'nkCommit'),
-        },
-        signal,
-      );
-      accountState = await client.getAccountState(pull.session, signal);
-    } catch (err) {
-      if (!(err instanceof V1ApiError) || err.status !== 404 || err.machineCode !== 'not_found') {
-        throw err;
-      }
-      const jobCounter = awaiting.awaiting_signature.send_counter;
-      if (jobCounter !== 0) {
-        throw new Error(
-          `createCoin: account not found but job awaiting_signature.send_counter is ${jobCounter} (non-genesis); refusing to sign`,
+        await client.refuseOrSignAndSubmit({
+          jobId,
+          localPubkey: spend.publicKey,
+          secretKey: spend.secretKey,
+          accountState: {
+            current_pubkey: accountState.current_pubkey,
+            send_counter: accountState.send_counter,
+          },
+          awaiting: awaiting.awaiting_signature,
+          nextPubkey: nextAfter.publicKey,
+          npkRand,
+          nodeNetwork: client.network,
+          signal,
+        });
+
+        await waitForJob(client, jobId, signal, deadline);
+        return { name, decimals, amount, address: keys.address };
+      } catch (err) {
+        // Post-submit/post-sign: never start a brand-new mint.
+        if (handshakeSubmitted) throw err;
+        lastErr = err;
+        if (attempt >= maxAttempts) throw err;
+        const wait = 1_000 * 2 ** (attempt - 1);
+        console.warn(
+          `createCoin: pre-sign failure (attempt ${attempt}/${maxAttempts}), retrying in ${wait}ms`,
         );
+        await delay(wait);
       }
-      accountState = {
-        send_counter: jobCounter,
-        current_pubkey: keys.pk0, // already lowercase hex
-      };
     }
-    const sendCounterFromAwaiting = awaiting.awaiting_signature.send_counter;
-    const spend = deriveSpendKey(seed, 0, sendCounterFromAwaiting);
-    const nextAfter = deriveSpendKey(seed, 0, sendCounterFromAwaiting + 1);
-
-    await client.refuseOrSignAndSubmit({
-      jobId,
-      localPubkey: spend.publicKey,
-      secretKey: spend.secretKey,
-      accountState: {
-        current_pubkey: accountState.current_pubkey,
-        send_counter: accountState.send_counter,
-      },
-      awaiting: awaiting.awaiting_signature,
-      nextPubkey: nextAfter.publicKey,
-      npkRand,
-      nodeNetwork: client.network,
-      signal,
-    });
-
-    await waitForJob(client, jobId, signal, deadline);
-    return { name, decimals, amount, address: keys.address };
+    throw lastErr instanceof Error ? lastErr : new Error(String(lastErr));
   },
 };
 
