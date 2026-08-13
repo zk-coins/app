@@ -17,11 +17,12 @@ test.describe('Asset detail — not available in this build', () => {
     await setViewport(page, 'mobile');
     await aliceLogin(page);
     await page.goto(`/asset/${'c'.repeat(64)}`);
-    await expect(page.getByTestId('asset-detail-wallet-unavailable')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('asset-detail-wallet-unavailable')).toBeVisible({
+      timeout: 30_000,
+    });
     await expect(page.getByTestId('asset-detail-unavailable')).toHaveCount(0);
     await expect(page.getByTestId('asset-detail-back')).toBeVisible();
     await expect(page.getByTestId('asset-detail-missing')).toHaveCount(0);
-    await expect(page.getByTestId('asset-detail-wallet-unavailable')).toHaveCount(0);
     await expect(page.getByTestId('asset-detail-body')).toHaveCount(0);
     await snap(page, '21-asset-detail-unavailable', { fullPage: true });
   });
