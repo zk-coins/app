@@ -1541,6 +1541,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       amount: '1',
       mnemonic: MNEMONIC,
       nkCommit: NK,
+      accountIndex: 0,
     });
     expect(job.status).toBe('completed');
     expect(submit).toHaveBeenCalledTimes(1);
@@ -1571,6 +1572,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
