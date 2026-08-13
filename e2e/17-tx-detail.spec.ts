@@ -64,8 +64,9 @@ test.describe('Transaction detail', () => {
     // pull record has no decoded snapshot — still present for layout).
     await expect(page.getByTestId('tx-detail-v-balance-after')).toBeVisible();
     await expect(page.getByTestId('tx-detail-v-num-sends')).toBeVisible();
-    // The loading frame has resolved.
+    // The loading frame has resolved; missing state must not appear on happy path.
     await expect(page.getByTestId('tx-detail-loading')).toHaveCount(0);
+    await expect(page.getByTestId('tx-detail-missing')).toHaveCount(0);
 
     await snap(page, '17-tx-detail-desktop', {
       mask: VALUE_TESTIDS.map((t) => page.getByTestId(t)),
