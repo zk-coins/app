@@ -27,7 +27,7 @@ function readCreateLock(address: string): boolean {
   }
 }
 
-/** Fail-closed: returns false on write error; caller must keep React state locked. */
+/** Fail-closed: returns false when already locked or when storage access fails; caller must keep React state locked. */
 function writeCreateLock(address: string): boolean {
   try {
     if (sessionStorage.getItem(createLockKey(address)) === '1') {
