@@ -14,7 +14,7 @@ import { render } from '@/__tests__/_helpers/intl';
 import CreateCoinPage from '@/app/create/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { api, JobFailedError, type JobStatus } from '@/lib/api/client';
+import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client';
 
 const routerReplace = vi.fn();
 const routerPush = vi.fn();
@@ -56,7 +56,7 @@ let infoSpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   routerReplace.mockClear();
   routerPush.mockClear();
-  sessionStorage.clear();
+  localStorage.clear();
   FEATURES_STATE.MULTI_ASSET = true;
   FEATURES_STATE.loaded = true;
   useNetworkStore.setState({ infoError: null });
@@ -312,7 +312,7 @@ describe('CreateCoinPage — error surfacing', () => {
     expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
   });
 
-  it('persists timeout lock across unmount/remount via sessionStorage', async () => {
+  it('persists timeout lock across unmount/remount via localStorage', async () => {
     createSpy.mockRejectedValue(
       new JobFailedError('mint-x', 'timeout', 'job timed out after signature submit'),
     );
@@ -324,7 +324,7 @@ describe('CreateCoinPage — error surfacing', () => {
     await user.click(screen.getByTestId('create-submit-btn'));
 
     expect(await screen.findByTestId('create-error')).toBeInTheDocument();
-    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
 
     unmount();
     render(<CreateCoinPage />);
@@ -333,7 +333,7 @@ describe('CreateCoinPage — error surfacing', () => {
     await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
     await user.type(screen.getByTestId('create-amount-input'), '1000');
     expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
-    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
   });
 
   it('persists create lock across unmount/remount while createCoin is still pending', async () => {
@@ -346,7 +346,7 @@ describe('CreateCoinPage — error surfacing', () => {
     await user.click(screen.getByTestId('create-submit-btn'));
 
     await expect(createSpy).toHaveBeenCalled();
-    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
 
     unmount();
     render(<CreateCoinPage />);
@@ -355,10 +355,10 @@ describe('CreateCoinPage — error surfacing', () => {
     await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
     await user.type(screen.getByTestId('create-amount-input'), '1000');
     expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
-    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
   });
 
-  it('writes sessionStorage lock on unknown and protocol JobFailedError', async () => {
+  it('writes localStorage lock on unknown and protocol JobFailedError', async () => {
     const user = userEvent.setup();
 
     createSpy.mockRejectedValue(
@@ -373,9 +373,9 @@ describe('CreateCoinPage — error surfacing', () => {
     await user.type(screen.getByTestId('create-amount-input'), '1000');
     await user.click(screen.getByTestId('create-submit-btn'));
     expect(await screen.findByTestId('create-error')).toBeInTheDocument();
-    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
     unmountUnknown();
-    sessionStorage.clear();
+    localStorage.clear();
 
     createSpy.mockRejectedValue(
       new JobFailedError('mint-x', 'protocol', 'protocol error after signature submit'),
@@ -385,10 +385,10 @@ describe('CreateCoinPage — error surfacing', () => {
     await user.type(screen.getByTestId('create-amount-input'), '1000');
     await user.click(screen.getByTestId('create-submit-btn'));
     expect(await screen.findByTestId('create-error')).toBeInTheDocument();
-    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
   });
 
-  it('removes sessionStorage lock on definite failed JobFailedError', async () => {
+  it('removes localStorage lock on definite failed JobFailedError', async () => {
     createSpy.mockRejectedValue(new JobFailedError('mint-x', 'failed', 'prove failed'));
     const user = userEvent.setup();
     render(<CreateCoinPage />);
@@ -398,11 +398,39 @@ describe('CreateCoinPage — error surfacing', () => {
     await user.click(screen.getByTestId('create-submit-btn'));
 
     expect(await screen.findByTestId('create-error')).toBeInTheDocument();
-    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
     expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
   });
 
-  it('removes sessionStorage lock on successful create', async () => {
+  it('removes localStorage lock on cancelled JobFailedError', async () => {
+    createSpy.mockRejectedValue(new JobFailedError('mint-x', 'cancelled', 'mint cancelled'));
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+
+    expect(await screen.findByTestId('create-error')).toBeInTheDocument();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
+  });
+
+  it('removes localStorage lock on a proven pre-admit ApiError', async () => {
+    createSpy.mockRejectedValue(new ApiError(400, 'bad request'));
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+
+    expect(await screen.findByTestId('create-error')).toBeInTheDocument();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
+  });
+
+  it('removes localStorage lock on successful create', async () => {
     createSpy.mockResolvedValue(completed);
     const user = userEvent.setup();
     render(<CreateCoinPage />);
@@ -412,7 +440,7 @@ describe('CreateCoinPage — error surfacing', () => {
     await user.click(screen.getByTestId('create-submit-btn'));
 
     expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
-    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
   });
 
   it('surfaces a non-API Error message', async () => {
@@ -425,6 +453,8 @@ describe('CreateCoinPage — error surfacing', () => {
     await user.click(screen.getByTestId('create-submit-btn'));
 
     expect(await screen.findByTestId('create-error')).toHaveTextContent(/boom local/);
+    expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
   });
 
   it('uses safe translated copy for a non-Error rejection', async () => {
@@ -435,10 +465,52 @@ describe('CreateCoinPage — error surfacing', () => {
     await user.type(screen.getByTestId('create-amount-input'), '1');
     await user.click(screen.getByTestId('create-submit-btn'));
     expect(await screen.findByTestId('create-error')).toBeInTheDocument();
+    expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
   });
 });
 
 describe('CreateCoinPage — lock', () => {
+  it('locks when another tab writes the create lock and ignores unrelated storage keys', async () => {
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+
+    act(() => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'unrelated', newValue: '1' }));
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: `zkcoins.create.lock.${ALICE.address}`,
+          newValue: null,
+        }),
+      );
+    });
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: `zkcoins.create.lock.${ALICE.address}`,
+          newValue: '1',
+        }),
+      );
+    });
+    expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+  });
+
+  it('does not start create when localStorage already has the create lock', async () => {
+    localStorage.setItem(`zkcoins.create.lock.${ALICE.address}`, '1');
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+  });
+
   it('starts createCoin only once when submit fires twice in the same tick', async () => {
     const noLockStorage: Storage = {
       get length() {
@@ -454,8 +526,8 @@ describe('CreateCoinPage — lock', () => {
       removeItem() {},
       setItem() {},
     };
-    vi.stubGlobal('sessionStorage', noLockStorage);
-    Object.defineProperty(window, 'sessionStorage', {
+    vi.stubGlobal('localStorage', noLockStorage);
+    Object.defineProperty(window, 'localStorage', {
       configurable: true,
       value: noLockStorage,
     });
@@ -495,8 +567,8 @@ describe('CreateCoinPage — lock', () => {
       removeItem() {},
       setItem() {},
     };
-    vi.stubGlobal('sessionStorage', throwingGet);
-    Object.defineProperty(window, 'sessionStorage', {
+    vi.stubGlobal('localStorage', throwingGet);
+    Object.defineProperty(window, 'localStorage', {
       configurable: true,
       value: throwingGet,
     });
@@ -529,8 +601,8 @@ describe('CreateCoinPage — lock', () => {
         throw new Error('quota');
       },
     };
-    vi.stubGlobal('sessionStorage', throwingSet);
-    Object.defineProperty(window, 'sessionStorage', {
+    vi.stubGlobal('localStorage', throwingSet);
+    Object.defineProperty(window, 'localStorage', {
       configurable: true,
       value: throwingSet,
     });
@@ -567,8 +639,8 @@ describe('CreateCoinPage — lock', () => {
       },
       setItem() {},
     };
-    vi.stubGlobal('sessionStorage', throwingRemove);
-    Object.defineProperty(window, 'sessionStorage', {
+    vi.stubGlobal('localStorage', throwingRemove);
+    Object.defineProperty(window, 'localStorage', {
       configurable: true,
       value: throwingRemove,
     });

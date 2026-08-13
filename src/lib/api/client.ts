@@ -620,7 +620,9 @@ async function runTransitionHandshake(
     // Counter from the node job field — not a local invention.
     const jobCounter = awaiting.awaiting_signature.send_counter;
     if (jobCounter !== 0) {
-      throw new Error(
+      throw new JobFailedError(
+        jobId,
+        'protocol',
         `account not found but job awaiting_signature.send_counter is ${jobCounter} (non-genesis); refusing to sign`,
       );
     }
@@ -636,7 +638,12 @@ async function runTransitionHandshake(
   const spend = spendKeyAt(signing.mnemonic, sendCounter, signing.accountIndex);
   const next = spendKeyAt(signing.mnemonic, sendCounter + 1, signing.accountIndex);
   // npk_rand must equal the value supplied on submit — recovered from the body.
-  const npkRand = hexToBytesExact(body.npk_rand, 32, 'npk_rand');
+  let npkRand: Uint8Array;
+  try {
+    npkRand = hexToBytesExact(body.npk_rand, 32, 'npk_rand');
+  } catch (err) {
+    throw new JobFailedError(jobId, 'protocol', (err as Error).message);
+  }
 
   if (signal.aborted) {
     throw new JobFailedError(
@@ -647,18 +654,27 @@ async function runTransitionHandshake(
   }
 
   const nodeNetwork = client.network;
-  const signature = client.signAwaiting({
-    localPubkey: spend.publicKey,
-    secretKey: spend.secretKey,
-    accountState: {
-      current_pubkey: accountState.current_pubkey,
-      send_counter: accountState.send_counter,
-    },
-    awaiting: awaiting.awaiting_signature,
-    nextPubkey: next.publicKey,
-    npkRand,
-    nodeNetwork,
-  });
+  let signature: ReturnType<ZkCoinsV1Client['signAwaiting']>;
+  try {
+    signature = client.signAwaiting({
+      localPubkey: spend.publicKey,
+      secretKey: spend.secretKey,
+      accountState: {
+        current_pubkey: accountState.current_pubkey,
+        send_counter: accountState.send_counter,
+      },
+      awaiting: awaiting.awaiting_signature,
+      nextPubkey: next.publicKey,
+      npkRand,
+      nodeNetwork,
+    });
+  } catch (err) {
+    if (err instanceof JobFailedError) {
+      throw err;
+    }
+    const message = err instanceof Error ? err.message : String(err);
+    throw new JobFailedError(jobId, 'unknown', message);
+  }
   try {
     await client.signJob(jobId, signBodyFromSignature(signature), signal);
   } catch {

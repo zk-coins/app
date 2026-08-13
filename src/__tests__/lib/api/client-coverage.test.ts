@@ -591,19 +591,56 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     });
     spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
 
+    const request = api.createCoin({
+      account_address: ADDR,
+      name: 'NonGenesis',
+      decimals: 0,
+      amount: '10',
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+      accountIndex: 0,
+    });
+    await expect(request).rejects.toThrow(/send_counter is 5 \(non-genesis\)/);
+    await expect(request).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'protocol',
+    });
+    expect(signAwaiting).not.toHaveBeenCalled();
+    expect(signJob).not.toHaveBeenCalled();
+  });
+
+  it('maps malformed npk_rand after admit to a protocol JobFailedError', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('submitTransition', async (body) => {
+      body.npk_rand = 'bad';
+      return { job_id: JOB_ID, status: 'accepted' };
+    });
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    const signAwaiting = spyProto('signAwaiting', () => DUMMY_SIG);
+    const getJob = spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
+
     await expect(
       api.createCoin({
         account_address: ADDR,
-        name: 'NonGenesis',
+        name: 'MalformedRand',
         decimals: 0,
         amount: '10',
         mnemonic: MNEMONIC,
         nkCommit: NK,
         accountIndex: 0,
       }),
-    ).rejects.toThrow(/send_counter is 5 \(non-genesis\)/);
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'protocol',
+      serverError: 'npk_rand: expected 32 bytes hex, got length 3',
+      message: 'npk_rand: expected 32 bytes hex, got length 3',
+    });
     expect(signAwaiting).not.toHaveBeenCalled();
-    expect(signJob).not.toHaveBeenCalled();
+    expect(getJob).not.toHaveBeenCalled();
   });
 
   it('pre-pull 404 + sign-pull 5xx aborts without signing', async () => {
@@ -1785,7 +1822,13 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     expect(signJob).not.toHaveBeenCalled();
   });
 
-  it('propagates KeyBindingRefusalError from signAwaiting without reconciling', async () => {
+  it('maps KeyBindingRefusalError from signAwaiting to unknown without reconciling', async () => {
+    const refusal = new KeyBindingRefusalError({
+      localPubkey: new Uint8Array(32),
+      currentPubkey: new Uint8Array(32),
+      txnPubkey: new Uint8Array(32),
+      sendCounter: 0,
+    });
     spyProto('openOwnershipPullSession', async () => {
       throw new V1ApiError(404, 'not_found', 'missing account');
     });
@@ -1795,13 +1838,9 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
     spyProto('signAwaiting', () => {
-      throw new KeyBindingRefusalError({
-        localPubkey: new Uint8Array(32),
-        currentPubkey: new Uint8Array(32),
-        txnPubkey: new Uint8Array(32),
-        sendCounter: 0,
-      });
+      throw refusal;
     });
+    const signJob = spyProto('signJob', async () => completedJob());
     const getJob = spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
 
     await expect(
@@ -1814,7 +1853,108 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         nkCommit: NK,
         accountIndex: 0,
       }),
-    ).rejects.toBeInstanceOf(KeyBindingRefusalError);
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'unknown',
+      serverError: refusal.message,
+      message: refusal.message,
+    });
+    expect(signJob).not.toHaveBeenCalled();
+    expect(getJob).not.toHaveBeenCalled();
+  });
+
+  it('maps a plain Error from signAwaiting to unknown without reconciling', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('signAwaiting', () => {
+      throw new Error('local signer failed');
+    });
+    const signJob = spyProto('signJob', async () => completedJob());
+    const getJob = spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'SignerError',
+        decimals: 0,
+        amount: '10',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'unknown',
+      serverError: 'local signer failed',
+      message: 'local signer failed',
+    });
+    expect(signJob).not.toHaveBeenCalled();
+    expect(getJob).not.toHaveBeenCalled();
+  });
+
+  it('maps an opaque rejection from signAwaiting to unknown without reconciling', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('signAwaiting', () => {
+      throw 'opaque signer failure';
+    });
+    const signJob = spyProto('signJob', async () => completedJob());
+    const getJob = spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'OpaqueSignerError',
+        decimals: 0,
+        amount: '10',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'unknown',
+      serverError: 'opaque signer failure',
+      message: 'opaque signer failure',
+    });
+    expect(signJob).not.toHaveBeenCalled();
+    expect(getJob).not.toHaveBeenCalled();
+  });
+
+  it('passes through JobFailedError from signAwaiting without reconciling', async () => {
+    const jobErr = new JobFailedError(JOB_ID, 'cancelled', 'signing cancelled');
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('signAwaiting', () => {
+      throw jobErr;
+    });
+    const signJob = spyProto('signJob', async () => completedJob());
+    const getJob = spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'SignerJobError',
+        decimals: 0,
+        amount: '10',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toBe(jobErr);
+    expect(signJob).not.toHaveBeenCalled();
     expect(getJob).not.toHaveBeenCalled();
   });
 

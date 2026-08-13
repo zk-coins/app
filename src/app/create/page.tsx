@@ -21,7 +21,7 @@ function createLockKey(address: string): string {
 /** Fail-closed: storage read error → treat as locked. */
 function readCreateLock(address: string): boolean {
   try {
-    return sessionStorage.getItem(createLockKey(address)) === '1';
+    return localStorage.getItem(createLockKey(address)) === '1';
   } catch {
     return true;
   }
@@ -30,10 +30,11 @@ function readCreateLock(address: string): boolean {
 /** Fail-closed: returns false when already locked or when storage access fails; caller must keep React state locked. */
 function writeCreateLock(address: string): boolean {
   try {
-    if (sessionStorage.getItem(createLockKey(address)) === '1') {
+    /* v8 ignore next -- already-locked is a TOCTOU duplicate of the create() readCreateLock guard */
+    if (localStorage.getItem(createLockKey(address)) === '1') {
       return false; // already locked — do not start a second mint
     }
-    sessionStorage.setItem(createLockKey(address), '1');
+    localStorage.setItem(createLockKey(address), '1');
     return true;
   } catch {
     return false;
@@ -42,7 +43,7 @@ function writeCreateLock(address: string): boolean {
 
 function clearCreateLock(address: string): void {
   try {
-    sessionStorage.removeItem(createLockKey(address));
+    localStorage.removeItem(createLockKey(address));
   } catch {
     // ignore clear failures
   }
@@ -104,12 +105,20 @@ export default function CreateCoinPage() {
   );
   const mintInFlight = useRef(false);
 
-  // Restore remount lock from sessionStorage (survives Back navigation).
+  // Restore remount lock from localStorage (survives Back navigation).
   useEffect(() => {
     if (!account) return;
+    const lockKey = createLockKey(account.address);
     if (readCreateLock(account.address)) {
       setCreating(true);
     }
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === lockKey && event.newValue === '1') {
+        setCreating(true);
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, [account]);
 
   const create = useCallback(async () => {
@@ -158,13 +167,11 @@ export default function CreateCoinPage() {
       clearCreateLock(account.address);
       setSuccess({ name: trimmedName, amount: trimmedAmount, decimals: dec });
     } catch (err) {
-      // Signature submit may already have been accepted; block a new transition.
-      if (
-        err instanceof JobFailedError &&
-        (err.status === 'unknown' || err.status === 'timeout' || err.status === 'protocol')
-      ) {
+      const isProvenPreAdmit = err instanceof ApiError && !(err instanceof JobFailedError);
+      const isDefiniteTerminalJob =
+        err instanceof JobFailedError && (err.status === 'failed' || err.status === 'cancelled');
+      if (!isProvenPreAdmit && !isDefiniteTerminalJob) {
         keepCreatingLocked = true;
-        writeCreateLock(account.address);
       }
       if (err instanceof ApiError || err instanceof JobFailedError) {
         setError(userMessageFor(err, tErrors));
