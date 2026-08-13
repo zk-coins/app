@@ -22,8 +22,8 @@ function createLockKey(address: string): string {
 function readCreateLock(address: string): boolean {
   try {
     return sessionStorage.getItem(createLockKey(address)) === '1';
-    /* v8 ignore next -- sessionStorage getItem throw is fail-closed; test env storage shims do not surface this */
   } catch {
+    /* v8 ignore next -- sessionStorage getItem throw is fail-closed; test env storage shims do not surface this */
     return true;
   }
 }
