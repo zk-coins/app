@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
@@ -30,6 +30,9 @@ function readCreateLock(address: string): boolean {
 /** Fail-closed: returns false on write error; caller must keep React state locked. */
 function writeCreateLock(address: string): boolean {
   try {
+    if (sessionStorage.getItem(createLockKey(address)) === '1') {
+      return false; // already locked — do not start a second mint
+    }
     sessionStorage.setItem(createLockKey(address), '1');
     return true;
   } catch {
@@ -99,6 +102,7 @@ export default function CreateCoinPage() {
   const [success, setSuccess] = useState<{ name: string; amount: string; decimals: number } | null>(
     null,
   );
+  const mintInFlight = useRef(false);
 
   // Restore remount lock from sessionStorage (survives Back navigation).
   useEffect(() => {
@@ -111,6 +115,7 @@ export default function CreateCoinPage() {
   const create = useCallback(async () => {
     /* v8 ignore next -- The form and its submit callback unmount synchronously whenever account becomes null. */
     if (!account) return;
+    if (mintInFlight.current || creating || readCreateLock(account.address)) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
       setError(t('errInvalidName'));
@@ -127,6 +132,7 @@ export default function CreateCoinPage() {
     }
     const dec = Number.parseInt(decimals, 10);
 
+    mintInFlight.current = true;
     setCreating(true);
     setPhase(null);
     setError(null);
@@ -171,10 +177,11 @@ export default function CreateCoinPage() {
       if (!keepCreatingLocked) {
         clearCreateLock(account.address);
         setCreating(false);
+        mintInFlight.current = false;
       }
       setPhase(null);
     }
-  }, [account, name, decimals, amount, t, tErrors]);
+  }, [account, name, decimals, amount, creating, t, tErrors]);
 
   if (!account) {
     return (
