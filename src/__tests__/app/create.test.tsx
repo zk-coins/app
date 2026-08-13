@@ -336,6 +336,28 @@ describe('CreateCoinPage — error surfacing', () => {
     expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
   });
 
+  it('persists create lock across unmount/remount while createCoin is still pending', async () => {
+    createSpy.mockImplementation(() => new Promise(() => {}));
+    const user = userEvent.setup();
+    const { unmount } = render(<CreateCoinPage />);
+
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+
+    await expect(createSpy).toHaveBeenCalled();
+    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+
+    unmount();
+    render(<CreateCoinPage />);
+
+    // Form fields reset on remount; refill so disabled is not due to empty inputs.
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+    expect(sessionStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+  });
+
   it('writes sessionStorage lock on unknown and protocol JobFailedError', async () => {
     const user = userEvent.setup();
 

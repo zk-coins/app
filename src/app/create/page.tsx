@@ -129,6 +129,7 @@ export default function CreateCoinPage() {
     setCreating(true);
     setPhase(null);
     setError(null);
+    writeCreateLock(account.address);
     let keepCreatingLocked = false;
     try {
       await api.createCoin(

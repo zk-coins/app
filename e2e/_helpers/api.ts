@@ -274,12 +274,12 @@ export const api = {
           },
         };
 
+        // Transition admitted — do not retry as a new handshake from here on.
+        handshakeSubmitted = true;
         const accepted = await client.submitTransition(body, {
           idempotencyKey: crypto.randomUUID(),
           signal,
         });
-        // Transition admitted — do not retry as a new handshake from here on.
-        handshakeSubmitted = true;
         const jobId = accepted.job_id;
 
         const awaiting = await client.waitForAwaitingSignature(jobId, {
