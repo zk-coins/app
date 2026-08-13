@@ -45,7 +45,10 @@ const DEFAULT_USERNAME_DOMAIN = 'dev.zkcoins.app';
  */
 export function normalizeInfo(upstream, usernameDomain, _multiAsset = false) {
   const normalized = { ...upstream };
-  const features = Array.isArray(upstream.features) ? [...upstream.features] : [];
+  if (!Array.isArray(upstream.features)) {
+    throw new Error('GET /v1/info: features missing or not an array');
+  }
+  const features = [...upstream.features];
   normalized.features = features.filter((f) => f !== 'wallet');
   if (usernameDomain) {
     normalized.username_domain = usernameDomain;
@@ -61,23 +64,6 @@ export function normalizeInfo(upstream, usernameDomain, _multiAsset = false) {
   return normalized;
 }
 
-/** Legacy helpers retained for unit tests that still import them. */
-export function aggregateOwnerBalance(portfolio) {
-  const assets = Array.isArray(portfolio.assets) ? portfolio.assets : [];
-  const out = {
-    balance: assets.reduce((sum, a) => sum + a.balance, 0),
-    num_sends: assets.reduce((sum, a) => sum + a.num_sends, 0),
-  };
-  if (portfolio.username) out.username = portfolio.username;
-  return out;
-}
-
-export function soleAssetId(portfolio) {
-  const assets = Array.isArray(portfolio.assets) ? portfolio.assets : [];
-  if (assets.length !== 1 || typeof assets[0].asset_id !== 'string') return null;
-  return assets[0].asset_id;
-}
-
 function readBody(req) {
   return new Promise((resolve, reject) => {
     if (req.method === 'GET' || req.method === 'HEAD') {
@@ -87,7 +73,7 @@ function readBody(req) {
     const chunks = [];
     req.on('data', (c) => chunks.push(c));
     req.on('end', () => resolve(Buffer.concat(chunks)));
-    /* c8 ignore next */
+    /* c8 ignore next -- IncomingMessage error event is unexercised under the unit harness */
     req.on('error', reject);
   });
 }
@@ -130,15 +116,19 @@ export function createProxyServer({ nodeUrl, usernameDomain, multiAsset = false 
   const base = nodeUrl.replace(/\/+$/, '');
 
   return http.createServer(async (req, res) => {
-    /* c8 ignore next */
-    const reqUrl = req.url ?? '/';
-    const url = new URL(reqUrl, 'http://localhost');
+    if (typeof req.url !== 'string' || req.url.length === 0) {
+      res.statusCode = 400;
+      res.setHeader('content-type', 'application/json');
+      res.end(JSON.stringify({ error: 'missing request url' }));
+      return;
+    }
+    const url = new URL(req.url, 'http://localhost');
     const isInfo = req.method === 'GET' && url.pathname === '/v1/info';
 
     try {
       const body = await readBody(req);
       const headers = forwardHeaders(req.headers);
-      const upstream = await fetch(`${base}${reqUrl}`, {
+      const upstream = await fetch(`${base}${req.url}`, {
         method: req.method,
         headers,
         body,
@@ -169,7 +159,7 @@ export function createProxyServer({ nodeUrl, usernameDomain, multiAsset = false 
   });
 }
 
-/* c8 ignore start */
+/* c8 ignore start -- process entrypoint; covered by startupMessage unit tests, not this branch */
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const port = Number.parseInt(process.env.E2E_INFO_PROXY_PORT ?? DEFAULT_PORT, 10);
   const nodeUrl = process.env.E2E_NODE_URL ?? DEFAULT_NODE_URL;

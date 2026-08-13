@@ -21,10 +21,11 @@
  * default-locale (`de`) translator built from the catalog — so the German
  * copy still comes from the catalog, not from this file.
  *
- * Lookup is two-layer:
- *   1. `SERVER_ERROR_TO_KEY` — exact-string match (the lockstep contract).
- *   2. `SERVER_ERROR_PATTERNS` — regex fallback for *families* of
- *      diagnostic strings the node may emit with varying wording.
+ * Lookup order in `userMessageFor`:
+ *   1. `SERVER_ERROR_TO_KEY` — exact-string match on `serverError` (lockstep).
+ *   2. `SERVER_ERROR_PATTERNS` — regex on `serverError` for diagnostic families.
+ *   3. `MACHINE_CODE_TO_KEY` — exact match on `ApiError.code` (machine codes).
+ *   4. Fallback catalog string with status + detail.
  */
 
 import { createTranslator } from 'next-intl';
@@ -145,6 +146,18 @@ const SERVER_ERROR_PATTERNS: Array<readonly [RegExp, string]> = [
 ];
 
 /**
+ * v1 machine codes (`ApiError.code` / `V1ApiError.machineCode`) → catalog
+ * key. Tried only after exact human-string and pattern match on
+ * `serverError`. Does not share entries with `SERVER_ERROR_TO_KEY`.
+ */
+export const MACHINE_CODE_TO_KEY: Record<string, string> = {
+  insufficient_funds: 'insufficientFunds',
+  not_found: 'unknownAccount',
+  unauthorized: 'signatureFailed',
+  internal_error: 'internalError',
+};
+
+/**
  * Map an `ApiError` or `JobFailedError` to a translated, user-facing
  * message. Pass the `errors`-namespaced translator (`useTranslations(
  * 'errors')`) from a component to render in the active locale; omit it
@@ -166,6 +179,11 @@ export function userMessageFor(
     for (const [pattern, key] of SERVER_ERROR_PATTERNS) {
       if (pattern.test(serverError)) return t(key);
     }
+  }
+
+  if (error instanceof ApiError && error.code !== undefined) {
+    const codeKey = MACHINE_CODE_TO_KEY[error.code];
+    if (codeKey !== undefined) return t(codeKey);
   }
 
   return t('serverErrorFallback', {

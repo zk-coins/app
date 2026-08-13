@@ -35,6 +35,7 @@ const FEATURES_STATE = vi.hoisted(() => ({
   TOR_ROUTING: false,
   USERNAME_CLAIM: false,
   MULTI_ASSET: true,
+  loaded: true,
 }));
 vi.mock('@/lib/features', () => ({
   FEATURES: FEATURES_STATE,
@@ -49,10 +50,13 @@ const ALICE = {
 };
 
 let createSpy: ReturnType<typeof vi.spyOn>;
+let infoSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   routerReplace.mockClear();
   routerPush.mockClear();
+  FEATURES_STATE.MULTI_ASSET = true;
+  FEATURES_STATE.loaded = true;
   useWalletStore.setState({
     account: ALICE,
     isLoading: false,
@@ -62,11 +66,23 @@ beforeEach(() => {
     storedAuthMethod: 'seed',
     error: null,
   });
+  infoSpy = vi.spyOn(api, 'info').mockResolvedValue({
+    network: 'regtest',
+    protocol_version: 'v1',
+    features: ['wallet'],
+    capabilities: {
+      address_list: false,
+      username_claim: false,
+      lnurl: false,
+      multi_asset: true,
+    },
+  });
   createSpy = vi.spyOn(api, 'createCoin');
 });
 
 afterEach(() => {
   createSpy.mockRestore();
+  infoSpy.mockRestore();
   vi.useRealTimers();
 });
 
@@ -272,9 +288,16 @@ describe('CreateCoinPage — error surfacing', () => {
 describe('CreateCoinPage — redirect guard', () => {
   it('redirects immediately when the runtime node lacks multi-asset support', () => {
     FEATURES_STATE.MULTI_ASSET = false;
+    FEATURES_STATE.loaded = true;
     render(<CreateCoinPage />);
     expect(routerReplace).toHaveBeenCalledWith('/');
-    FEATURES_STATE.MULTI_ASSET = true;
+  });
+
+  it('does not redirect when capabilities have not loaded yet', () => {
+    FEATURES_STATE.MULTI_ASSET = false;
+    FEATURES_STATE.loaded = false;
+    render(<CreateCoinPage />);
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 
   it('redirects to / when there is no account', async () => {

@@ -38,7 +38,6 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { aliceLogin } from './_helpers/fixtures';
-import { getUsernameDomain, zkAddressRegex } from './_helpers/api';
 import { snap, setViewport } from './_helpers/screenshot';
 
 const PASSWORD = 'TestPass123!';
@@ -100,11 +99,8 @@ test.describe('Unlock wallet — password', () => {
     await arriveAtUnlock(page);
     await page.getByTestId('unlock-password-input').fill(PASSWORD);
     await page.getByTestId('unlock-submit-btn').click();
-    // Suffix is server-reported via /v1/info.username_domain (per-stage).
-    const chip = zkAddressRegex(await getUsernameDomain());
-    await expect(page.locator(`text=${chip}`).first()).toBeVisible({
-      timeout: 30_000,
-    });
+    // Wait for the wallet shell — create-coin-btn marks a settled WalletScreen.
+    await expect(page.getByTestId('create-coin-btn')).toBeVisible({ timeout: 30_000 });
     // Wait for Alice's first balance-poll tick — see comment in
     // 02-create-seed.spec.ts::wallet-after-create.
     await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });

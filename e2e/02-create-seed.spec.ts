@@ -18,7 +18,6 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { clearWalletState, waitForBalanceLoaded } from './_helpers/wallet';
-import { getUsernameDomain, zkAddressRegex } from './_helpers/api';
 import { snap, setViewport } from './_helpers/screenshot';
 
 const PASSWORD = 'TestPass123!';
@@ -120,13 +119,12 @@ test.describe('Create wallet — seed phrase', () => {
   });
 
   // The `creating` baseline from the plan was dropped: SeedFlow's
-  // `create` callback runs `wasm.createAccountFromMnemonic` and
+  // `create` callback runs pure-TS `@zkcoins/sdk` account derivation and
   // `saveWithPassword` (IDB encrypt) in series, both finish in <50 ms,
-  // and `setAuth` swaps `Home` to render `WalletScreen` before the
-  // first `/v1/balance` round-trip — there is no stable window to
-  // snapshot the "Creating…" disabled-button state. The transition is
-  // covered functionally by `wallet-after-create`. Plan totals
-  // updated in e2e/README.md § 8.13.
+  // and `setAuth` swaps `Home` to render `WalletScreen` before any
+  // stable "Creating…" window. Ready is marked by `create-coin-btn` /
+  // portfolio-unavailable. Covered functionally by `wallet-after-create`.
+  // Plan totals updated in e2e/README.md § 8.13.
 
   test('wallet-after-create', async ({ page }) => {
     await enterSeedFlow(page);
@@ -136,16 +134,11 @@ test.describe('Create wallet — seed phrase', () => {
     await page.getByTestId('seed-password-input').fill(PASSWORD);
     await page.getByTestId('seed-password-confirm-input').fill(PASSWORD);
     await page.getByTestId('seed-create-btn').click();
-    // Wait for the wallet screen — the chip is the most reliable marker.
-    // Suffix is server-reported via /v1/info.username_domain (per-stage).
-    const chip = zkAddressRegex(await getUsernameDomain());
-    await expect(page.locator(`text=${chip}`).first()).toBeVisible({
-      timeout: 30_000,
-    });
-    // Block on the first /v1/balance tick so the banner check below is
-    // deterministic. The banner renders for `balance === 0` and remains
-    // absent while `balance === null` (post-mount loading) — without an
-    // explicit wait the assertion races the polling tick.
+    // Wait for the wallet shell — create-coin-btn marks a settled WalletScreen.
+    await expect(page.getByTestId('create-coin-btn')).toBeVisible({ timeout: 30_000 });
+    // Block until the first portfolio tick settles the unavailable banner
+    // (ready path: create-coin-btn + portfolio-unavailable-banner). Without
+    // an explicit wait the assertion races the polling tick.
     await waitForBalanceLoaded(page);
     await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
     await snap(page, '02-wallet-after-create', { fullPage: true });

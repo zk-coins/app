@@ -11,14 +11,14 @@ If you discover a security vulnerability in zkCoins, please report it responsibl
 
 ## Scope
 
-| Component                 | In Scope |
-| ------------------------- | -------- |
-| Wallet key derivation     | Yes      |
-| WASM crypto module        | Yes      |
-| Backend API               | Yes      |
-| ZK proof circuit          | Yes      |
-| Bitcoin inscription logic | Yes      |
-| Documentation site        | No       |
+| Component                       | In Scope |
+| ------------------------------- | -------- |
+| Wallet key derivation           | Yes      |
+| Pure-TS crypto (`@zkcoins/sdk`) | Yes      |
+| Backend API                     | Yes      |
+| ZK proof circuit                | Yes      |
+| Bitcoin inscription logic       | Yes      |
+| Documentation site              | No       |
 
 ## Supported Versions
 

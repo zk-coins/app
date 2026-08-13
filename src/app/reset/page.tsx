@@ -30,9 +30,9 @@ export default function ResetPage() {
 
   useEffect(() => {
     (async () => {
-      await deleteWallet();
       await deleteCredential();
       resetAuth();
+      await deleteWallet();
       router.replace('/');
     })();
   }, [deleteWallet, resetAuth, router]);

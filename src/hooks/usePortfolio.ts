@@ -59,6 +59,7 @@ export function usePortfolio(address: string | undefined): UsePortfolioResult {
     if (!address) return;
 
     let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     const tick = async () => {
       try {
         const res = await api.ownerBalances(address);
@@ -95,12 +96,15 @@ export function usePortfolio(address: string | undefined): UsePortfolioResult {
         setLoaded(true);
       }
     };
-
-    tick();
-    const interval = setInterval(tick, PORTFOLIO_POLL_MS);
+    const schedule = () => {
+      void tick().finally(() => {
+        if (!cancelled) timeout = setTimeout(schedule, PORTFOLIO_POLL_MS);
+      });
+    };
+    void schedule();
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timeout !== undefined) clearTimeout(timeout);
     };
   }, [address]);
 

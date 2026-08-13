@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   ZkCoinsV1Client,
   V1ApiError,
+  encodeHexLower,
   type DeliveryCredential,
   type V1Job,
   type V1JobErrorBody,
@@ -21,7 +22,9 @@ import {
   historyItemDate,
   newIdempotencyKey,
 } from '@/lib/api/client';
+import { SERVER_ERROR_TO_USER_MESSAGE, userMessageFor } from '@/lib/api/errorMessages';
 import { useNetworkStore } from '@/stores/network';
+import { spendKeyAt } from '@/lib/crypto/account-keys';
 
 const MNEMONIC =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -84,7 +87,7 @@ function awaitingJob(overrides: JobOverrides = {}): V1Job {
 const spies: Array<ReturnType<typeof vi.spyOn>> = [];
 
 type V1ClientMethod = keyof {
-  [K in keyof ZkCoinsV1Client as ZkCoinsV1Client[K] extends (...args: any[]) => any
+  [K in keyof ZkCoinsV1Client as ZkCoinsV1Client[K] extends (...args: never[]) => unknown
     ? K
     : never]: true;
 };
@@ -226,8 +229,30 @@ describe('api.getJob / mapV1Error', () => {
     });
     await expect(api.getJob(JOB_ID)).rejects.toMatchObject({
       status: 502,
-      serverError: 'bad_gateway',
+      serverError: 'upstream',
+      code: 'bad_gateway',
     });
+  });
+
+  it('maps V1ApiError human message into serverError and preserves machineCode', async () => {
+    spyProto('getJob', async () => {
+      throw new V1ApiError(422, 'insufficient_funds', 'Insufficient funds');
+    });
+    let mapped: unknown;
+    try {
+      await api.getJob(JOB_ID);
+    } catch (err) {
+      mapped = err;
+    }
+    expect(mapped).toMatchObject({
+      status: 422,
+      serverError: 'Insufficient funds',
+      code: 'insufficient_funds',
+    });
+    expect(mapped).toBeInstanceOf(ApiError);
+    expect(userMessageFor(mapped as ApiError)).toBe(
+      SERVER_ERROR_TO_USER_MESSAGE['Insufficient funds'],
+    );
   });
 
   it('re-throws ApiError and JobFailedError unchanged', async () => {
@@ -309,7 +334,7 @@ describe('api.accountState / getHistory / getTransaction', () => {
         {
           record_id: 'r2',
           record_type: 'note',
-          // no transition_kind — falls back to record_type
+          // no transition_kind — adapter emits unknown (no record_type fallback)
           blob_id: 'blob-r2',
           occurred_at: '1700000000',
         },
@@ -325,14 +350,14 @@ describe('api.accountState / getHistory / getTransaction', () => {
     expect(res.items).toHaveLength(1);
     expect(res.items[0]).toMatchObject({
       id: 'r1',
-      kind: 'send',
+      kind: 'unknown',
     });
     expect(res.items[0]).not.toHaveProperty('status');
     expect(res.items[0]).not.toHaveProperty('index');
 
-    // Full list: transition_kind preferred, else record_type
+    // Only mint stays mint; send/missing transition_kind → unknown
     const all = await api.getHistory({ address: ADDR, mnemonic: MNEMONIC, nkCommit: NK });
-    expect(all.items.map((i) => i.kind)).toEqual(['mint', 'send', 'note']);
+    expect(all.items.map((i) => i.kind)).toEqual(['mint', 'unknown', 'unknown']);
   });
 
   it('getHistory defaults limit/offset and maps errors', async () => {
@@ -372,10 +397,15 @@ describe('api.accountState / getHistory / getTransaction', () => {
       nkCommit: NK,
     });
     expect(found.id).toBe('tx-7');
+    expect(found.kind).toBe('unknown');
 
     await expect(
       api.getTransaction('missing', { address: ADDR, mnemonic: MNEMONIC, nkCommit: NK }),
-    ).rejects.toMatchObject({ status: 404, serverError: 'not_found' });
+    ).rejects.toMatchObject({
+      status: 404,
+      serverError: 'transaction not found',
+      code: 'transaction_not_found',
+    });
   });
 
   it('rejects malformed nkCommit hex fail-closed', async () => {
@@ -386,32 +416,51 @@ describe('api.accountState / getHistory / getTransaction', () => {
 });
 
 describe('api.createCoin — account-state 404 vs live counter + handshake', () => {
-  it('treats typed 404 as new account (sendCounter=0) and completes mint', async () => {
-    let pullCalls = 0;
-    spyProto('openOwnershipPullSession', async () => {
-      pullCalls += 1;
-      if (pullCalls === 1) {
-        throw new V1ApiError(404, 'not_found', 'missing account');
-      }
-      return { session: 's-sign', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
+  it('pre-pull 404 + sign-pull 404 builds Genesis head and signs', async () => {
+    // Both ownership pulls 404: pre-pull seeds sendCounter=0; sign-pull
+    // takes send_counter from the job field awaiting_signature.send_counter
+    // (0 here) — not an invented literal — then signs with local genesis pubkey.
+    const events: string[] = [];
+    let pullCount = 0;
+    const pull = spyProto('openOwnershipPullSession', async () => {
+      pullCount += 1;
+      if (pullCount === 2) events.push('second pull');
+      throw new V1ApiError(404, 'not_found', 'missing account');
     });
-    spyProto('getAccountState', async () => ({
-      account_state: 'ac'.repeat(32),
-      state_head: 'ad'.repeat(32),
-      send_counter: 0,
-      current_pubkey: 'aa'.repeat(32),
-    }));
-    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('getAccountState', async () => {
+      throw new Error('getAccountState must not run when every pull 404s');
+    });
+    spyProto('submitTransition', async (body) => {
+      events.push('submit');
+      expect(body.kind).toBe('mint');
+      if (body.kind === 'mint') {
+        expect(body.issuance.creator_pubkey).toBe(
+          encodeHexLower(spendKeyAt(MNEMONIC, 0, 0).publicKey),
+        );
+      }
+      return { job_id: JOB_ID, status: 'accepted' };
+    });
     // Invoke the sleep callback waitForAwaitingSignature receives (covers
-    // the inline `(ms) => delay(Math.max(POLL_FLOOR_MS, ms))` arrow).
+    // the abortableSleep path in runTransitionHandshake).
     spyProto('waitForAwaitingSignature', async (_id, opts) => {
       if (opts?.sleep) await opts.sleep(10);
+      events.push('awaiting_signature');
       return awaitingJob();
     });
-    spyProto('refuseOrSignAndSubmit', async () => ({
-      signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob(),
-    }));
+    const refuse = spyProto('refuseOrSignAndSubmit', async (args) => {
+      events.push('sign');
+      expect(args.accountState.send_counter).toBe(0);
+      expect(args.accountState.current_pubkey).toBe(
+        encodeHexLower(spendKeyAt(MNEMONIC, 0, 0).publicKey),
+      );
+      expect(args.localPubkey).toEqual(
+        spendKeyAt(MNEMONIC, args.awaiting.send_counter, 0).publicKey,
+      );
+      return {
+        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
+        job: completedJob(),
+      };
+    });
     spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
 
     const phases: string[] = [];
@@ -428,6 +477,86 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     );
     expect(job.status).toBe('completed');
     expect(phases.length).toBeGreaterThan(0);
+    expect(pull).toHaveBeenCalledTimes(2);
+    expect(refuse).toHaveBeenCalled();
+    expect(events.indexOf('submit')).toBeLessThan(events.indexOf('awaiting_signature'));
+    expect(events.indexOf('awaiting_signature')).toBeLessThan(events.indexOf('second pull'));
+    expect(events.indexOf('second pull')).toBeLessThan(events.indexOf('sign'));
+  });
+
+  it('pre-pull 404 + sign-pull 404 with non-zero job send_counter refuses to sign', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('getAccountState', async () => {
+      throw new Error('getAccountState must not run when every pull 404s');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () =>
+      awaitingJob({
+        awaiting_signature: {
+          send_counter: 5,
+          new_account_state_hash: 'a0'.repeat(32),
+          output_coins_root: 'a1'.repeat(32),
+          input_nullifiers_root: 'a2'.repeat(32),
+          coin_history_root: 'a3'.repeat(32),
+          nav_commitment: 'a4'.repeat(32),
+          npk_commit: '22'.repeat(32),
+          proof_data_hash: '11'.repeat(32),
+          txn_pubkey: 'a5'.repeat(32),
+        },
+      }),
+    );
+    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
+      throw new Error('refuseOrSignAndSubmit must not run when job counter is non-genesis on 404');
+    });
+    spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'NonGenesis',
+        decimals: 0,
+        amount: '10',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toThrow(/send_counter is 5 \(non-genesis\)/);
+    expect(refuse).not.toHaveBeenCalled();
+  });
+
+  it('pre-pull 404 + sign-pull 5xx aborts without signing', async () => {
+    let pullCalls = 0;
+    spyProto('openOwnershipPullSession', async () => {
+      pullCalls += 1;
+      if (pullCalls === 1) {
+        throw new V1ApiError(404, 'not_found', 'missing account');
+      }
+      throw new V1ApiError(500, 'internal_error', 'node lag');
+    });
+    const getState = spyProto('getAccountState', async () => {
+      throw new Error('getAccountState must not run on the sign-pull 5xx path');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
+      throw new Error('refuseOrSignAndSubmit must not run after sign-pull 5xx');
+    });
+    spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'Genesis',
+        decimals: 0,
+        amount: '10',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({ status: 500 });
+    expect(pullCalls).toBe(2);
+    expect(getState).not.toHaveBeenCalled();
+    expect(refuse).not.toHaveBeenCalled();
   });
 
   it('uses live send_counter when account state is present', async () => {
@@ -476,6 +605,37 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     expect(submit).not.toHaveBeenCalled();
   });
 
+  it('rejects a non-string amount before any network hop', async () => {
+    const pull = spyProto('openOwnershipPullSession', async () => {
+      throw new Error('openOwnershipPullSession must not run for a non-string amount');
+    });
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run for a non-string amount');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.createCoin({
+        account_address: ADDR,
+        name: 'Invalid',
+        decimals: 0,
+        amount: 1 as unknown as string,
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown).toMatchObject({
+      name: 'Error',
+      message: 'createCoin: amount must be a non-empty unsigned decimal digit string, got 1',
+    });
+    expect(pull).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it('mint delegates to createCoin', async () => {
     mockHappyHandshake({ phases: ['completed'] });
     // First pull for createCoin account head: mockHappy already returns send_counter 0
@@ -508,7 +668,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         nkCommit: NK,
       }),
     ).rejects.toMatchObject({
-      status: 'failed',
+      status: 'timeout',
       serverError: 'timed out waiting for awaiting_signature after 180000ms',
     });
   });
@@ -535,45 +695,51 @@ describe('runTransitionHandshake error branches via createCoin', () => {
   });
 
   it('classifies an abort during a long Retry-After sleep as a timeout', async () => {
-    const controller = new AbortController();
-    const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
-    spyProto('openOwnershipPullSession', async () => {
-      throw new V1ApiError(404, 'not_found', '');
-    });
-    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
-    spyProto('waitForAwaitingSignature', async (_id, opts) => {
-      expect(opts?.signal).toBe(controller.signal);
-      if (!opts?.sleep) {
-        throw new Error('waitForAwaitingSignature test stub requires sleep');
-      }
-      const sleeping = opts.sleep(240_000);
-      controller.abort();
-      await sleeping;
-      throw new Error('abortable sleep resolved after the signal aborted');
-    });
-
-    let thrown: unknown;
+    vi.useFakeTimers();
     try {
-      await api.createCoin({
-        account_address: ADDR,
-        name: 'Timeout',
-        decimals: 0,
-        amount: '1',
-        mnemonic: MNEMONIC,
-        nkCommit: NK,
+      const controller = new AbortController();
+      const timeout = vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+      spyProto('openOwnershipPullSession', async () => {
+        throw new V1ApiError(404, 'not_found', '');
       });
-    } catch (err) {
-      thrown = err;
-    }
+      spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+      spyProto('waitForAwaitingSignature', async (_id, opts) => {
+        expect(opts?.signal).toBe(controller.signal);
+        if (!opts?.sleep) {
+          throw new Error('waitForAwaitingSignature test stub requires sleep');
+        }
+        const sleeping = opts.sleep(240_000);
+        controller.abort();
+        expect(vi.getTimerCount()).toBe(0);
+        await sleeping;
+        throw new Error('abortable sleep resolved after the signal aborted');
+      });
 
-    expect(timeout).toHaveBeenCalledWith(180_000);
-    expect(thrown).toBeInstanceOf(JobFailedError);
-    expect(thrown).toMatchObject({
-      jobId: JOB_ID,
-      status: 'failed',
-      serverError: 'timed out waiting for awaiting_signature after 180000ms',
-      message: 'timed out waiting for awaiting_signature after 180000ms',
-    });
+      let thrown: unknown;
+      try {
+        await api.createCoin({
+          account_address: ADDR,
+          name: 'Timeout',
+          decimals: 0,
+          amount: '1',
+          mnemonic: MNEMONIC,
+          nkCommit: NK,
+        });
+      } catch (err) {
+        thrown = err;
+      }
+
+      expect(timeout).toHaveBeenCalledWith(180_000);
+      expect(thrown).toBeInstanceOf(JobFailedError);
+      expect(thrown).toMatchObject({
+        jobId: JOB_ID,
+        status: 'timeout',
+        serverError: 'timed out waiting for awaiting_signature after 180000ms',
+        message: 'timed out waiting for awaiting_signature after 180000ms',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('throws JobFailedError when wait returns failed', async () => {
@@ -618,7 +784,12 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         mnemonic: MNEMONIC,
         nkCommit: NK,
       }),
-    ).rejects.toMatchObject({ name: 'JobFailedError' });
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'protocol',
+      message: 'job ended in completed before signature',
+    });
   });
 
   it('throws when awaiting_signature payload is missing', async () => {
@@ -639,7 +810,279 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         mnemonic: MNEMONIC,
         nkCommit: NK,
       }),
-    ).rejects.toThrow(/awaiting_signature payload/);
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'protocol',
+      message: expect.stringMatching(/awaiting_signature payload/),
+    });
+  });
+
+  it('maps waitForAwaitingSignature without Retry-After to protocol', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => {
+      throw new Error(
+        'waitForAwaitingSignature(job-cover-1): non-terminal status proving without Retry-After',
+      );
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'RetryAfterMissing',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'protocol',
+      message: expect.stringMatching(/without Retry-After/),
+    });
+  });
+
+  it('maps abort during submitTransition to timeout', async () => {
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => {
+      controller.abort();
+      throw new Error('submit aborted by deadline');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'SubmitTimeout',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      status: 'timeout',
+      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+    });
+  });
+
+  // SDK-own request timeout aborts without aborting the handshake signal.
+  it('maps AbortError during submitTransition without signal abort to timeout', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => {
+      throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'SubmitAbortError',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      status: 'timeout',
+      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+    });
+  });
+
+  // DOMException AbortError covers the err instanceof DOMException branch of isAbortLike.
+  it('maps DOMException AbortError during submitTransition without signal abort to timeout', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => {
+      throw new DOMException('aborted', 'AbortError');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'SubmitDomExceptionAbortError',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      status: 'timeout',
+      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+    });
+  });
+
+  it('maps AbortError during waitForAwaitingSignature without signal abort to timeout', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => {
+      throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'WaitAbortError',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'timeout',
+      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+    });
+  });
+
+  it('maps abort during rehydration pull to timeout', async () => {
+    // Abort only after waitForAwaitingSignature succeeds, on the post-wait
+    // rehydration pull (not the createCoin pre-pull).
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+
+    let pullCalls = 0;
+    spyProto('openOwnershipPullSession', async () => {
+      pullCalls += 1;
+      if (pullCalls === 1) {
+        throw new V1ApiError(404, 'not_found', '');
+      }
+      controller.abort();
+      throw new Error('rehydration pull aborted by deadline');
+    });
+    spyProto('getAccountState', async () => {
+      throw new Error('getAccountState must not run when rehydration pull aborts');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
+      throw new Error('must not run after rehydration timeout');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'RehydrateTimeout',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'timeout',
+      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+    });
+    expect(refuse).not.toHaveBeenCalled();
+  });
+
+  it('maps AbortError during rehydration pull without signal abort to timeout', async () => {
+    let pullCalls = 0;
+    spyProto('openOwnershipPullSession', async () => {
+      pullCalls += 1;
+      if (pullCalls === 1) {
+        throw new V1ApiError(404, 'not_found', '');
+      }
+      throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    });
+    spyProto('getAccountState', async () => {
+      throw new Error('getAccountState must not run when rehydration pull aborts');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
+      throw new Error('must not run after rehydration AbortError');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'RehydrateAbortError',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'timeout',
+      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+    });
+    expect(refuse).not.toHaveBeenCalled();
+  });
+
+  it('maps abort during refuseOrSignAndSubmit to timeout', async () => {
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('refuseOrSignAndSubmit', async () => {
+      controller.abort();
+      throw new Error('sign submit aborted by deadline');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'RefuseTimeout',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'timeout',
+      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+    });
+  });
+
+  it('maps AbortError during refuseOrSignAndSubmit without signal abort to timeout', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('refuseOrSignAndSubmit', async () => {
+      throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'RefuseAbortError',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'timeout',
+      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+    });
   });
 
   it('throws JobFailedError when wait returns cancelled with error.error only', async () => {
@@ -665,10 +1108,105 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       }),
     ).rejects.toBeInstanceOf(JobFailedError);
   });
+
+  it('throws JobFailedError when handshake signal aborts after awaiting_signature and before sign', async () => {
+    // Abort only after waitForAwaitingSignature succeeds so the check at
+    // signal.aborted before refuseOrSignAndSubmit is hit, not the wait catch.
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+
+    let pullCalls = 0;
+    spyProto('openOwnershipPullSession', async () => {
+      pullCalls += 1;
+      if (pullCalls === 1) {
+        throw new V1ApiError(404, 'not_found', '');
+      }
+      controller.abort();
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('getAccountState', async () => {
+      throw new Error('getAccountState must not run when every pull 404s');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
+      throw new Error('must not run after handshake signal abort');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'PostAwaitAbort',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'timeout',
+      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+      message: 'timed out waiting for awaiting_signature after 180000ms',
+    });
+    expect(refuse).not.toHaveBeenCalled();
+  });
+
+  // mapHandshakeAbort must rethrow the same JobFailedError instance (not wrap as timeout).
+  it('passes through JobFailedError from submitTransition via mapHandshakeAbort', async () => {
+    const jobErr = new JobFailedError('j', 'failed', 'prove failed');
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => {
+      throw jobErr;
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'SubmitJobFailed',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toBe(jobErr);
+    expect(jobErr.status).toBe('failed');
+    expect(jobErr.serverError).toBe('prove failed');
+    expect(jobErr.jobId).toBe('j');
+  });
+
+  // waitForAwaitingSignature catch must rethrow JobFailedError unchanged (not timeout/protocol).
+  it('passes through JobFailedError from waitForAwaitingSignature', async () => {
+    const jobErr = new JobFailedError('j', 'cancelled', 'operator');
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => {
+      throw jobErr;
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'WaitJobFailed',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toBe(jobErr);
+    expect(jobErr.status).toBe('cancelled');
+    expect(jobErr.serverError).toBe('operator');
+    expect(jobErr.jobId).toBe('j');
+  });
 });
 
 describe('waitForJob branches via completed handshake + poll', () => {
   it('fails closed when non-terminal status lacks Retry-After', async () => {
+    // Pre-pull 404 → sendCounter=0; sign-pull 404 builds Genesis locally.
     spyProto('openOwnershipPullSession', async () => {
       throw new V1ApiError(404, 'not_found', '');
     });
@@ -680,13 +1218,6 @@ describe('waitForJob branches via completed handshake + poll', () => {
       send_counter: 0,
       current_pubkey: 'aa'.repeat(32),
     }));
-    // After 404 path, signing pull also needs openOwnershipPullSession success.
-    let pulls = 0;
-    spies[0]!.mockImplementation(async () => {
-      pulls += 1;
-      if (pulls === 1) throw new V1ApiError(404, 'not_found', '');
-      return { session: 's', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
-    });
     spyProto('refuseOrSignAndSubmit', async () => ({
       signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
       job: completedJob({ status: 'proving', phase: 'proving' }),
@@ -705,15 +1236,16 @@ describe('waitForJob branches via completed handshake + poll', () => {
         mnemonic: MNEMONIC,
         nkCommit: NK,
       }),
-    ).rejects.toThrow(/without Retry-After/);
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      status: 'protocol',
+      message: expect.stringMatching(/without Retry-After/),
+    });
   });
 
   it('throws JobFailedError on failed poll status and surfaces error.message', async () => {
-    let pulls = 0;
     spyProto('openOwnershipPullSession', async () => {
-      pulls += 1;
-      if (pulls === 1) throw new V1ApiError(404, 'not_found', '');
-      return { session: 's', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
+      throw new V1ApiError(404, 'not_found', '');
     });
     spyProto('getAccountState', async () => ({
       account_state: 'ac'.repeat(32),
@@ -748,11 +1280,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
   });
 
   it('surfaces job.error.error when message is absent on cancelled poll', async () => {
-    let pulls = 0;
     spyProto('openOwnershipPullSession', async () => {
-      pulls += 1;
-      if (pulls === 1) throw new V1ApiError(404, 'not_found', '');
-      return { session: 's', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
+      throw new V1ApiError(404, 'not_found', '');
     });
     spyProto('getAccountState', async () => ({
       account_state: 'ac'.repeat(32),
@@ -791,11 +1320,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
 
   it('polls with Retry-After floor and notifies phase changes', async () => {
     vi.useFakeTimers();
-    let pulls = 0;
     spyProto('openOwnershipPullSession', async () => {
-      pulls += 1;
-      if (pulls === 1) throw new V1ApiError(404, 'not_found', '');
-      return { session: 's', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
+      throw new V1ApiError(404, 'not_found', '');
     });
     spyProto('getAccountState', async () => ({
       account_state: 'ac'.repeat(32),
@@ -841,6 +1367,284 @@ describe('waitForJob branches via completed handshake + poll', () => {
     expect(phases).toContain('awaiting_signature');
     expect(phases).toContain('proving');
   });
+
+  it('times out when the job stays non-terminal past WAIT_TIMEOUT_MS', async () => {
+    vi.useFakeTimers();
+    try {
+      spyProto('openOwnershipPullSession', async () => {
+        throw new V1ApiError(404, 'not_found', '');
+      });
+      spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+      // Resolve immediately — no sleep on AbortSignal, so handshake timeout does not steal.
+      spyProto('waitForAwaitingSignature', async () => awaitingJob());
+      spyProto('refuseOrSignAndSubmit', async () => ({
+        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
+        job: completedJob({ status: 'proving', phase: 'proving' }),
+      }));
+      // retryAfterMs above MAX_POLL_SLEEP_MS — waitForJob must cap sleep and time out.
+      let seenSignal: AbortSignal | undefined;
+      spyProto('getJob', async (_id, signal) => {
+        seenSignal = signal;
+        return {
+          job: completedJob({ status: 'proving', phase: 'proving' }),
+          retryAfterMs: 900_000,
+        };
+      });
+
+      const pending = api.createCoin({
+        account_address: ADDR,
+        name: 'Timeout',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      });
+
+      const assertion = expect(pending).rejects.toMatchObject({
+        name: 'JobFailedError',
+        status: 'timeout',
+        serverError: 'timed out in proving after 180000ms',
+        message: 'timed out in proving after 180000ms',
+      });
+      await vi.advanceTimersByTimeAsync(180_000);
+      await assertion;
+      expect(seenSignal).toBeInstanceOf(AbortSignal);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('times out when remainingForSleep is zero after a non-terminal getJob', async () => {
+    vi.useFakeTimers();
+    try {
+      spyProto('openOwnershipPullSession', async () => {
+        throw new V1ApiError(404, 'not_found', '');
+      });
+      spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+      spyProto('waitForAwaitingSignature', async () => awaitingJob());
+      spyProto('refuseOrSignAndSubmit', async () => ({
+        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
+        job: completedJob({ status: 'proving', phase: 'proving' }),
+      }));
+
+      let releaseGetJob!: (value: { job: V1Job; retryAfterMs: number }) => void;
+      let resolveSaw!: () => void;
+      const getJobSawCall = new Promise<void>((r) => {
+        resolveSaw = r;
+      });
+      spyProto('getJob', async () => {
+        resolveSaw();
+        return new Promise((resolve) => {
+          releaseGetJob = resolve;
+        });
+      });
+
+      const pending = api.createCoin({
+        account_address: ADDR,
+        name: 'TimeoutRemainingZero',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      });
+      const assertion = expect(pending).rejects.toMatchObject({
+        name: 'JobFailedError',
+        status: 'timeout',
+        serverError: 'timed out in proving after 180000ms',
+        message: 'timed out in proving after 180000ms',
+      });
+      await getJobSawCall;
+      await vi.advanceTimersByTimeAsync(180_000);
+      releaseGetJob({
+        job: completedJob({ status: 'proving', phase: 'proving' }),
+        retryAfterMs: 10,
+      });
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('times out when deadlineSignal aborts during poll sleep', async () => {
+    vi.useFakeTimers();
+    try {
+      // One handshake deadline is shared with waitForJob — not two independent windows.
+      const handshakeController = new AbortController();
+      vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => handshakeController.signal);
+      spyProto('openOwnershipPullSession', async () => {
+        throw new V1ApiError(404, 'not_found', '');
+      });
+      spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+      spyProto('waitForAwaitingSignature', async () => awaitingJob());
+      spyProto('refuseOrSignAndSubmit', async () => ({
+        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
+        job: completedJob({ status: 'proving', phase: 'proving' }),
+      }));
+      spyProto('getJob', async () => ({
+        job: completedJob({ status: 'proving', phase: 'proving' }),
+        retryAfterMs: 10,
+      }));
+
+      const pending = api.createCoin({
+        account_address: ADDR,
+        name: 'TimeoutDeadlineAbort',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      });
+      const assertion = expect(pending).rejects.toMatchObject({
+        name: 'JobFailedError',
+        status: 'timeout',
+        serverError: 'timed out in proving after 180000ms',
+        message: 'timed out in proving after 180000ms',
+      });
+      // enter sleep (POLL_FLOOR_MS is 1500); advance less than floor
+      await vi.advanceTimersByTimeAsync(100);
+      handshakeController.abort();
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('maps getJob abort to JobFailedError and rethrows non-abort getJob errors', async () => {
+    vi.useFakeTimers();
+    try {
+      const handshakeController = new AbortController();
+      vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => handshakeController.signal);
+      spyProto('openOwnershipPullSession', async () => {
+        throw new V1ApiError(404, 'not_found', '');
+      });
+      spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+      spyProto('waitForAwaitingSignature', async () => awaitingJob());
+      spyProto('refuseOrSignAndSubmit', async () => ({
+        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
+        job: completedJob({ status: 'proving', phase: 'proving' }),
+      }));
+
+      let getJobCalls = 0;
+      spyProto('getJob', async () => {
+        getJobCalls += 1;
+        if (getJobCalls === 1) {
+          handshakeController.abort();
+          throw new Error('fetch aborted');
+        }
+        throw new Error('unexpected getJob call');
+      });
+
+      await expect(
+        api.createCoin({
+          account_address: ADDR,
+          name: 'GetJobAbort',
+          decimals: 0,
+          amount: '1',
+          mnemonic: MNEMONIC,
+          nkCommit: NK,
+        }),
+      ).rejects.toMatchObject({
+        name: 'JobFailedError',
+        status: 'timeout',
+        serverError: 'timed out in undefined after 180000ms',
+        message: 'timed out in undefined after 180000ms',
+      });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('rethrows getJob errors when the deadline signal is not aborted', async () => {
+    vi.useFakeTimers();
+    try {
+      spyProto('openOwnershipPullSession', async () => {
+        throw new V1ApiError(404, 'not_found', '');
+      });
+      spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+      spyProto('waitForAwaitingSignature', async () => awaitingJob());
+      spyProto('refuseOrSignAndSubmit', async () => ({
+        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
+        job: completedJob({ status: 'proving', phase: 'proving' }),
+      }));
+      spyProto('getJob', async () => {
+        throw new Error('node unavailable');
+      });
+
+      await expect(
+        api.createCoin({
+          account_address: ADDR,
+          name: 'GetJobRethrow',
+          decimals: 0,
+          amount: '1',
+          mnemonic: MNEMONIC,
+          nkCommit: NK,
+        }),
+      ).rejects.toThrow('node unavailable');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  // SDK-own getJob timeout: AbortError with signal.aborted still false.
+  it('maps getJob AbortError without signal abort to JobFailedError timeout', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('refuseOrSignAndSubmit', async () => ({
+      signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
+      job: completedJob({ status: 'proving', phase: 'proving' }),
+    }));
+    spyProto('getJob', async () => {
+      throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'GetJobAbortError',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      status: 'timeout',
+      serverError: 'timed out in undefined after 180000ms',
+    });
+  });
+
+  // waitForJob getJob-catch muss dieselbe JobFailedError-Instanz rethrowen, nicht als timeout wrappen.
+  it('passes through JobFailedError from getJob via waitForJob', async () => {
+    const jobErr = new JobFailedError('j', 'failed', 'prove failed');
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('refuseOrSignAndSubmit', async () => ({
+      signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
+      job: completedJob({ status: 'proving', phase: 'proving' }),
+    }));
+    spyProto('getJob', async () => {
+      throw jobErr;
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'WaitForJobGetJobFailed',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+      }),
+    ).rejects.toBe(jobErr);
+    expect(jobErr.status).toBe('failed');
+    expect(jobErr.serverError).toBe('prove failed');
+    expect(jobErr.jobId).toBe('j');
+  });
 });
 
 describe('api.send failure mapping (no delivery crypto)', () => {
@@ -852,7 +1656,7 @@ describe('api.send failure mapping (no delivery crypto)', () => {
       api.send({
         account_address: ADDR,
         recipient: ADDR,
-        amount: 1,
+        amount: '1',
         asset_id: 'aa'.repeat(32),
         mnemonic: MNEMONIC,
         nkCommit: NK,
@@ -861,22 +1665,94 @@ describe('api.send failure mapping (no delivery crypto)', () => {
       }),
     ).rejects.toMatchObject({ status: 500 });
   });
+
+  it('rejects a non-canonical amount with leading zeros before any network hop', async () => {
+    const pull = spyProto('openOwnershipPullSession', async () => {
+      throw new Error('openOwnershipPullSession must not run for an invalid amount');
+    });
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run for an invalid amount');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.send({
+        account_address: ADDR,
+        recipient: ADDR,
+        amount: '0001',
+        asset_id: 'aa'.repeat(32),
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        delivery: invoiceDelivery,
+        input_coins: ['ff'.repeat(32)],
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown).toMatchObject({
+      name: 'Error',
+      message: 'send: amount must be a non-empty unsigned decimal digit string, got "0001"',
+    });
+    expect(pull).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-string amount before any network hop', async () => {
+    const pull = spyProto('openOwnershipPullSession', async () => {
+      throw new Error('openOwnershipPullSession must not run for a non-string amount');
+    });
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run for a non-string amount');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.send({
+        account_address: ADDR,
+        recipient: ADDR,
+        amount: 1 as unknown as string,
+        asset_id: 'aa'.repeat(32),
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        delivery: invoiceDelivery,
+        input_coins: ['ff'.repeat(32)],
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(Error);
+    expect(thrown).toMatchObject({
+      name: 'Error',
+      message: 'send: amount must be a non-empty unsigned decimal digit string, got 1',
+    });
+    expect(pull).not.toHaveBeenCalled();
+    expect(submit).not.toHaveBeenCalled();
+  });
 });
 
-describe('api.info features default', () => {
-  it('maps missing features to empty capability set (multi_asset still true)', async () => {
+describe('api.info features fail-closed', () => {
+  it('rejects missing features fail-closed', async () => {
     const malformedInfo: Partial<V1Info> = {
       network: 'regtest',
       protocol_version: 'v1',
     };
     // The unsafe cast deliberately simulates a malformed server response missing `features`.
     spyProto('info', async () => malformedInfo as unknown as V1Info);
-    const info = await api.info();
-    expect(info.capabilities).toEqual({
-      address_list: false,
-      username_claim: false,
-      lnurl: false,
-      multi_asset: true,
+    await expect(api.info()).rejects.toThrow(/features missing/);
+  });
+
+  // Empty human message after the V1ApiError prefix → mapV1Error falls back to machineCode.
+  it('maps V1ApiError with empty human message to machineCode as serverError', async () => {
+    spyProto('info', async () => {
+      throw new V1ApiError(502, 'bad_gateway', '');
+    });
+    await expect(api.info()).rejects.toMatchObject({
+      status: 502,
+      serverError: 'bad_gateway',
+      code: 'bad_gateway',
     });
   });
 });

@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react';
 import { useParams } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Plus, Receipt, ExternalLink } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
@@ -18,6 +19,7 @@ const EXPLORER_URL = (process.env.NEXT_PUBLIC_EXPLORER_URL ?? '').replace(/\/$/,
 
 export default function TransactionDetailPage() {
   const params = useParams<{ id: string }>();
+  const tAsset = useTranslations('asset');
   const account = useWalletStore((s) => s.account);
   const usernameDomain = useNetworkStore((s) => s.usernameDomain);
 
@@ -41,7 +43,7 @@ export default function TransactionDetailPage() {
           className="inline-flex items-center gap-1.5 text-[13px] text-ink3 transition-colors hover:text-ink"
         >
           <ArrowLeft size={14} strokeWidth={2} />
-          Back
+          {tAsset('backToWallet')}
         </Link>
         <span className="text-[11px] font-medium tracking-wider text-ink3 uppercase">
           Transaction
@@ -52,9 +54,10 @@ export default function TransactionDetailPage() {
         <TxDetailLoading />
       ) : detail ? (
         <TxDetailBody detail={detail} usernameDomain={usernameDomain} />
+      ) : error === 'wallet_unavailable' ? (
+        <TxDetailWalletUnavailable />
       ) : (
-        // No detail + not loading ⇒ the hook set `error` to one of the two
-        // terminal kinds (404 / bad inputs → not_found, else → error).
+        // No detail + not loading ⇒ not_found (404 / empty id) or error.
         <TxDetailMissing kind={error === 'not_found' ? 'not_found' : 'error'} />
       )}
     </AppShell>
@@ -73,7 +76,31 @@ function TxDetailLoading() {
   );
 }
 
+function TxDetailWalletUnavailable() {
+  const t = useTranslations('wallet');
+  const tAsset = useTranslations('asset');
+  return (
+    <div
+      data-testid="tx-detail-wallet-unavailable"
+      className="flex min-h-[60vh] flex-col items-center justify-center text-center"
+    >
+      <div className="flex h-14 w-14 items-center justify-center rounded-full border border-line bg-surface text-ink4">
+        <Receipt size={22} strokeWidth={1.75} />
+      </div>
+      <p className="mt-4 text-[15px] font-semibold text-ink">{t('txUnlockToView')}</p>
+      <Link
+        href="/"
+        className="mt-6 rounded-md bg-bitcoin px-6 py-2.5 text-[13px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover"
+      >
+        {tAsset('backToWallet')}
+      </Link>
+    </div>
+  );
+}
+
 function TxDetailMissing({ kind }: { kind: 'not_found' | 'error' }) {
+  const t = useTranslations('wallet');
+  const tAsset = useTranslations('asset');
   return (
     <div
       data-testid="tx-detail-missing"
@@ -83,48 +110,94 @@ function TxDetailMissing({ kind }: { kind: 'not_found' | 'error' }) {
         <Receipt size={22} strokeWidth={1.75} />
       </div>
       <p className="mt-4 text-[15px] font-semibold text-ink">
-        {kind === 'not_found' ? 'Transaction not found' : 'Could not load transaction'}
+        {kind === 'not_found' ? t('txNotFound') : t('txLoadError')}
       </p>
       <p className="mt-1 max-w-[280px] text-[13px] leading-relaxed text-ink3">
-        {kind === 'not_found'
-          ? 'It may belong to a different wallet, or it no longer exists on this node.'
-          : 'The node could not be reached. Go back and open it again.'}
+        {kind === 'not_found' ? t('txNotFoundBody') : t('txLoadErrorBody')}
       </p>
       <Link
         href="/"
         className="mt-6 rounded-md bg-bitcoin px-6 py-2.5 text-[13px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover"
       >
-        Back to wallet
+        {tAsset('backToWallet')}
       </Link>
     </div>
   );
 }
 
-const STATUS_STYLES: Record<string, string> = {
+const KNOWN_STATUSES = new Set(['confirmed', 'completed', 'pending', 'failed', 'cancelled']);
+
+type TxStatusKey = 'confirmed' | 'completed' | 'pending' | 'failed' | 'cancelled' | 'unknown';
+
+const STATUS_STYLES: Record<TxStatusKey, string> = {
   confirmed: 'border-bitcoin/40 bg-bitcoin/10 text-bitcoin',
   completed: 'border-bitcoin/40 bg-bitcoin/10 text-bitcoin',
   pending: 'border-line2 bg-surface text-ink2',
   failed: 'border-bad/40 bg-bad/10 text-bad',
+  cancelled: 'border-line2 bg-surface text-ink3',
+  unknown: 'border-line2 bg-surface text-ink3',
+};
+
+const STATUS_LABEL_KEYS: Record<
+  TxStatusKey,
+  | 'statusConfirmed'
+  | 'statusCompleted'
+  | 'statusPending'
+  | 'statusFailed'
+  | 'statusCancelled'
+  | 'statusUnknown'
+> = {
+  confirmed: 'statusConfirmed',
+  completed: 'statusCompleted',
+  pending: 'statusPending',
+  failed: 'statusFailed',
+  cancelled: 'statusCancelled',
+  unknown: 'statusUnknown',
 };
 
 function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDomain: string }) {
+  const t = useTranslations('wallet');
   const kind = detail.kind;
-  const positive = kind !== 'send';
-  const label = kind === 'mint' ? 'Faucet' : kind === 'send' ? 'Sent' : 'Received';
-  const HeroIcon = kind === 'send' ? ArrowUpRight : kind === 'mint' ? Plus : ArrowDownLeft;
+  let positive: boolean;
+  let label: string;
+  let HeroIcon: typeof ArrowUpRight;
+  if (kind === 'mint') {
+    positive = true;
+    label = t('txMint');
+    HeroIcon = Plus;
+  } else if (kind === 'send') {
+    positive = false;
+    label = t('txSent');
+    HeroIcon = ArrowUpRight;
+  } else if (kind === 'receive') {
+    positive = true;
+    label = t('txReceived');
+    HeroIcon = ArrowDownLeft;
+  } else {
+    positive = false;
+    label = t('txUnknown');
+    HeroIcon = Receipt;
+  }
 
   const explorerHref = EXPLORER_URL && detail.txid ? `${EXPLORER_URL}/tx/${detail.txid}` : null;
   const accountAddr = detail.address ?? '';
   const zkAddress = accountAddr ? toZkAddress(accountAddr, usernameDomain) : '';
   const amount = typeof detail.amount === 'number' ? detail.amount : undefined;
-  const status = detail.status ?? 'pending';
-  const statusClass = STATUS_STYLES[status] ?? STATUS_STYLES.pending;
+  const rawStatus = detail.status;
+  const status: TxStatusKey =
+    typeof rawStatus === 'string' && rawStatus.length > 0 && KNOWN_STATUSES.has(rawStatus)
+      ? (rawStatus as TxStatusKey)
+      : 'unknown';
+  const statusClass = STATUS_STYLES[status];
+  const statusLabel = t(STATUS_LABEL_KEYS[status]);
   const confirmationLabel =
     status === 'confirmed' || status === 'completed'
-      ? 'Confirmed'
+      ? t('txConfirmed')
       : status === 'failed' || status === 'cancelled'
-        ? 'Not confirmed'
-        : 'Awaiting confirmation';
+        ? t('txNotConfirmed')
+        : status === 'pending'
+          ? t('txAwaiting')
+          : t('txStatusUnknown');
 
   return (
     <section data-testid="tx-detail-body" className="mt-8 space-y-8">
@@ -152,7 +225,7 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
           data-testid="tx-detail-status"
           className={`mt-3 rounded-full border px-2.5 py-1 text-[11px] font-semibold capitalize ${statusClass}`}
         >
-          {status}
+          {statusLabel}
         </span>
       </div>
 
@@ -213,7 +286,7 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
         <Row label="Status" testid="tx-detail-confirmation">
           <span
             className={`text-[12px] ${
-              confirmationLabel === 'Confirmed' ? 'font-medium text-bitcoin' : 'text-ink3'
+              confirmationLabel === t('txConfirmed') ? 'font-medium text-bitcoin' : 'text-ink3'
             }`}
           >
             {confirmationLabel}

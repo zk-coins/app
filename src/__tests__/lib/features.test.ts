@@ -38,7 +38,7 @@ describe('useFeatures (build-time + runtime merged)', () => {
     });
   });
 
-  it('exposes the build-time flags plus the runtime USERNAME_CLAIM + MULTI_ASSET', () => {
+  it('exposes the build-time flags plus the runtime USERNAME_CLAIM + MULTI_ASSET + loaded', () => {
     const { result } = renderHook(() => useFeatures());
     expect(Object.keys(result.current).sort()).toEqual([
       'ADDRESS_ROTATION',
@@ -49,7 +49,17 @@ describe('useFeatures (build-time + runtime merged)', () => {
       'PASSKEY',
       'TOR_ROUTING',
       'USERNAME_CLAIM',
+      'loaded',
     ]);
+  });
+
+  it('loaded mirrors useCapabilities.loaded', () => {
+    const { result, rerender } = renderHook(() => useFeatures());
+    expect(result.current.loaded).toBe(false);
+
+    useCapabilities.setState({ loaded: true });
+    rerender();
+    expect(result.current.loaded).toBe(true);
   });
 
   it('MULTI_ASSET reflects the runtime capability from /v1/info', () => {
@@ -86,7 +96,7 @@ describe('useFeatures (build-time + runtime merged)', () => {
     expect(result.current.USERNAME_CLAIM).toBe(true);
   });
 
-  it('returns a stable reference when capability values are unchanged', () => {
+  it('returns a stable reference when capability values and loaded are unchanged', () => {
     const { result, rerender } = renderHook(() => useFeatures());
     const first = result.current;
     rerender();

@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zkcoins-v1';
+const CACHE_NAME = 'zkcoins-v2';
 const PRECACHE = ['/', '/manifest.json'];
 
 self.addEventListener('install', (event) => {

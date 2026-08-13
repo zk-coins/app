@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useCapabilities } from '@/stores/capabilities';
 import { api } from '@/lib/api/client';
+import { useNetworkStore } from '@/stores/network';
 
 const FAIL_CLOSED = {
   address_list: false,
@@ -46,9 +47,7 @@ describe('useCapabilities.fetch — server response handling', () => {
     expect(useCapabilities.getState().loaded).toBe(true);
   });
 
-  it('derives capabilities from v1 features when the capabilities field is omitted', async () => {
-    // Closed `/v1/info` advertises `features`; the app maps those into the
-    // legacy capability booleans (no silent all-off when features are present).
+  it('fail-closes when the capabilities field is omitted', async () => {
     vi.spyOn(api, 'info').mockResolvedValue({
       network: 'testnet',
       protocol_version: 'v1',
@@ -57,13 +56,9 @@ describe('useCapabilities.fetch — server response handling', () => {
 
     await useCapabilities.getState().fetch();
 
-    expect(useCapabilities.getState().capabilities).toEqual({
-      address_list: false,
-      username_claim: true,
-      lnurl: false,
-      multi_asset: true,
-    });
+    expect(useCapabilities.getState().capabilities).toEqual(FAIL_CLOSED);
     expect(useCapabilities.getState().loaded).toBe(true);
+    expect(useNetworkStore.getState().infoError).toMatch(/capabilities missing/);
   });
 
   it('falls back to fail-closed when /v1/info is unreachable', async () => {
@@ -95,7 +90,7 @@ describe('useCapabilities.fetch — server response handling', () => {
     expect(useCapabilities.getState().loaded).toBe(true);
   });
 
-  it('derives from empty features when both capabilities and features are absent', async () => {
+  it('fail-closes when both capabilities and features are absent', async () => {
     vi.spyOn(api, 'info').mockResolvedValue({
       network: 'regtest',
       protocol_version: 'v1',
@@ -103,12 +98,45 @@ describe('useCapabilities.fetch — server response handling', () => {
 
     await useCapabilities.getState().fetch();
 
-    // capabilitiesFromV1Features([]) → multi_asset true, rest false
-    expect(useCapabilities.getState().capabilities).toEqual({
-      address_list: false,
-      username_claim: false,
-      lnurl: false,
-      multi_asset: true,
+    expect(useCapabilities.getState().capabilities).toEqual(FAIL_CLOSED);
+    expect(useCapabilities.getState().loaded).toBe(true);
+    expect(useNetworkStore.getState().infoError).toMatch(/capabilities missing/);
+  });
+
+  it('coalesces concurrent fetch() into a single api.info call', async () => {
+    let resolveInfo!: (v: {
+      network: string;
+      protocol_version: string;
+      features: string[];
+      capabilities: typeof ALL_ON;
+    }) => void;
+    const infoPromise = new Promise<{
+      network: string;
+      protocol_version: string;
+      features: string[];
+      capabilities: typeof ALL_ON;
+    }>((r) => {
+      resolveInfo = r;
     });
+    const infoSpy = vi
+      .spyOn(api, 'info')
+      .mockReturnValue(infoPromise as ReturnType<typeof api.info>);
+
+    const p1 = useCapabilities.getState().fetch();
+    const p2 = useCapabilities.getState().fetch();
+    expect(p1).toBe(p2);
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+
+    resolveInfo({
+      network: 'testnet',
+      protocol_version: 'v1',
+      features: ['wallet'],
+      capabilities: ALL_ON,
+    });
+    await Promise.all([p1, p2]);
+
+    expect(useCapabilities.getState().capabilities).toEqual(ALL_ON);
+    expect(useCapabilities.getState().loaded).toBe(true);
+    expect(infoSpy).toHaveBeenCalledTimes(1);
   });
 });

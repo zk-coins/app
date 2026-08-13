@@ -78,14 +78,26 @@ export const useNetworkStore = create<NetworkState>(() => ({
     if (!isV1Network(info.network)) {
       useNetworkStore.setState({
         network: '',
+        features: [],
+        usernameDomain: '',
         infoError: `unsupported network tag from node: ${JSON.stringify(info.network)}`,
+        infoLoaded: true,
+      });
+      return;
+    }
+    if (!Array.isArray(info.features)) {
+      useNetworkStore.setState({
+        network: '',
+        features: [],
+        usernameDomain: '',
+        infoError: 'GET /v1/info: features missing or not an array',
         infoLoaded: true,
       });
       return;
     }
     useNetworkStore.setState({
       network: info.network,
-      features: Array.isArray(info.features) ? [...info.features] : [],
+      features: [...info.features],
       usernameDomain: typeof info.username_domain === 'string' ? info.username_domain : '',
       infoError: null,
       infoLoaded: true,
@@ -94,6 +106,8 @@ export const useNetworkStore = create<NetworkState>(() => ({
   applyInfoFailure: (message) => {
     useNetworkStore.setState({
       network: '',
+      features: [],
+      usernameDomain: '',
       infoError: message,
       infoLoaded: true,
     });

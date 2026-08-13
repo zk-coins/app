@@ -23,8 +23,8 @@ import {
   type V1PullResult,
 } from '@zkcoins/sdk';
 
-import { spendKeyAt, seedFromAccountMnemonic } from '@/lib/crypto/account-keys';
 import { isV1Network, useNetworkStore } from '@/stores/network';
+import { spendKeyAt } from '@/lib/crypto/account-keys';
 
 // ---------------------------------------------------------------------------
 // Error surface — keep names the rest of the app already imports.
@@ -118,7 +118,7 @@ export interface OwnerBalanceResponse {
  */
 export interface HistoryItem {
   id: number | string;
-  /** Transition / record kind (`mint` | `send` | `receive` | record_type, …). */
+  /** Adapter emits only `mint` or `unknown` (no owner-relative send/receive). */
   kind: string;
   amount?: number;
   asset_id?: string;
@@ -139,8 +139,16 @@ export interface HistoryItem {
   commit_output_value?: number;
 }
 
+/** Kinds emitted by the pull-history adapter (`getHistory`). */
+export type PullHistoryKind = 'mint' | 'unknown';
+
+/** History row as returned by {@link api.getHistory}. */
+export interface PullHistoryItem extends Omit<HistoryItem, 'kind'> {
+  kind: PullHistoryKind;
+}
+
 export interface HistoryResponse {
-  items: HistoryItem[];
+  items: PullHistoryItem[];
   total: number;
   limit: number;
   offset: number;
@@ -202,7 +210,9 @@ export interface SendParams {
   account_address: string;
   /** Recipient Bech32m address (resolved from a name upstream). */
   recipient: string;
-  amount: number;
+  /** Decimal digit string in atomic units (arbitrary precision). Never converted through
+   *  Number()/String(number). */
+  amount: string;
   asset_id: string;
   mnemonic: string;
   /** Required for every non-self output (§7.5 delivery presence rule). */
@@ -255,7 +265,10 @@ export function newIdempotencyKey(): string {
 
 function mapV1Error(err: unknown): never {
   if (err instanceof V1ApiError) {
-    throw new ApiError(err.status, err.machineCode, err.rawBody, err.machineCode);
+    const prefix = `zkCoins v1 API error ${err.status} ${err.machineCode}: `;
+    const human = err.message.slice(prefix.length);
+    const serverError = human.length > 0 ? human : err.machineCode;
+    throw new ApiError(err.status, serverError, err.rawBody, err.machineCode);
   }
   if (err instanceof ApiError || err instanceof JobFailedError) {
     throw err;
@@ -287,27 +300,83 @@ const TERMINAL: ReadonlySet<V1JobStatusValue> = new Set(['completed', 'failed', 
 
 const POLL_FLOOR_MS = 1_500;
 const WAIT_TIMEOUT_MS = 180_000;
+const MAX_POLL_SLEEP_MS = 600_000;
 
-function delay(ms: number): Promise<void> {
-  /* c8 ignore next — host timer */
-  return new Promise((resolve) => setTimeout(resolve, ms));
+/** Sleep that rejects on abort and always clears its timer. */
+function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    function cleanup() {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      signal.removeEventListener('abort', onAbort);
+    }
+    function onAbort() {
+      cleanup();
+      reject(signal.reason instanceof Error ? signal.reason : new Error('abortableSleep: aborted'));
+    }
+
+    if (signal.aborted) {
+      onAbort();
+      return;
+    }
+
+    timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 /**
  * Poll a job until it hits `stopAt` or a terminal status. Honours
- * `Retry-After`. Throws {@link JobFailedError} on failed/cancelled/timeout.
+ * `Retry-After`, caps sleep to the remaining deadline, and aborts both
+ * `getJob` and sleep via the required shared deadline signal. Throws
+ * {@link JobFailedError} on failed/cancelled/timeout.
  */
 async function waitForJob(
   client: ZkCoinsV1Client,
   jobId: string,
   stopAt: ReadonlySet<V1JobStatusValue>,
-  opts: { onPhase?: (status: V1Job) => void } = {},
+  opts: { onPhase?: (status: V1Job) => void; signal: AbortSignal; deadline: number },
 ): Promise<V1Job> {
-  const deadline = Date.now() + WAIT_TIMEOUT_MS;
+  // opts.deadline is the shared handshake start; opts.signal is the abort
+  // authority (same AbortSignal.timeout from runTransitionHandshake).
+  const deadlineSignal = opts.signal;
   let lastPhase: string | undefined;
+  let lastStatus: V1JobStatusValue | undefined;
 
   for (;;) {
-    const { job, retryAfterMs } = await client.getJob(jobId);
+    const remaining = Math.max(0, opts.deadline - Date.now());
+    if (remaining === 0) {
+      throw new JobFailedError(
+        jobId,
+        'timeout',
+        `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+      );
+    }
+
+    let job: V1Job;
+    let retryAfterMs: number | null;
+    try {
+      ({ job, retryAfterMs } = await client.getJob(jobId, deadlineSignal));
+    } catch (err) {
+      if (err instanceof JobFailedError) {
+        throw err;
+      }
+      if (isAbortLike(err, deadlineSignal)) {
+        throw new JobFailedError(
+          jobId,
+          'timeout',
+          `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+        );
+      }
+      throw err;
+    }
+    lastStatus = job.status;
 
     if (opts.onPhase && job.phase !== lastPhase) {
       lastPhase = job.phase;
@@ -320,23 +389,68 @@ async function waitForJob(
     if (stopAt.has(job.status)) {
       return job;
     }
-    /* c8 ignore next 5 — deadline only on a stuck node */
-    if (Date.now() >= deadline) {
-      throw new JobFailedError(
-        jobId,
-        'failed',
-        `timed out in ${job.status} after ${WAIT_TIMEOUT_MS}ms`,
-      );
-    }
     if (retryAfterMs === null) {
       throw new JobFailedError(
         jobId,
-        'failed',
+        'protocol',
         `non-terminal status ${job.status} without Retry-After`,
       );
     }
-    await delay(Math.max(POLL_FLOOR_MS, retryAfterMs));
+
+    const remainingForSleep = Math.max(0, opts.deadline - Date.now());
+    if (remainingForSleep === 0) {
+      throw new JobFailedError(
+        jobId,
+        'timeout',
+        `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+      );
+    }
+    const sleepMs = Math.min(
+      Math.max(POLL_FLOOR_MS, retryAfterMs),
+      MAX_POLL_SLEEP_MS,
+      remainingForSleep,
+    );
+    try {
+      await abortableSleep(sleepMs, deadlineSignal);
+    } catch (err) {
+      /* v8 ignore next -- abortableSleep rejects only when deadlineSignal aborts */
+      if (deadlineSignal.aborted) {
+        throw new JobFailedError(
+          jobId,
+          'timeout',
+          `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+        );
+      }
+      /* v8 ignore next -- abortableSleep rejects only via signal abort */
+      throw err;
+    }
   }
+}
+
+/** True when the handshake signal aborted or the SDK threw AbortError/TimeoutError. */
+function isAbortLike(err: unknown, signal: AbortSignal): boolean {
+  return (
+    signal.aborted === true ||
+    (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError'))
+  );
+}
+
+/**
+ * Map handshake abort/deadline to JobFailedError(status: 'timeout').
+ * Existing JobFailedError instances pass through unchanged.
+ */
+function mapHandshakeAbort(err: unknown, jobId: string, signal: AbortSignal): never {
+  if (err instanceof JobFailedError) {
+    throw err;
+  }
+  if (isAbortLike(err, signal)) {
+    throw new JobFailedError(
+      jobId,
+      'timeout',
+      `timed out waiting for awaiting_signature after ${WAIT_TIMEOUT_MS}ms`,
+    );
+  }
+  throw err;
 }
 
 /**
@@ -358,63 +472,48 @@ async function runTransitionHandshake(
     pinOnFirstUse?: boolean;
   } = {},
 ): Promise<V1Job> {
+  const deadline = Date.now() + WAIT_TIMEOUT_MS;
   const signal = AbortSignal.timeout(WAIT_TIMEOUT_MS);
-  const abortableSleep = (ms: number): Promise<void> =>
-    new Promise<void>((resolve, reject) => {
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      function cleanup() {
-        if (timer !== undefined) {
-          clearTimeout(timer);
-          timer = undefined;
-        }
-        signal.removeEventListener('abort', onAbort);
-      }
-      function onAbort() {
-        cleanup();
-        reject(
-          signal.reason instanceof Error
-            ? signal.reason
-            : new Error('runTransitionHandshake: wait aborted'),
-        );
-      }
+  const sleep = (ms: number): Promise<void> => {
+    const remainingToDeadline = Math.max(0, deadline - Date.now());
+    const capped = Math.min(Math.max(POLL_FLOOR_MS, ms), MAX_POLL_SLEEP_MS, remainingToDeadline);
+    return abortableSleep(capped, signal);
+  };
 
-      if (signal.aborted) {
-        onAbort();
-        return;
-      }
-
-      timer = setTimeout(
-        () => {
-          cleanup();
-          resolve();
-        },
-        Math.max(POLL_FLOOR_MS, ms),
-      );
-      signal.addEventListener('abort', onAbort, { once: true });
+  let jobId = '';
+  try {
+    const accepted = await client.submitTransition(body, {
+      idempotencyKey: newIdempotencyKey(),
+      signal,
+      ...(opts.confirmPinMismatch !== undefined
+        ? { confirmPinMismatch: opts.confirmPinMismatch }
+        : {}),
+      ...(opts.pinOnFirstUse !== undefined ? { pinOnFirstUse: opts.pinOnFirstUse } : {}),
     });
-
-  const accepted = await client.submitTransition(body, {
-    idempotencyKey: newIdempotencyKey(),
-    ...(opts.confirmPinMismatch !== undefined
-      ? { confirmPinMismatch: opts.confirmPinMismatch }
-      : {}),
-    ...(opts.pinOnFirstUse !== undefined ? { pinOnFirstUse: opts.pinOnFirstUse } : {}),
-  });
-  const jobId = accepted.job_id;
+    jobId = accepted.job_id;
+  } catch (err) {
+    mapHandshakeAbort(err, jobId, signal);
+  }
 
   let awaiting: V1Job;
   try {
     awaiting = await client.waitForAwaitingSignature(jobId, {
-      sleep: abortableSleep,
+      sleep,
       signal,
     });
   } catch (err) {
-    if (signal.aborted) {
+    if (err instanceof JobFailedError) {
+      throw err;
+    }
+    if (isAbortLike(err, signal)) {
       throw new JobFailedError(
         jobId,
-        'failed',
+        'timeout',
         `timed out waiting for awaiting_signature after ${WAIT_TIMEOUT_MS}ms`,
       );
+    }
+    if (err instanceof Error && err.message.includes('without Retry-After')) {
+      throw new JobFailedError(jobId, 'protocol', err.message);
     }
     throw err;
   }
@@ -428,26 +527,50 @@ async function runTransitionHandshake(
         awaiting.error?.message ?? awaiting.error?.error,
       );
     }
-    throw new JobFailedError(jobId, 'failed', `job ended in ${awaiting.status} before signature`);
+    throw new JobFailedError(jobId, 'protocol', `job ended in ${awaiting.status} before signature`);
   }
   if (!awaiting.awaiting_signature) {
     throw new JobFailedError(
       jobId,
-      'failed',
+      'protocol',
       'awaiting_signature job did not carry awaiting_signature payload',
     );
   }
 
-  // Ownership pull session → authoritative account head for key-binding check.
-  const seed = seedFromAccountMnemonic(signing.mnemonic);
-  const sk0 = spendKeyAt(signing.mnemonic, 0, signing.accountIndex);
-  const nkCommitBytes = hexToBytesExact(signing.nkCommitHex, 32, 'nkCommit');
-  const pull = await client.openOwnershipPullSession({
-    subject: signing.subject,
-    sk0: sk0.secretKey,
-    nkCommit: nkCommitBytes,
-  });
-  const accountState = await client.getAccountState(pull.session);
+  // Authoritative account head for key-binding: always re-hydrate immediately
+  // before sign. Typed account-404 + job counter 0 → Genesis from job field;
+  // any other error aborts (including 404 with non-genesis job counter).
+  let accountState: { current_pubkey: string; send_counter: number };
+  try {
+    const sk0 = spendKeyAt(signing.mnemonic, 0, signing.accountIndex);
+    const nkCommitBytes = hexToBytesExact(signing.nkCommitHex, 32, 'nkCommit');
+    const pull = await client.openOwnershipPullSession(
+      {
+        subject: signing.subject,
+        sk0: sk0.secretKey,
+        nkCommit: nkCommitBytes,
+      },
+      signal,
+    );
+    accountState = await client.getAccountState(pull.session, signal);
+  } catch (err) {
+    if (!isAccountNotFoundError(err)) {
+      mapHandshakeAbort(err, jobId, signal);
+    }
+    // Counter from the node job field — not a local invention.
+    const jobCounter = awaiting.awaiting_signature.send_counter;
+    if (jobCounter !== 0) {
+      throw new Error(
+        `account not found but job awaiting_signature.send_counter is ${jobCounter} (non-genesis); refusing to sign`,
+      );
+    }
+    accountState = {
+      send_counter: jobCounter,
+      current_pubkey: encodeHexLower(
+        spendKeyAt(signing.mnemonic, 0, signing.accountIndex).publicKey,
+      ),
+    };
+  }
 
   const sendCounter = awaiting.awaiting_signature.send_counter;
   const spend = spendKeyAt(signing.mnemonic, sendCounter, signing.accountIndex);
@@ -455,25 +578,35 @@ async function runTransitionHandshake(
   // npk_rand must equal the value supplied on submit — recovered from the body.
   const npkRand = hexToBytesExact(body.npk_rand, 32, 'npk_rand');
 
+  if (signal.aborted) {
+    throw new JobFailedError(
+      jobId,
+      'timeout',
+      `timed out waiting for awaiting_signature after ${WAIT_TIMEOUT_MS}ms`,
+    );
+  }
+
   const nodeNetwork = client.network;
-  await client.refuseOrSignAndSubmit({
-    jobId,
-    localPubkey: spend.publicKey,
-    secretKey: spend.secretKey,
-    accountState: {
-      current_pubkey: accountState.current_pubkey,
-      send_counter: accountState.send_counter,
-    },
-    awaiting: awaiting.awaiting_signature,
-    nextPubkey: next.publicKey,
-    npkRand,
-    nodeNetwork,
-  });
+  try {
+    await client.refuseOrSignAndSubmit({
+      jobId,
+      localPubkey: spend.publicKey,
+      secretKey: spend.secretKey,
+      accountState: {
+        current_pubkey: accountState.current_pubkey,
+        send_counter: accountState.send_counter,
+      },
+      awaiting: awaiting.awaiting_signature,
+      nextPubkey: next.publicKey,
+      npkRand,
+      nodeNetwork,
+      signal,
+    });
+  } catch (err) {
+    mapHandshakeAbort(err, jobId, signal);
+  }
 
-  // Silence unused seed warning in case tree-shaking audits care.
-  void seed;
-
-  return waitForJob(client, jobId, TERMINAL, opts);
+  return waitForJob(client, jobId, TERMINAL, { ...opts, signal, deadline });
 }
 
 function hexToBytesExact(hex: string, len: number, label: string): Uint8Array {
@@ -520,9 +653,12 @@ export const api = {
     const client = new ZkCoinsV1Client({ apiUrl: apiUrl(), network: 'regtest' });
     try {
       const info = await client.info();
+      if (!Array.isArray(info.features)) {
+        throw new Error('GET /v1/info: features missing or not an array');
+      }
       return {
         ...info,
-        capabilities: capabilitiesFromV1Features(info.features ?? []),
+        capabilities: capabilitiesFromV1Features(info.features),
       };
     } catch (err) {
       mapV1Error(err);
@@ -557,6 +693,11 @@ export const api = {
         'send not available yet — input coin selection requires AccountState coin inventory decode',
       );
     }
+    if (typeof params.amount !== 'string' || !/^(0|[1-9][0-9]*)$/.test(params.amount)) {
+      throw new Error(
+        `send: amount must be a non-empty unsigned decimal digit string, got ${JSON.stringify(params.amount)}`,
+      );
+    }
     try {
       const client = v1Client();
       const accountIndex = params.accountIndex ?? 0;
@@ -575,12 +716,11 @@ export const api = {
       const sendCounter = head.send_counter;
       const next = spendKeyAt(params.mnemonic, sendCounter + 1, accountIndex);
 
-      const amountStr = String(params.amount);
       const foreignOutput = placeDeliveryCredential(
         {
           recipient: params.recipient,
           asset_id: params.asset_id,
-          amount: amountStr,
+          amount: params.amount,
         },
         params.delivery,
         {
@@ -645,7 +785,7 @@ export const api = {
     opts: { onPhase?: (status: V1Job) => void } = {},
   ): Promise<V1Job> => {
     try {
-      if (!/^(0|[1-9][0-9]*)$/.test(params.amount)) {
+      if (typeof params.amount !== 'string' || !/^(0|[1-9][0-9]*)$/.test(params.amount)) {
         throw new Error(
           `createCoin: amount must be a non-empty unsigned decimal digit string, got ${JSON.stringify(params.amount)}`,
         );
@@ -656,7 +796,9 @@ export const api = {
       const accountIndex = params.accountIndex ?? 0;
       const npkRand = freshNpkRand();
 
-      let sendCounter = 0;
+      // Pre-pull only seeds next_pubkey / request sendCounter. The sign path
+      // re-hydrates the head itself immediately before refuse-or-sign.
+      let sendCounter: number;
       try {
         const sk0 = spendKeyAt(params.mnemonic, 0, accountIndex);
         const pull = await client.openOwnershipPullSession({
@@ -667,9 +809,8 @@ export const api = {
         const head = await client.getAccountState(pull.session);
         sendCounter = head.send_counter;
       } catch (err) {
-        // Only a typed "account does not exist" (404) means counter 0.
-        // Any other failure (network, auth, parse, 5xx) must abort before
-        // /v1/tx — never invent sendCounter=0 for a possibly live account.
+        // Node 404 = no account. sendCounter 0 only derives next_pubkey for the mint
+        // request (protocol genesis). Signing still requires awaiting.send_counter === 0.
         if (!isAccountNotFoundError(err)) {
           throw err;
         }
@@ -707,6 +848,7 @@ export const api = {
           decimals: params.decimals,
           issuance_version: 1,
           amount: amountStr,
+          creator_pubkey: encodeHexLower(spendKeyAt(params.mnemonic, 0, accountIndex).publicKey),
         },
       };
 
@@ -733,8 +875,8 @@ export const api = {
       mnemonic: string;
       nkCommit: string;
     },
-    amount: string = '10000',
-    opts: { onPhase?: (status: V1Job) => void } = {},
+    amount: string,
+    opts?: { onPhase?: (status: V1Job) => void },
   ): Promise<V1Job> =>
     api.createCoin(
       {
@@ -835,9 +977,9 @@ export const api = {
       const limit = opts.limit ?? 50;
       const offset = opts.offset ?? 0;
       const slice = pull.records.slice(offset, offset + limit);
-      const items: HistoryItem[] = slice.map((r) => ({
+      const items: PullHistoryItem[] = slice.map((r) => ({
         id: r.record_id,
-        kind: r.transition_kind ?? r.record_type,
+        kind: r.transition_kind === 'mint' ? 'mint' : 'unknown',
         created_at: r.occurred_at,
       }));
       return {
@@ -861,7 +1003,7 @@ export const api = {
     const history = await api.getHistory(params, { limit: Number.MAX_SAFE_INTEGER });
     const found = history.items.find((item) => String(item.id) === String(id));
     if (!found) {
-      throw new ApiError(404, 'not_found');
+      throw new ApiError(404, 'transaction not found', undefined, 'transaction_not_found');
     }
     return found;
   },

@@ -14,7 +14,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { PwaPrompt } from '@/components/PwaPrompt';
+import { PwaPrompt, detectMode } from '@/components/PwaPrompt';
 
 /**
  * Override the UA + matchMedia + standalone flags before the
@@ -128,6 +128,18 @@ describe('PwaPrompt — mode detection', () => {
 
     expect(screen.getByTestId('pwa-prompt-native')).toBeInTheDocument();
     expect(screen.getByTestId('pwa-install-btn')).toBeEnabled();
+  });
+
+  it('returns the SSR manual fallback when window is undefined', () => {
+    vi.stubGlobal('window', undefined);
+    try {
+      expect(detectMode()).toEqual({
+        kind: 'manual',
+        body: 'Install zkCoins for the smoothest experience.',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

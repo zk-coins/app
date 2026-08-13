@@ -119,7 +119,7 @@ describe('no legacy /api/ node paths', () => {
       api.send({
         account_address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
         recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
-        amount: 1,
+        amount: '1',
         asset_id: 'aa'.repeat(32),
         mnemonic:
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
@@ -146,7 +146,7 @@ describe('no legacy /api/ node paths', () => {
       api.send({
         account_address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
         recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
-        amount: 1,
+        amount: '1',
         asset_id: 'aa'.repeat(32),
         mnemonic:
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',

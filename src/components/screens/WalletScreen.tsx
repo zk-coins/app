@@ -18,7 +18,8 @@ import { Logo } from '../icons/Logo';
 import { PwaPrompt } from '../PwaPrompt';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { api, historyItemDate, type HistoryItem, type AssetBalance } from '@/lib/api/client';
+import { useCapabilities } from '@/stores/capabilities';
+import { historyItemDate, type HistoryItem, type AssetBalance } from '@/lib/api/client';
 import { formatAssetAmount, formatBtc, shortAssetId, toZkAddress } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
 import { useHistory } from '@/hooks/useHistory';
@@ -56,26 +57,15 @@ export function WalletScreen() {
     unavailableReason: portfolioUnavailableReason,
     stale: portfolioStale,
   } = usePortfolio(multiAsset ? account?.address : undefined);
-  const { usernameDomain, infoError, infoLoaded, applyInfo, applyInfoFailure } = useNetworkStore();
+  const { usernameDomain, infoError, infoLoaded } = useNetworkStore();
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  // Fetch network info once. Failure is a visible error — never a silent
-  // fallback to a guessed network (v1 migration / no-fallback contract).
+  // Capabilities/Info over useCapabilities.fetch (same path as Home).
+  const fetchCapabilities = useCapabilities((s) => s.fetch);
   useEffect(() => {
-    api
-      .info()
-      .then((info) => {
-        applyInfo({
-          network: info.network,
-          features: info.features,
-          username_domain: info.username_domain,
-        });
-      })
-      .catch((err: unknown) => {
-        applyInfoFailure(err instanceof Error ? err.message : 'failed to load /v1/info');
-      });
-  }, [applyInfo, applyInfoFailure]);
+    void fetchCapabilities();
+  }, [fetchCapabilities]);
 
   // Receive identity is the name when set — never a raw address as identity.
   const displayName = account
@@ -256,7 +246,7 @@ export function WalletScreen() {
                     {t('portfolioStaleBody')}
                   </p>
                 )}
-                <AssetList assets={assets} unknownName={t('txMint')} />
+                <AssetList assets={assets} unknownName={t('unknownName')} />
               </>
             ) : !account || portfolioEmpty ? (
               <EmptyPortfolio
@@ -297,7 +287,12 @@ export function WalletScreen() {
             <TransactionsList
               items={history.slice(0, 10)}
               multiAsset={multiAsset}
-              labels={{ sent: t('txSent'), received: t('txReceived'), mint: t('txMint') }}
+              labels={{
+                sent: t('txSent'),
+                received: t('txReceived'),
+                mint: t('txMint'),
+                unknown: t('txUnknown'),
+              }}
             />
           </>
         ) : historyBlocked ? (
@@ -474,17 +469,33 @@ function TransactionsList({
   multiAsset,
 }: {
   items: HistoryItem[];
-  labels: { sent: string; received: string; mint: string };
+  labels: { sent: string; received: string; mint: string; unknown: string };
   multiAsset: boolean;
 }) {
   return (
     <ul className="space-y-2">
       {items.map((tx) => {
         const kind = tx.kind;
-        const positive = kind !== 'send';
-        const label =
-          kind === 'mint' ? labels.mint : kind === 'send' ? labels.sent : labels.received;
-        const Icon = kind === 'send' ? ArrowUpRight : kind === 'mint' ? Plus : ArrowDownLeft;
+        let positive: boolean;
+        let label: string;
+        let Icon: typeof ArrowUpRight;
+        if (kind === 'mint') {
+          positive = true;
+          label = labels.mint;
+          Icon = Plus;
+        } else if (kind === 'send') {
+          positive = false;
+          label = labels.sent;
+          Icon = ArrowUpRight;
+        } else if (kind === 'receive') {
+          positive = true;
+          label = labels.received;
+          Icon = ArrowDownLeft;
+        } else {
+          positive = false;
+          label = labels.unknown;
+          Icon = ArrowUpRight;
+        }
         // Single-asset history renders BTC-denominated amounts; multi-asset
         // history renders raw atomic counts (per-asset decimals differ, so a
         // single unit suffix would be wrong). Amount is optional on thin

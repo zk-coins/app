@@ -68,6 +68,7 @@ export function useHistory(account: HistoryAccount | undefined): UseHistoryResul
     if (!address || !mnemonic || !nkCommit) return;
 
     let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     const tick = async () => {
       try {
         const res = await api.getHistory({ address, mnemonic, nkCommit });
@@ -96,12 +97,15 @@ export function useHistory(account: HistoryAccount | undefined): UseHistoryResul
         setLoaded(true);
       }
     };
-
-    tick();
-    const interval = setInterval(tick, HISTORY_POLL_MS);
+    const schedule = () => {
+      void tick().finally(() => {
+        if (!cancelled) timeout = setTimeout(schedule, HISTORY_POLL_MS);
+      });
+    };
+    void schedule();
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timeout !== undefined) clearTimeout(timeout);
     };
   }, [address, mnemonic, nkCommit]);
 

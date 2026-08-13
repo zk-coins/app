@@ -19,8 +19,10 @@
 import {
   V1ApiError,
   ZkCoinsV1Client,
+  deriveSpendKey,
   encodeHexLower,
   freshNpkRand,
+  seedFromMnemonicV1,
   type Network,
   type TransitionRequest,
   type V1Info,
@@ -28,12 +30,11 @@ import {
   type V1JobStatusValue,
 } from '@zkcoins/sdk';
 import { accountFromMnemonic } from './keys';
-import { deriveSpendKey, seedFromMnemonicV1 } from '@zkcoins/sdk';
 
 const API_URL = (process.env.E2E_API_URL ?? 'https://dev-api.zkcoins.app').replace(/\/+$/, '');
 
-/** Default supply minted into a fixture wallet's own asset. */
-const MINT_AMOUNT = 100_000;
+/** Default supply minted into a fixture wallet's own asset (wire digit string). */
+const MINT_AMOUNT = '100000';
 /** Decimals for the fixture asset (0 = whole units). */
 const FIXTURE_DECIMALS = 0;
 
@@ -41,8 +42,30 @@ const POLL_FLOOR_MS = 2_000;
 const WAIT_TIMEOUT_MS = 240_000;
 const TERMINAL: ReadonlySet<V1JobStatusValue> = new Set(['completed', 'failed', 'cancelled']);
 
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+function delay(ms: number, signal?: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const cleanup = () => {
+      if (timer !== undefined) {
+        clearTimeout(timer);
+        timer = undefined;
+      }
+      signal?.removeEventListener('abort', onAbort);
+    };
+    const onAbort = () => {
+      cleanup();
+      reject(signal?.reason instanceof Error ? signal.reason : new Error('delay: aborted'));
+    };
+    if (signal?.aborted) {
+      onAbort();
+      return;
+    }
+    timer = setTimeout(() => {
+      cleanup();
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
+  });
 }
 
 function hexToBytesExact(hex: string, len: number, label: string): Uint8Array {
@@ -75,23 +98,32 @@ async function resolveNetwork(): Promise<Network> {
   return network;
 }
 
-async function waitForJob(client: ZkCoinsV1Client, jobId: string): Promise<V1Job> {
-  const deadline = Date.now() + WAIT_TIMEOUT_MS;
+async function waitForJob(
+  client: ZkCoinsV1Client,
+  jobId: string,
+  signal: AbortSignal,
+  deadline: number,
+): Promise<V1Job> {
   for (;;) {
-    const { job, retryAfterMs } = await client.getJob(jobId);
+    const { job, retryAfterMs } = await client.getJob(jobId, signal);
     if (job.status === 'failed' || job.status === 'cancelled') {
-      throw new Error(
-        `job ${jobId} ${job.status}: ${job.error?.message ?? job.error?.error ?? ''}`,
-      );
+      const detail = job.error?.message ?? job.error?.error;
+      if (detail === undefined || detail === '') {
+        throw new Error(`job ${jobId} ${job.status}: error payload missing`);
+      }
+      throw new Error(`job ${jobId} ${job.status}: ${detail}`);
     }
     if (TERMINAL.has(job.status)) return job;
-    if (Date.now() >= deadline) {
+    if (Date.now() >= deadline || signal.aborted) {
       throw new Error(`job ${jobId} stuck at ${job.status}`);
     }
     if (retryAfterMs === null) {
       throw new Error(`job ${jobId} non-terminal ${job.status} without Retry-After`);
     }
-    await delay(Math.max(POLL_FLOOR_MS, retryAfterMs));
+    await delay(Math.max(POLL_FLOOR_MS, retryAfterMs), signal);
+    if (signal.aborted) {
+      throw new Error(`job ${jobId} stuck at ${job.status}`);
+    }
   }
 }
 
@@ -116,7 +148,10 @@ export const api = {
     // Construction placeholder network — info is network-agnostic.
     const client = new ZkCoinsV1Client({ apiUrl: API_URL, network: 'regtest' });
     const info = await client.info();
-    const features = new Set(info.features ?? []);
+    if (!Array.isArray(info.features)) {
+      throw new Error('e2e api: features missing or not an array');
+    }
+    const features = new Set(info.features);
     return {
       ...info,
       capabilities: {
@@ -159,11 +194,16 @@ export const api = {
    */
   createCoin: async (
     mnemonic: string,
-    opts: { name?: string; decimals?: number; amount?: number } = {},
-  ): Promise<{ name: string; decimals: number; amount: number; address: string }> => {
+    opts: { name?: string; decimals?: number; amount?: string } = {},
+  ): Promise<{ name: string; decimals: number; amount: string; address: string }> => {
     const name = opts.name ?? `E2E-${Date.now()}-${Math.floor(Math.random() * 1e6)}`;
     const decimals = opts.decimals ?? FIXTURE_DECIMALS;
-    const amount = opts.amount ?? MINT_AMOUNT;
+    const amount = opts.amount !== undefined ? opts.amount : MINT_AMOUNT;
+    if (typeof amount !== 'string' || !/^[0-9]+$/.test(amount)) {
+      throw new Error(
+        `createCoin: amount must be a digit string, got ${String(amount)} ${JSON.stringify(amount)}`,
+      );
+    }
 
     const keys = accountFromMnemonic(mnemonic);
     const network = await resolveNetwork();
@@ -171,29 +211,34 @@ export const api = {
     const seed = seedFromMnemonicV1(mnemonic);
     const npkRand = freshNpkRand();
 
+    // One deadline/signal for the whole handshake — waitForJob reuses it.
+    const deadline = Date.now() + WAIT_TIMEOUT_MS;
+    const signal = AbortSignal.timeout(WAIT_TIMEOUT_MS);
+
     let sendCounter = 0;
     try {
       const sk0 = deriveSpendKey(seed, 0, 0);
-      const pull = await client.openOwnershipPullSession({
-        subject: keys.address,
-        sk0: sk0.secretKey,
-        nkCommit: hexToBytesExact(keys.nkCommit, 32, 'nkCommit'),
-      });
-      const head = await client.getAccountState(pull.session);
+      const pull = await client.openOwnershipPullSession(
+        {
+          subject: keys.address,
+          sk0: sk0.secretKey,
+          nkCommit: hexToBytesExact(keys.nkCommit, 32, 'nkCommit'),
+        },
+        signal,
+      );
+      const head = await client.getAccountState(pull.session, signal);
       sendCounter = head.send_counter;
     } catch (err) {
-      // Only a typed HTTP 404 means "account does not exist yet".
-      // Network/auth/parse/5xx and untyped wrappers must abort before
-      // /v1/tx (same contract as the app client's isAccountNotFoundError)
-      // — never invent sendCounter=0 for a live account.
-      if (!(err instanceof V1ApiError) || err.status !== 404) {
+      // Only typed HTTP 404 + machineCode not_found means "account does not
+      // exist yet". Network/auth/parse/5xx and untyped wrappers must abort
+      // before /v1/tx — never invent sendCounter=0 for a live account.
+      if (!(err instanceof V1ApiError) || err.status !== 404 || err.machineCode !== 'not_found') {
         throw err;
       }
       sendCounter = 0;
     }
 
     const next = deriveSpendKey(seed, 0, sendCounter + 1);
-    const amountStr = String(amount);
     const body: TransitionRequest = {
       kind: 'mint',
       subject: keys.address,
@@ -203,36 +248,59 @@ export const api = {
         {
           recipient: keys.address,
           asset_id: '00'.repeat(32),
-          amount: amountStr,
+          amount,
         },
       ],
       issuance: {
         name,
         decimals,
         issuance_version: 1,
-        amount: amountStr,
+        amount,
+        creator_pubkey: keys.pk0,
       },
     };
 
     const accepted = await client.submitTransition(body, {
       idempotencyKey: crypto.randomUUID(),
+      signal,
     });
     const jobId = accepted.job_id;
 
     const awaiting = await client.waitForAwaitingSignature(jobId, {
-      sleep: (ms) => delay(Math.max(POLL_FLOOR_MS, ms)),
+      sleep: (ms) => delay(Math.max(POLL_FLOOR_MS, ms), signal),
+      signal,
     });
     if (awaiting.status !== 'awaiting_signature' || !awaiting.awaiting_signature) {
       throw new Error(`createCoin: job ${jobId} ended in ${awaiting.status} before signature`);
     }
 
-    const sk0 = deriveSpendKey(seed, 0, 0);
-    const pull = await client.openOwnershipPullSession({
-      subject: keys.address,
-      sk0: sk0.secretKey,
-      nkCommit: hexToBytesExact(keys.nkCommit, 32, 'nkCommit'),
-    });
-    const accountState = await client.getAccountState(pull.session);
+    let accountState: { current_pubkey: string; send_counter: number };
+    try {
+      const sk0 = deriveSpendKey(seed, 0, 0);
+      const pull = await client.openOwnershipPullSession(
+        {
+          subject: keys.address,
+          sk0: sk0.secretKey,
+          nkCommit: hexToBytesExact(keys.nkCommit, 32, 'nkCommit'),
+        },
+        signal,
+      );
+      accountState = await client.getAccountState(pull.session, signal);
+    } catch (err) {
+      if (!(err instanceof V1ApiError) || err.status !== 404 || err.machineCode !== 'not_found') {
+        throw err;
+      }
+      const jobCounter = awaiting.awaiting_signature.send_counter;
+      if (jobCounter !== 0) {
+        throw new Error(
+          `createCoin: account not found but job awaiting_signature.send_counter is ${jobCounter} (non-genesis); refusing to sign`,
+        );
+      }
+      accountState = {
+        send_counter: jobCounter,
+        current_pubkey: keys.pk0, // already lowercase hex
+      };
+    }
     const sendCounterFromAwaiting = awaiting.awaiting_signature.send_counter;
     const spend = deriveSpendKey(seed, 0, sendCounterFromAwaiting);
     const nextAfter = deriveSpendKey(seed, 0, sendCounterFromAwaiting + 1);
@@ -249,9 +317,10 @@ export const api = {
       nextPubkey: nextAfter.publicKey,
       npkRand,
       nodeNetwork: client.network,
+      signal,
     });
 
-    await waitForJob(client, jobId);
+    await waitForJob(client, jobId, signal, deadline);
     return { name, decimals, amount, address: keys.address };
   },
 };

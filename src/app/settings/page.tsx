@@ -109,9 +109,9 @@ export default function SettingsPage() {
       typeof window !== 'undefined' &&
       window.confirm('Disconnect this wallet? Make sure you have your seed phrase saved.')
     ) {
-      await deleteWallet();
       await deleteCredential();
       resetAuth();
+      await deleteWallet();
     }
   };
 

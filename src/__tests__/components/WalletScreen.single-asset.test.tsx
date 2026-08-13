@@ -12,6 +12,7 @@ import { render } from '@/__tests__/_helpers/intl';
 import { WalletScreen } from '@/components/screens/WalletScreen';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
+import { useCapabilities } from '@/stores/capabilities';
 import { ApiError, api } from '@/lib/api/client';
 
 const FEATURES_STATE = vi.hoisted(() => ({
@@ -62,11 +63,21 @@ beforeEach(() => {
     storedAuthMethod: null,
     error: null,
   });
+  useCapabilities.setState({
+    capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: false },
+    loaded: false,
+  });
   infoSpy = vi.spyOn(api, 'info').mockResolvedValue({
     network: 'regtest',
     features: [],
     protocol_version: 'v1',
     username_domain: 'local.zkcoins.test',
+    capabilities: {
+      address_list: false,
+      username_claim: false,
+      lnurl: false,
+      multi_asset: false,
+    },
   });
   vi.spyOn(api, 'walletBalance').mockRejectedValue(
     new ApiError(501, 'wallet balance not available in this build'),

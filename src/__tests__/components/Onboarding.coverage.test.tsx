@@ -298,10 +298,12 @@ describe('Onboarding seed failure paths', () => {
     expect(screen.getByTestId('seed-import-password-stage')).toBeInTheDocument();
   });
 
-  it('allows backing out of seed import and safely discarding without a callback', async () => {
+  it('allows backing out of seed import and discarding with onDiscardLegacy', async () => {
     const user = userEvent.setup();
-    render(<Onboarding reimportRequired />);
+    const onDiscardLegacy = vi.fn();
+    render(<Onboarding reimportRequired onDiscardLegacy={onDiscardLegacy} />);
     await user.click(screen.getByTestId('onboarding-discard-legacy-btn'));
+    expect(onDiscardLegacy).toHaveBeenCalled();
     await user.click(screen.getByTestId('onboarding-restore-btn'));
     await user.click(screen.getByTestId('onboarding-step-back-btn'));
     expect(screen.getByTestId('welcome-heading')).toBeInTheDocument();

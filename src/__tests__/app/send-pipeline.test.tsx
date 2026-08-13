@@ -13,7 +13,7 @@ const MNEMONIC =
 const baseParams = {
   account_address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
   recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
-  amount: 1,
+  amount: '1',
   asset_id: 'aa'.repeat(32),
   mnemonic: MNEMONIC,
   nkCommit: '00'.repeat(32),

@@ -1,9 +1,9 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { ApiError, api, type TxDetail } from '@/lib/api/client';
+import { ApiError, api, isAccountNotFoundError, type TxDetail } from '@/lib/api/client';
 
-export type TxLoadError = 'not_found' | 'error';
+export type TxLoadError = 'not_found' | 'error' | 'wallet_unavailable';
 
 export interface TxAccount {
   address: string;
@@ -37,9 +37,16 @@ export function useTransaction(
     setError(null);
     setLoading(true);
 
-    if (id === null || !address || !mnemonic || !nkCommit) {
+    // id and account are checked separately — missing wallet material is not
+    // the same as a missing transaction.
+    if (id === null) {
       setLoading(false);
       setError('not_found');
+      return;
+    }
+    if (!address || !mnemonic || !nkCommit) {
+      setLoading(false);
+      setError('wallet_unavailable');
       return;
     }
 
@@ -54,7 +61,18 @@ export function useTransaction(
       .catch((e) => {
         if (cancelled) return;
         setLoading(false);
-        setError(e instanceof ApiError && e.status === 404 ? 'not_found' : 'error');
+        if (e instanceof ApiError && e.code === 'transaction_not_found') {
+          setError('not_found');
+          return;
+        }
+        if (
+          isAccountNotFoundError(e) ||
+          (e instanceof ApiError && e.status === 404 && e.code === 'not_found')
+        ) {
+          setError('error');
+          return;
+        }
+        setError('error');
       });
 
     return () => {

@@ -12,6 +12,7 @@ import { useHistory } from '@/hooks/useHistory';
 import type { HistoryItem } from '@/lib/api/client';
 import { formatAssetAmount, shortAssetId } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
+import { useCapabilities } from '@/stores/capabilities';
 
 export default function AssetDetailPage() {
   const router = useRouter();
@@ -19,19 +20,25 @@ export default function AssetDetailPage() {
   const t = useTranslations('asset');
   const tWallet = useTranslations('wallet');
   const account = useWalletStore((s) => s.account);
-  const { MULTI_ASSET: multiAssetRuntime } = useFeatures();
+  const { MULTI_ASSET: multiAssetRuntime, loaded: featuresLoaded } = useFeatures();
+
+  useEffect(() => {
+    void useCapabilities.getState().fetch();
+  }, []);
 
   // Runtime gate: a capability-adaptive bundle talking to a single-asset
-  // node has no per-asset detail — redirect home.
+  // node has no per-asset detail — redirect home. Wait for capabilities so
+  // fail-closed defaults do not bounce before /v1/info lands.
   useEffect(() => {
     if (
+      featuresLoaded &&
       !multiAssetRuntime &&
       /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
       typeof window !== 'undefined'
     ) {
       router.replace('/');
     }
-  }, [multiAssetRuntime, router]);
+  }, [featuresLoaded, multiAssetRuntime, router]);
 
   const assetId = params.id;
   const {
@@ -190,6 +197,7 @@ export default function AssetDetailPage() {
                 sent: tWallet('txSent'),
                 received: tWallet('txReceived'),
                 mint: tWallet('txMint'),
+                unknown: tWallet('txUnknown'),
               }}
             />
           </div>
@@ -223,7 +231,7 @@ function AssetHistory({
   labels,
 }: {
   items: HistoryItem[];
-  labels: { sent: string; received: string; mint: string };
+  labels: { sent: string; received: string; mint: string; unknown: string };
 }) {
   if (items.length === 0) {
     return null;
@@ -232,10 +240,26 @@ function AssetHistory({
     <ul className="space-y-2">
       {items.map((tx) => {
         const kind = tx.kind;
-        const positive = kind !== 'send';
-        const label =
-          kind === 'mint' ? labels.mint : kind === 'send' ? labels.sent : labels.received;
-        const Icon = kind === 'send' ? ArrowUpRight : kind === 'mint' ? Plus : ArrowDownLeft;
+        let positive: boolean;
+        let label: string;
+        let Icon: typeof ArrowUpRight;
+        if (kind === 'mint') {
+          positive = true;
+          label = labels.mint;
+          Icon = Plus;
+        } else if (kind === 'send') {
+          positive = false;
+          label = labels.sent;
+          Icon = ArrowUpRight;
+        } else if (kind === 'receive') {
+          positive = true;
+          label = labels.received;
+          Icon = ArrowDownLeft;
+        } else {
+          positive = false;
+          label = labels.unknown;
+          Icon = ArrowUpRight;
+        }
         const amountText = typeof tx.amount === 'number' ? tx.amount.toLocaleString('en-US') : '—';
         return (
           <li key={tx.id}>

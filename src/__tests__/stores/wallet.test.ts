@@ -180,6 +180,7 @@ describe('wallet store — unlock edge cases', () => {
       authMethod: 'seed',
       address: 'c'.repeat(64),
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
     await expect(useWalletStore.getState().unlockWithPassword('any')).rejects.toThrow(
       'No salt found in stored wallet',
@@ -192,6 +193,7 @@ describe('wallet store — unlock edge cases', () => {
 
     // Overwrite ciphertext with a valid-password encrypt of a legacy blob
     // by re-saving via low-level encrypt of unversioned JSON.
+    // Envelope stays at WALLET_PAYLOAD_VERSION so decrypt-then-parse runs.
     const { encrypt, deriveKeyFromPassword } = await import('@/lib/crypto/encryption');
     const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
     const stored = await loadEncryptedWallet();
@@ -209,6 +211,7 @@ describe('wallet store — unlock edge cases', () => {
       authMethod: 'seed',
       address: testAccount.address,
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
 
     useWalletStore.setState({ account: null, isLocked: true });
@@ -218,6 +221,51 @@ describe('wallet store — unlock edge cases', () => {
     expect(useWalletStore.getState().needsSeedReimport).toBe(true);
     expect(useWalletStore.getState().account).toBeNull();
     // IndexedDB record must survive so the user can re-import or discard.
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+
+  it('unlockWithPassword refuses foreign payloadVersion without decrypting', async () => {
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'not-valid-ciphertext', iv: 'iv', salt: 'c2FsdA==' },
+      authMethod: 'seed',
+      address: testAccount.address,
+      createdAt: Date.now(),
+      payloadVersion: 1,
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('any-password')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const state = useWalletStore.getState();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.account).toBeNull();
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.isLocked).toBe(false);
+    expect(state.storedAddress).toBeNull();
+    expect(state.storedAuthMethod).toBeNull();
+    expect(state.error).toBe(
+      'Stored wallet format is incompatible with this build. Re-import your 12-word seed phrase.',
+    );
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+
+  it('unlockWithPassword refuses missing payloadVersion without decrypting', async () => {
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'garbage', iv: 'iv', salt: 'c2FsdA==' },
+      authMethod: 'seed',
+      address: testAccount.address,
+      createdAt: Date.now(),
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('any-password')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
     expect(await loadEncryptedWallet()).not.toBeNull();
   });
 
@@ -326,6 +374,7 @@ describe('wallet store — PRF encryption', () => {
     useWalletStore.getState().setAccount(testAccount);
     await useWalletStore.getState().saveWithPrf(prf);
 
+    // Envelope stays at WALLET_PAYLOAD_VERSION so decrypt-then-parse runs.
     const { encrypt, deriveKeyFromPrf } = await import('@/lib/crypto/encryption');
     const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
     const stored = await loadEncryptedWallet();
@@ -340,6 +389,7 @@ describe('wallet store — PRF encryption', () => {
       authMethod: 'passkey',
       address: testAccount.address,
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
 
     useWalletStore.setState({ account: null, isLocked: true });
@@ -348,6 +398,48 @@ describe('wallet store — PRF encryption', () => {
     );
     expect(useWalletStore.getState().needsSeedReimport).toBe(true);
     expect(useWalletStore.getState().account).toBeNull();
+  });
+
+  it('unlockWithPrf refuses foreign payloadVersion without decrypting', async () => {
+    const prf = crypto.getRandomValues(new Uint8Array(32));
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'not-valid-ciphertext', iv: 'iv' },
+      authMethod: 'passkey',
+      address: testAccount.address,
+      createdAt: Date.now(),
+      payloadVersion: 1,
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPrf(prf)).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const state = useWalletStore.getState();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.account).toBeNull();
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.isLocked).toBe(false);
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+
+  it('unlockWithPrf refuses missing payloadVersion without decrypting', async () => {
+    const prf = crypto.getRandomValues(new Uint8Array(32));
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'garbage', iv: 'iv' },
+      authMethod: 'passkey',
+      address: testAccount.address,
+      createdAt: Date.now(),
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPrf(prf)).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
+    expect(await loadEncryptedWallet()).not.toBeNull();
   });
 });
 
@@ -399,7 +491,9 @@ describe('wallet store — checkForStoredWallet', () => {
       authMethod: 'seed',
       address: 'x'.repeat(64),
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
+    useWalletStore.setState({ error: 'stale' });
 
     await useWalletStore.getState().checkForStoredWallet();
     const state = useWalletStore.getState();
@@ -407,6 +501,49 @@ describe('wallet store — checkForStoredWallet', () => {
     expect(state.storedAddress).toBe('x'.repeat(64));
     expect(state.storedAuthMethod).toBe('seed');
     expect(state.isLocked).toBe(true);
+    expect(state.error).toBeNull();
+  });
+
+  it('requires seed re-import for IDB blob without payloadVersion and keeps the blob', async () => {
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'ct', iv: 'iv' },
+      authMethod: 'seed',
+      address: 'x'.repeat(64),
+      createdAt: Date.now(),
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.isLocked).toBe(false);
+    expect(state.account).toBeNull();
+    expect(state.storedAddress).toBeNull();
+    expect(state.storedAuthMethod).toBeNull();
+    expect(state.error).toBe(
+      'Stored wallet format is incompatible with this build. Re-import your 12-word seed phrase.',
+    );
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+
+  it('requires seed re-import for IDB blob with foreign payloadVersion and keeps the blob', async () => {
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'ct', iv: 'iv' },
+      authMethod: 'seed',
+      address: 'y'.repeat(64),
+      createdAt: Date.now(),
+      payloadVersion: 1,
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.isLocked).toBe(false);
+    expect(state.account).toBeNull();
+    expect(await loadEncryptedWallet()).not.toBeNull();
   });
 
   it('keeps legacy localStorage blobs and requires seed re-import', async () => {
@@ -416,12 +553,15 @@ describe('wallet store — checkForStoredWallet', () => {
       account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 },
     };
     localStorage.setItem('zkcoins_wallet', JSON.stringify(legacyData));
+    useWalletStore.setState({ error: 'stale' });
 
     await useWalletStore.getState().checkForStoredWallet();
     const state = useWalletStore.getState();
     expect(state.account).toBeNull();
     expect(state.needsSeedReimport).toBe(true);
     expect(state.hasStoredWallet).toBe(false);
+    // needsSeedReimport is the gate; error is not sticky I/O / guidance here.
+    expect(state.error).toBeNull();
     expect(localStorage.getItem('zkcoins_wallet')).not.toBeNull();
   });
 
@@ -442,10 +582,12 @@ describe('wallet store — checkForStoredWallet', () => {
   });
 
   it('does nothing when no wallet stored anywhere', async () => {
+    useWalletStore.setState({ error: 'stale' });
     await useWalletStore.getState().checkForStoredWallet();
     const state = useWalletStore.getState();
     expect(state.hasStoredWallet).toBe(false);
     expect(state.account).toBeNull();
+    expect(state.error).toBeNull();
   });
 
   it('refreshes stored flags without re-locking on re-mount', async () => {
@@ -455,6 +597,7 @@ describe('wallet store — checkForStoredWallet', () => {
       authMethod: 'passkey',
       address: 'b'.repeat(64),
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
 
     useWalletStore.setState({
@@ -463,6 +606,7 @@ describe('wallet store — checkForStoredWallet', () => {
       hasStoredWallet: false,
       storedAddress: null,
       storedAuthMethod: null,
+      error: 'stale',
     });
 
     await useWalletStore.getState().checkForStoredWallet();
@@ -472,6 +616,34 @@ describe('wallet store — checkForStoredWallet', () => {
     expect(state.hasStoredWallet).toBe(true);
     expect(state.storedAddress).toBe('b'.repeat(64));
     expect(state.storedAuthMethod).toBe('passkey');
+    expect(state.error).toBeNull();
+  });
+
+  it('re-mount with foreign payloadVersion forces re-import and clears the unlocked account', async () => {
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'ct', iv: 'iv' },
+      authMethod: 'passkey',
+      address: 'b'.repeat(64),
+      createdAt: Date.now(),
+      payloadVersion: 1,
+    });
+
+    useWalletStore.setState({
+      account: testAccount,
+      isLocked: false,
+      hasStoredWallet: true,
+      storedAddress: 'b'.repeat(64),
+      storedAuthMethod: 'passkey',
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.account).toBeNull();
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.isLocked).toBe(false);
+    expect(await loadEncryptedWallet()).not.toBeNull();
   });
 
   it('returns early without setting flags when the unlocked account has no stored blob', async () => {
@@ -479,6 +651,7 @@ describe('wallet store — checkForStoredWallet', () => {
       account: testAccount,
       isLocked: false,
       hasStoredWallet: false,
+      error: 'stale',
     });
 
     await useWalletStore.getState().checkForStoredWallet();
@@ -486,6 +659,131 @@ describe('wallet store — checkForStoredWallet', () => {
     expect(state.account).toEqual(testAccount);
     expect(state.isLocked).toBe(false);
     expect(state.hasStoredWallet).toBe(false);
+    expect(state.error).toBeNull();
+  });
+
+  it('surfaces loadEncryptedWallet error on unlocked path without clearing account', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi
+      .spyOn(storage, 'loadEncryptedWallet')
+      .mockRejectedValue(new Error('IDB unavailable'));
+
+    useWalletStore.setState({
+      account: testAccount,
+      isLocked: false,
+      hasStoredWallet: true,
+      needsSeedReimport: false,
+      error: null,
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('IDB unavailable');
+    expect(state.account).toEqual(testAccount);
+    expect(state.isLocked).toBe(false);
+    expect(state.hasStoredWallet).toBe(true);
+    expect(state.needsSeedReimport).toBe(false);
+    spy.mockRestore();
+  });
+
+  it('surfaces loadEncryptedWallet non-Error throw on unlocked path without clearing account', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi.spyOn(storage, 'loadEncryptedWallet').mockRejectedValue('idb-string-failure');
+
+    useWalletStore.setState({
+      account: testAccount,
+      isLocked: false,
+      hasStoredWallet: true,
+      needsSeedReimport: false,
+      error: null,
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('idb-string-failure');
+    expect(state.account).toEqual(testAccount);
+    expect(state.isLocked).toBe(false);
+    expect(state.hasStoredWallet).toBe(true);
+    expect(state.needsSeedReimport).toBe(false);
+    spy.mockRestore();
+  });
+
+  it('surfaces loadEncryptedWallet error on empty path without treating as no-blob', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi
+      .spyOn(storage, 'loadEncryptedWallet')
+      .mockRejectedValue(new Error('IDB unavailable'));
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('IDB unavailable');
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.needsSeedReimport).toBe(false);
+    expect(state.account).toBeNull();
+    spy.mockRestore();
+  });
+
+  it('surfaces loadEncryptedWallet non-Error throw on empty path without treating as no-blob', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi.spyOn(storage, 'loadEncryptedWallet').mockRejectedValue('idb-string-failure');
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('idb-string-failure');
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.needsSeedReimport).toBe(false);
+    expect(state.account).toBeNull();
+    spy.mockRestore();
+  });
+
+  it('does not fall through to legacy localStorage when loadEncryptedWallet rejects', async () => {
+    localStorage.setItem(
+      'zkcoins_wallet',
+      JSON.stringify({ account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 } }),
+    );
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi
+      .spyOn(storage, 'loadEncryptedWallet')
+      .mockRejectedValue(new Error('IDB unavailable'));
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('IDB unavailable');
+    expect(state.needsSeedReimport).toBe(false);
+    expect(localStorage.getItem('zkcoins_wallet')).not.toBeNull();
+    spy.mockRestore();
+  });
+
+  it('surfaces localStorage.getItem Error on the legacy path', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const loadSpy = vi.spyOn(storage, 'loadEncryptedWallet').mockResolvedValue(null);
+    const getItemSpy = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('localStorage blocked');
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('localStorage blocked');
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.needsSeedReimport).toBe(false);
+    getItemSpy.mockRestore();
+    loadSpy.mockRestore();
+  });
+
+  it('surfaces localStorage.getItem non-Error throw on the legacy path', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const loadSpy = vi.spyOn(storage, 'loadEncryptedWallet').mockResolvedValue(null);
+    const getItemSpy = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw 'ls-string-failure';
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('ls-string-failure');
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.needsSeedReimport).toBe(false);
+    getItemSpy.mockRestore();
+    loadSpy.mockRestore();
   });
 });
 

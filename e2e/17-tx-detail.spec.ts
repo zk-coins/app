@@ -98,6 +98,15 @@ test.describe('Transaction detail', () => {
     });
   });
 
+  test('tx-detail-wallet-unavailable without session', async ({ page }) => {
+    // Hard navigation without login: no in-memory account → unlock prompt.
+    await setViewport(page, 'mobile');
+    await page.goto(`/tx/${'a'.repeat(64)}`);
+    await expect(page.getByTestId('tx-detail-wallet-unavailable')).toBeVisible({
+      timeout: 15_000,
+    });
+  });
+
   test('tx-detail-missing', async ({ page }) => {
     // A hard navigation to a tx URL drops the in-memory account, so the
     // page resolves to the not-found state without a doomed request — the

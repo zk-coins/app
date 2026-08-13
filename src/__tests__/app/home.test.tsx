@@ -18,9 +18,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import Home from '@/app/page';
-import { useWalletStore } from '@/stores/wallet';
+import { useWalletStore, WALLET_PAYLOAD_VERSION } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api/client';
 
@@ -135,6 +136,8 @@ describe('Home — legacy reimport branch', () => {
       authMethod: 'seed',
       address: ALICE.address,
       createdAt: Date.now(),
+      // Outer envelope is current; inner plaintext is xpriv-era incompatible.
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
 
     render(<Home />);
@@ -163,6 +166,7 @@ describe('Home — unlock branch (stored wallet, locked)', () => {
       authMethod: 'seed',
       address: ALICE.address,
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
 
     render(<Home />);
@@ -184,6 +188,76 @@ describe('Home — wallet branch (account in memory)', () => {
   });
 });
 
+describe('Home — storage error surface', () => {
+  it('shows storage-error with the store message and hides onboarding/unlock', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const loadSpy = vi
+      .spyOn(storage, 'loadEncryptedWallet')
+      .mockRejectedValue(new Error('IDB unavailable'));
+
+    try {
+      render(<Home />);
+
+      const surface = await screen.findByTestId('storage-error');
+      expect(surface).toHaveTextContent('IDB unavailable');
+      expect(screen.queryByTestId('welcome-heading')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('unlock-heading')).not.toBeInTheDocument();
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
+  it('retry re-invokes checkForStoredWallet via another loadEncryptedWallet call', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const loadSpy = vi
+      .spyOn(storage, 'loadEncryptedWallet')
+      .mockRejectedValue(new Error('IDB unavailable'));
+
+    try {
+      render(<Home />);
+      await screen.findByTestId('storage-error');
+      const callsBefore = loadSpy.mock.calls.length;
+
+      await userEvent.click(screen.getByTestId('storage-error-retry'));
+
+      await waitFor(() => {
+        expect(loadSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
+  it('retry keeps storage-error mounted while the check is pending (no onboarding flash)', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    let resolveSecond!: (v: null) => void;
+    const loadSpy = vi.spyOn(storage, 'loadEncryptedWallet');
+    loadSpy.mockRejectedValueOnce(new Error('IDB unavailable')).mockReturnValueOnce(
+      new Promise<null>((res) => {
+        resolveSecond = res;
+      }),
+    );
+
+    try {
+      render(<Home />);
+      await screen.findByTestId('storage-error');
+
+      await userEvent.click(screen.getByTestId('storage-error-retry'));
+
+      // Check is pending: error surface stays, onboarding does not flash.
+      expect(screen.getByTestId('storage-error')).toBeInTheDocument();
+      expect(screen.queryByTestId('welcome-heading')).not.toBeInTheDocument();
+
+      resolveSecond(null);
+      await waitFor(() => {
+        expect(screen.queryByTestId('storage-error')).not.toBeInTheDocument();
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+});
+
 describe('Home — branch priority', () => {
   it('prefers the wallet branch over the unlock branch when both gates would match', async () => {
     // Both `account` is set AND a stored blob exists (the post-unlock
@@ -195,6 +269,7 @@ describe('Home — branch priority', () => {
       authMethod: 'seed',
       address: ALICE.address,
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
     useWalletStore.setState({ account: ALICE, isLocked: false });
 
@@ -212,6 +287,7 @@ describe('Home — branch priority', () => {
       authMethod: 'passkey',
       address: ALICE.address,
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
     render(<Home />);
     expect(await screen.findByTestId('unlock-heading')).toBeInTheDocument();
@@ -224,6 +300,7 @@ describe('Home — branch priority', () => {
       authMethod: 'seed',
       address: ALICE.address,
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
     useWalletStore.setState({
       account: null,

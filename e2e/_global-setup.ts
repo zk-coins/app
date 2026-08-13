@@ -257,10 +257,6 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
 
     fs.mkdirSync(FIXTURES_DIR, { recursive: true });
     fs.writeFileSync(FIXTURES_PATH, JSON.stringify(accounts, null, 2));
-
-    console.log(
-      `globalSetup: Alice ${alice.address} (balance not available in this build)  Bob ${bob.address}`,
-    );
   } finally {
     await browser.close();
   }

@@ -12,6 +12,7 @@ import { render } from '@/__tests__/_helpers/intl';
 import { WalletScreen } from '@/components/screens/WalletScreen';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
+import { useCapabilities } from '@/stores/capabilities';
 import { api, type HistoryItem, type OwnerBalanceResponse } from '@/lib/api/client';
 
 const FEATURES_STATE = vi.hoisted(() => ({
@@ -74,10 +75,20 @@ beforeEach(() => {
     storedAuthMethod: null,
     error: null,
   });
+  useCapabilities.setState({
+    capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: false },
+    loaded: false,
+  });
   vi.spyOn(api, 'info').mockResolvedValue({
     network: 'regtest',
     features: ['wallet'],
     protocol_version: 'v1',
+    capabilities: {
+      address_list: false,
+      username_claim: false,
+      lnurl: false,
+      multi_asset: true,
+    },
   });
   vi.spyOn(api, 'ownerBalances').mockResolvedValue(FUNDED);
   historySpy = vi.spyOn(api, 'getHistory');
@@ -124,6 +135,26 @@ describe('WalletScreen — transaction list from server history', () => {
     const amounts = screen.getAllByTestId('tx-row-amount').map((n) => n.textContent ?? '');
     // The send row is the only debit → the only one with a leading minus.
     expect(amounts.filter((t) => t.trim().startsWith('-'))).toHaveLength(1);
+  });
+
+  it('maps unknown history kinds to neutral unknown label, not receive', async () => {
+    historySpy.mockResolvedValue({
+      items: [row({ id: 1, kind: 'burn', amount: 7 })],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+
+    render(<WalletScreen />);
+
+    const rowEl = await screen.findByTestId('tx-row');
+    expect(rowEl).toHaveTextContent('Unbekannt');
+    expect(rowEl).not.toHaveTextContent('Empfangen');
+    const iconWrap = rowEl.querySelector('div.flex.h-9');
+    expect(iconWrap).not.toBeNull();
+    expect(iconWrap?.className).toContain('bg-bitcoin/10');
+    expect(iconWrap?.className).toContain('text-bitcoin');
+    expect(iconWrap?.className).not.toContain('bg-line');
   });
 
   it('renders the row time from a Unix-seconds timestamp (not raw ms)', async () => {
@@ -209,7 +240,7 @@ describe('WalletScreen — transaction list from server history', () => {
       offset: 0,
     });
     render(<WalletScreen />);
-    expect(await screen.findByTestId('asset-row-name')).toHaveTextContent('Erstellt');
+    expect(await screen.findByTestId('asset-row-name')).toHaveTextContent('Unbekanntes Asset');
     expect(screen.getByTestId('tx-row-amount')).toHaveTextContent('—');
     expect(screen.getByTestId('tx-row-time')).toHaveTextContent('—');
   });

@@ -21,45 +21,55 @@
 import type { Page } from '@playwright/test';
 import { expect } from '@playwright/test';
 
-import { getUsernameDomain, zkAddressRegex } from './api';
+import { accountFromMnemonic } from './keys';
 
 export const DEFAULT_PASSWORD = 'TestPass123!';
 
 /**
- * Wipe localStorage + IndexedDB for the current origin. Run this in
- * `beforeEach` of any onboarding spec.
+ * Wipe localStorage + IndexedDB for the current origin. Wipe without an
+ * open app connection: `goto('/')` would open React/IDB and leave
+ * `deleteDatabase` blocked. Hit a same-origin static asset first, await
+ * every delete, then enter the app. Run this in `beforeEach` of any
+ * onboarding spec.
  */
 export async function clearWalletState(page: Page): Promise<void> {
-  await page.goto('/');
+  // Static asset — same origin, no React, no IDB connection from the app.
+  await page.goto('/manifest.json');
   await page.evaluate(async () => {
     Object.keys(localStorage)
       .filter((k) => k.startsWith('zkcoins'))
       .forEach((k) => localStorage.removeItem(k));
-    const dbs = await indexedDB.databases().catch(() => []);
-    for (const db of dbs) {
-      if (db.name) indexedDB.deleteDatabase(db.name);
-    }
+    const dbs = await indexedDB.databases();
+    await Promise.all(
+      dbs.map(
+        (db) =>
+          new Promise<void>((resolve, reject) => {
+            if (!db.name) {
+              resolve();
+              return;
+            }
+            const req = indexedDB.deleteDatabase(db.name);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error ?? new Error(`deleteDatabase failed: ${db.name}`));
+            req.onblocked = () => reject(new Error(`deleteDatabase blocked: ${db.name}`));
+          }),
+      ),
+    );
   });
-  // Wait only until the document hydrates. We don't wait for
-  // `networkidle` (500 ms of zero traffic) because the boot path now
-  // fires a fire-and-forget `/v1/info` capabilities fetch and the
-  // service worker (public/sw.js) does stale-while-revalidate for
-  // every cached asset — on CI those background fetches can keep the
-  // 500 ms window from ever closing, deadlocking globalSetup. The
-  // caller's next step is a testid-based locator assertion, which
-  // is the real readiness signal we want anyway. Same rationale as
-  // `snap()` in `screenshot.ts`.
-  await page.reload({ waitUntil: 'domcontentloaded' });
+  // Enter the app only after the wipe succeeded. Wait for document
+  // hydrate only — not `networkidle` (boot fires fire-and-forget
+  // `/v1/info` + SW revalidation that can keep the 500 ms window open
+  // on CI). Callers assert readiness via testid locators.
+  await page.goto('/', { waitUntil: 'domcontentloaded' });
 }
 
 /**
  * Walk the SeedFlow from Welcome to a fully-loaded wallet, capturing the
  * generated mnemonic before the user "confirms it down".
  *
- * Returns the 12 BIP-39 words and the full 64-hex address read off the
- * copy-address button's `title` attribute (the visible chip is truncated
- * to `{8hex}@<username_domain>` — the domain is read from `/v1/info` so
- * the helper matches whichever stage the suite is pointed at).
+ * Ready-marker is `create-coin-btn` (wallet shell settled). Address is
+ * derived via `accountFromMnemonic` from the captured seed — not from the
+ * address-chip title (chip may be empty until a username is claimed).
  *
  * Assumes a blank-slate state (no wallet in IDB). Caller must `clearWalletState`
  * first.
@@ -107,21 +117,8 @@ export async function createSeedWallet(
   await page.getByTestId('seed-password-confirm-input').fill(password);
   await page.getByTestId('seed-create-btn').click();
 
-  // The full 64-hex address is exposed via the `title` attribute on the
-  // copy-address button in WalletScreen (the visible text is the truncated
-  // `{8hex}@<username_domain>` chip). Wait for the chip to render, then
-  // read the title from the surrounding `<button>` for the canonical form.
-  const domain = await getUsernameDomain();
-  const chip = page.locator(`text=${zkAddressRegex(domain)}`).first();
-  await expect(chip).toBeVisible({ timeout: 30_000 });
-  const copyButton = page.locator(`button:has-text("@${domain}")`).first();
-  const address = (await copyButton.getAttribute('title'))?.trim() ?? '';
-  if (!address || address.length < 64) {
-    throw new Error(
-      `createSeedWallet: failed to read full address from chip title, got "${address}"`,
-    );
-  }
-
+  await expect(page.getByTestId('create-coin-btn')).toBeVisible({ timeout: 30_000 });
+  const address = accountFromMnemonic(mnemonic.join(' ')).address;
   return { mnemonic, address };
 }
 
@@ -129,6 +126,8 @@ export async function createSeedWallet(
  * Drive the SeedImportFlow with a known mnemonic. Used by `aliceLogin` /
  * `bobLogin` in `fixtures.ts` to log a worker in as one of the run's
  * fixture accounts.
+ *
+ * Ready-marker is `create-coin-btn`. Address via `accountFromMnemonic`.
  *
  * Assumes a blank-slate state.
  */
@@ -150,16 +149,16 @@ export async function restoreSeedWallet(
   await page.getByTestId('seed-import-password-confirm-input').fill(password);
   await page.getByTestId('seed-import-submit-btn').click();
 
-  const domain = await getUsernameDomain();
-  const chip = page.locator(`text=${zkAddressRegex(domain)}`).first();
-  await expect(chip).toBeVisible({ timeout: 30_000 });
-  const address = (await chip.textContent())?.trim() ?? '';
+  await expect(page.getByTestId('create-coin-btn')).toBeVisible({ timeout: 30_000 });
+  const address = accountFromMnemonic(mnemonic.join(' ')).address;
   return { address };
 }
 
 /**
  * Drive the UnlockScreen. Assumes the encrypted wallet is already in IDB
  * and `Home` is rendering `<UnlockScreen authMethod="seed" />`.
+ *
+ * Ready-marker is `create-coin-btn` after unlock.
  */
 export async function unlockWithPassword(
   page: Page,
@@ -168,10 +167,7 @@ export async function unlockWithPassword(
   await expect(page.getByTestId('unlock-heading')).toBeVisible({ timeout: 10_000 });
   await page.getByTestId('unlock-password-input').fill(password);
   await page.getByTestId('unlock-submit-btn').click();
-  const domain = await getUsernameDomain();
-  await expect(page.locator(`text=${zkAddressRegex(domain)}`).first()).toBeVisible({
-    timeout: 15_000,
-  });
+  await expect(page.getByTestId('create-coin-btn')).toBeVisible({ timeout: 15_000 });
 }
 
 /**
@@ -191,19 +187,19 @@ export async function disconnect(page: Page): Promise<void> {
 }
 
 /**
- * Block until WalletScreen's `useEffect(api.info, …)` has resolved and
- * `networkName` is populated in the zustand store. Polling the store
+ * Block until WalletScreen/`useCapabilities.fetch` has resolved and
+ * `network` is populated in the zustand Network store. Polling the store
  * directly (rather than the DOM badge) eliminates the in-app-navigation
  * race that previously required +30 s DOM-visibility timeouts: as soon
- * as `api.info()` returns, any subsequent navigation that gates UI on
- * `networkName !== ''` is deterministic — the badge renders on first
- * paint of the target route.
+ * as capabilities/info lands, any subsequent navigation that gates UI on
+ * `network !== ''` is deterministic — the badge renders on first paint
+ * of the target route.
  *
  * The store is exposed on `window.__useNetworkStore` by
  * `src/stores/network.ts` precisely for this purpose.
  */
 type NetworkStoreShim = {
-  getState: () => { networkName: string };
+  getState: () => { network: string };
 };
 export async function waitForNetworkInfo(page: Page, timeout = 30_000): Promise<void> {
   await expect
@@ -211,7 +207,7 @@ export async function waitForNetworkInfo(page: Page, timeout = 30_000): Promise<
       () =>
         page.evaluate(() => {
           const w = window as unknown as { __useNetworkStore?: NetworkStoreShim };
-          return w.__useNetworkStore?.getState().networkName ?? '';
+          return w.__useNetworkStore?.getState().network ?? '';
         }),
       { timeout },
     )

@@ -51,18 +51,66 @@ describe('network store', () => {
   });
 
   it('applyInfo refuses mutinynet without silent coercion', () => {
+    useNetworkStore.setState({ features: ['wallet'], usernameDomain: 'stale.example' });
     useNetworkStore.getState().applyInfo({ network: 'mutinynet' });
     const s = useNetworkStore.getState();
     expect(s.network).toBe('');
+    expect(s.features).toEqual([]);
+    expect(s.usernameDomain).toBe('');
     expect(s.infoError).toMatch(/unsupported network/);
     expect(s.infoLoaded).toBe(true);
   });
 
+  it('applyInfo fail-closes when features is missing or not an array', () => {
+    useNetworkStore.getState().applyInfo({
+      network: 'testnet',
+      features: ['wallet'],
+      username_domain: 'stale.example',
+    });
+    useNetworkStore.getState().applyInfo({ network: 'testnet' });
+    const omitted = useNetworkStore.getState();
+    expect(omitted.network).toBe('');
+    expect(omitted.features).toEqual([]);
+    expect(omitted.usernameDomain).toBe('');
+    expect(omitted.infoError).toMatch(/features missing/);
+    expect(omitted.infoLoaded).toBe(true);
+
+    useNetworkStore.setState({
+      network: '',
+      usernameDomain: '',
+      features: [],
+      infoError: null,
+      infoLoaded: false,
+    });
+    useNetworkStore.getState().applyInfo({
+      network: 'testnet',
+      features: ['wallet'],
+      username_domain: 'stale.example',
+    });
+    useNetworkStore.getState().applyInfo({
+      network: 'testnet',
+      features: 'wallet' as unknown as string[],
+    });
+    const wrongType = useNetworkStore.getState();
+    expect(wrongType.network).toBe('');
+    expect(wrongType.features).toEqual([]);
+    expect(wrongType.usernameDomain).toBe('');
+    expect(wrongType.infoError).toMatch(/features missing/);
+    expect(wrongType.infoLoaded).toBe(true);
+  });
+
   it('applyInfoFailure records a visible error and clears network', () => {
+    useNetworkStore.setState({
+      features: ['wallet'],
+      usernameDomain: 'stale.example',
+    });
     useNetworkStore.getState().setNetwork('regtest');
+    expect(useNetworkStore.getState().network).toBe('regtest');
     useNetworkStore.getState().applyInfoFailure('network down');
     const s = useNetworkStore.getState();
     expect(s.network).toBe('');
+    expect(s.features).toEqual([]);
+    expect(s.usernameDomain).toBe('');
     expect(s.infoError).toBe('network down');
     expect(s.infoLoaded).toBe(true);
   });
@@ -87,7 +135,7 @@ describe('network store', () => {
 
   it('applyInfo clears usernameDomain when the field is omitted', () => {
     useNetworkStore.getState().setUsernameDomain('old.example');
-    useNetworkStore.getState().applyInfo({ network: 'mainnet' });
+    useNetworkStore.getState().applyInfo({ network: 'mainnet', features: [] });
     const s = useNetworkStore.getState();
     expect(s.network).toBe('mainnet');
     expect(s.usernameDomain).toBe('');

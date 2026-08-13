@@ -114,6 +114,20 @@ function serializeWalletPayload(account: Account): string {
   return JSON.stringify(payload);
 }
 
+/** Outer-envelope reimport transition — blob stays in IDB; no decrypt. */
+function incompatibleStoredWalletState() {
+  return {
+    needsSeedReimport: true as const,
+    account: null,
+    hasStoredWallet: false,
+    isLocked: false,
+    storedAddress: null,
+    storedAuthMethod: null,
+    error:
+      'Stored wallet format is incompatible with this build. Re-import your 12-word seed phrase.',
+  };
+}
+
 interface WalletState {
   account: Account | null;
   isLoading: boolean;
@@ -236,6 +250,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const stored = await loadEncryptedWallet();
     if (!stored) throw new Error('No stored wallet found');
 
+    if (stored.payloadVersion !== WALLET_PAYLOAD_VERSION) {
+      set(incompatibleStoredWalletState());
+      throw new IncompatibleWalletError();
+    }
+
     const salt = stored.encrypted.salt
       ? (() => {
           const binary = atob(stored.encrypted.salt!);
@@ -277,6 +296,11 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const stored = await loadEncryptedWallet();
     if (!stored) throw new Error('No stored wallet found');
 
+    if (stored.payloadVersion !== WALLET_PAYLOAD_VERSION) {
+      set(incompatibleStoredWalletState());
+      throw new IncompatibleWalletError();
+    }
+
     const key = await deriveKeyFromPrf(prfOutput);
     const decrypted = await decrypt(stored.encrypted, key);
 
@@ -316,14 +340,22 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       try {
         const stored = await loadEncryptedWallet();
         if (stored) {
-          set({
-            hasStoredWallet: true,
-            storedAddress: stored.address,
-            storedAuthMethod: stored.authMethod,
-          });
+          if (stored.payloadVersion !== WALLET_PAYLOAD_VERSION) {
+            set(incompatibleStoredWalletState());
+          } else {
+            set({
+              hasStoredWallet: true,
+              storedAddress: stored.address,
+              storedAuthMethod: stored.authMethod,
+              error: null,
+            });
+          }
+        } else {
+          // Successful empty read — clear a prior storage error; leave account.
+          set({ error: null });
         }
-      } catch {
-        // IndexedDB not available
+      } catch (err) {
+        set({ error: err instanceof Error ? err.message : String(err) });
       }
       return;
     }
@@ -331,16 +363,22 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       const stored = await loadEncryptedWallet();
       if (stored) {
-        set({
-          hasStoredWallet: true,
-          storedAddress: stored.address,
-          storedAuthMethod: stored.authMethod,
-          isLocked: true,
-        });
+        if (stored.payloadVersion !== WALLET_PAYLOAD_VERSION) {
+          set(incompatibleStoredWalletState());
+        } else {
+          set({
+            hasStoredWallet: true,
+            storedAddress: stored.address,
+            storedAuthMethod: stored.authMethod,
+            isLocked: true,
+            error: null,
+          });
+        }
         return;
       }
-    } catch {
-      // IndexedDB not available
+    } catch (err) {
+      set({ error: err instanceof Error ? err.message : String(err) });
+      return;
     }
 
     /* c8 ignore next — SSR guard, unreachable in the browser test env */
@@ -352,6 +390,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           // xpriv-era). Keep the blob until the user re-imports or
           // explicitly resets — deleting here would destroy the only copy
           // before a conscious recovery decision.
+          // needsSeedReimport is the gate; error stays null (not sticky I/O).
           set({
             needsSeedReimport: true,
             hasStoredWallet: false,
@@ -359,19 +398,25 @@ export const useWalletStore = create<WalletState>((set, get) => ({
             storedAuthMethod: null,
             isLocked: false,
             account: null,
-            error:
-              'Stored wallet format is incompatible with this build. Re-import your 12-word seed phrase.',
+            error: null,
           });
+          return;
         }
-      } catch {
-        // ignore
+      } catch (err) {
+        set({ error: err instanceof Error ? err.message : String(err) });
+        return;
       }
     }
+
+    // Successful empty read: neither IDB nor legacy held a wallet.
+    set({ error: null });
   },
 
   deleteWallet: async () => {
     await deleteEncryptedWallet();
     clearLegacyStorage();
+    // Visible flags last: UI that keys off hasStoredWallet / needsSeedReimport
+    // must not unmount before durable cleanup finishes.
     set({
       account: null,
       isLocked: false,

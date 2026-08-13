@@ -44,6 +44,9 @@ const ALICE = {
   nkCommit: '00'.repeat(32),
 };
 
+const originalDeleteWallet = useWalletStore.getState().deleteWallet;
+const originalReset = useAuthStore.getState().reset;
+
 beforeEach(() => {
   routerReplace.mockClear();
   Object.assign(FEATURES_STATE, {
@@ -65,8 +68,14 @@ beforeEach(() => {
     storedAuthMethod: 'seed',
     error: null,
     needsSeedReimport: false,
+    deleteWallet: originalDeleteWallet,
   });
-  useAuthStore.setState({ authMethod: 'seed', credentialId: null, isHydrated: true });
+  useAuthStore.setState({
+    authMethod: 'seed',
+    credentialId: null,
+    isHydrated: true,
+    reset: originalReset,
+  });
   vi.mocked(deleteCredential).mockClear();
 });
 
@@ -100,12 +109,27 @@ describe('SettingsPage', () => {
     const resetAuth = vi.fn();
     useAuthStore.setState({ reset: resetAuth } as never);
 
+    vi.mocked(deleteCredential).mockImplementation(async () => {
+      expect(deleteWallet).not.toHaveBeenCalled();
+      expect(resetAuth).not.toHaveBeenCalled();
+    });
+    resetAuth.mockImplementation(() => {
+      expect(deleteCredential).toHaveBeenCalled();
+      expect(deleteWallet).not.toHaveBeenCalled();
+    });
+
     render(<SettingsPage />);
     await user.click(screen.getByTestId('settings-disconnect-btn'));
     expect(confirm).toHaveBeenCalled();
     await waitFor(() => expect(deleteWallet).toHaveBeenCalled());
     expect(deleteCredential).toHaveBeenCalled();
     expect(resetAuth).toHaveBeenCalled();
+    expect(vi.mocked(deleteCredential).mock.invocationCallOrder[0]).toBeLessThan(
+      resetAuth.mock.invocationCallOrder[0],
+    );
+    expect(resetAuth.mock.invocationCallOrder[0]).toBeLessThan(
+      deleteWallet.mock.invocationCallOrder[0],
+    );
   });
 
   it('disconnect aborts when the user cancels the confirm dialog', async () => {

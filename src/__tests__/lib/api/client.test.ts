@@ -99,7 +99,7 @@ describe('api without resolved network', () => {
       api.send({
         account_address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
         recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
-        amount: 1,
+        amount: '1',
         asset_id: 'aa'.repeat(32),
         mnemonic:
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
@@ -230,7 +230,7 @@ describe('read paths refuse invented empty wallets', () => {
       api.send({
         account_address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
         recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
-        amount: 1,
+        amount: '1',
         asset_id: 'aa'.repeat(32),
         mnemonic:
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',

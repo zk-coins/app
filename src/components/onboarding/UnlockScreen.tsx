@@ -20,7 +20,7 @@ export const UNLOCK_RESET_CONFIRM =
 
 /**
  * Surface message when `onReset` throws. The caller's reset chain
- * (deleteWallet → deleteCredential → resetAuth) is mostly idempotent,
+ * (deleteCredential → resetAuth → deleteWallet) is mostly idempotent,
  * but a partial failure can leave IDB in a half-wiped state — telling
  * the user to reload is the safest recovery path.
  *

@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import { api, type Capabilities, capabilitiesFromV1Features } from '@/lib/api/client';
+import { api, type Capabilities } from '@/lib/api/client';
 import { useNetworkStore } from '@/stores/network';
 
 export type { Capabilities };
@@ -21,26 +21,40 @@ interface CapabilitiesState {
   fetch: () => Promise<void>;
 }
 
+// Coalesce concurrent fetch() into one in-flight request.
+let inFlight: Promise<void> | undefined;
+
 export const useCapabilities = create<CapabilitiesState>((set) => ({
   capabilities: FAIL_CLOSED,
   loaded: false,
-  fetch: async () => {
-    const network = useNetworkStore.getState();
-    try {
-      const info = await api.info();
-      network.applyInfo({
-        network: info.network,
-        features: info.features,
-        username_domain: info.username_domain,
-      });
-      set({
-        capabilities: info.capabilities ?? capabilitiesFromV1Features(info.features ?? []),
-        loaded: true,
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'failed to load /v1/info';
-      network.applyInfoFailure(message);
-      set({ capabilities: FAIL_CLOSED, loaded: true });
-    }
+  fetch: () => {
+    if (inFlight !== undefined) return inFlight;
+    inFlight = (async () => {
+      const network = useNetworkStore.getState();
+      try {
+        const info = await api.info();
+        if (info.capabilities === undefined) {
+          network.applyInfoFailure('GET /v1/info: capabilities missing');
+          set({ capabilities: FAIL_CLOSED, loaded: true });
+          return;
+        }
+        network.applyInfo({
+          network: info.network,
+          features: info.features,
+          username_domain: info.username_domain,
+        });
+        set({
+          capabilities: info.capabilities,
+          loaded: true,
+        });
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'failed to load /v1/info';
+        network.applyInfoFailure(message);
+        set({ capabilities: FAIL_CLOSED, loaded: true });
+      }
+    })().finally(() => {
+      inFlight = undefined;
+    });
+    return inFlight;
   },
 }));

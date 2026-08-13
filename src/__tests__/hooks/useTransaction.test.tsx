@@ -34,10 +34,25 @@ describe('useTransaction', () => {
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('resolves not_found when account is missing', async () => {
+  it('resolves wallet_unavailable when account is missing', async () => {
     const { result } = renderHook(() => useTransaction(7, undefined));
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.error).toBe('not_found');
+    expect(result.current.error).toBe('wallet_unavailable');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('resolves wallet_unavailable when mnemonic is missing', async () => {
+    const { result } = renderHook(() => useTransaction(7, { ...ACCOUNT, mnemonic: '' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('wallet_unavailable');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('resolves wallet_unavailable when nkCommit is missing', async () => {
+    const { result } = renderHook(() => useTransaction(7, { ...ACCOUNT, nkCommit: '' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('wallet_unavailable');
+    expect(spy).not.toHaveBeenCalled();
   });
 
   it('loads detail for a valid id', async () => {
@@ -48,11 +63,27 @@ describe('useTransaction', () => {
     expect(spy).toHaveBeenCalledWith('r1', ACCOUNT);
   });
 
-  it('maps 404 to not_found', async () => {
-    spy.mockRejectedValue(new ApiError(404, 'not_found'));
+  it('maps transaction_not_found to not_found', async () => {
+    spy.mockRejectedValue(
+      new ApiError(404, 'transaction not found', undefined, 'transaction_not_found'),
+    );
     const { result } = renderHook(() => useTransaction('missing', ACCOUNT));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error).toBe('not_found');
+  });
+
+  it('maps account not_found 404 to error, not tx-missing', async () => {
+    spy.mockRejectedValue(new ApiError(404, 'Unknown account address', undefined, 'not_found'));
+    const { result } = renderHook(() => useTransaction('r1', ACCOUNT));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('error');
+  });
+
+  it('maps bare 404 without transaction_not_found to error', async () => {
+    spy.mockRejectedValue(new ApiError(404, 'gone'));
+    const { result } = renderHook(() => useTransaction('r1', ACCOUNT));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('error');
   });
 
   it('maps other failures to error', async () => {

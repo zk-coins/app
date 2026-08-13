@@ -53,7 +53,7 @@ const invoiceDelivery: DeliveryCredential = {
 const spies: Array<ReturnType<typeof vi.spyOn>> = [];
 
 type V1ClientMethod = keyof {
-  [K in keyof ZkCoinsV1Client as ZkCoinsV1Client[K] extends (...args: any[]) => any
+  [K in keyof ZkCoinsV1Client as ZkCoinsV1Client[K] extends (...args: never[]) => unknown
     ? K
     : never]: true;
 };
@@ -138,7 +138,7 @@ describe('api.send with delivery placement', () => {
       {
         account_address: ADDR,
         recipient: ADDR,
-        amount: 7,
+        amount: '7',
         asset_id: 'aa'.repeat(32),
         mnemonic: MNEMONIC,
         nkCommit: NK,
@@ -159,7 +159,7 @@ describe('api.send with delivery placement', () => {
     const job = await api.walletSend({
       account_address: ADDR,
       recipient: ADDR,
-      amount: 1,
+      amount: '1',
       asset_id: 'aa'.repeat(32),
       mnemonic: MNEMONIC,
       nkCommit: NK,
@@ -172,11 +172,9 @@ describe('api.send with delivery placement', () => {
 
 describe('api.createCoin with delivery', () => {
   it('places delivery on mint output when provided', async () => {
-    let pulls = 0;
+    // Pre-pull 404 → sendCounter=0; sign-pull 404 builds Genesis locally.
     spyProto('openOwnershipPullSession', async () => {
-      pulls += 1;
-      if (pulls === 1) throw new V1ApiError(404, 'not_found', '');
-      return { session: 's', session_expiry: '2099-01-01T00:00:00.000Z', records: [] };
+      throw new V1ApiError(404, 'not_found', '');
     });
     spyProto('getAccountState', async () => ({
       account_state: 'ac'.repeat(32),

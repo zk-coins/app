@@ -11,6 +11,7 @@ import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client'
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { formatAssetAmountString } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
+import { useCapabilities } from '@/stores/capabilities';
 
 const MAX_DECIMALS = 18;
 
@@ -19,20 +20,26 @@ export default function CreateCoinPage() {
   const t = useTranslations('createCoin');
   const tErrors = useTranslations('errors');
   const account = useWalletStore((s) => s.account);
-  const { MULTI_ASSET: multiAssetRuntime } = useFeatures();
+  const { MULTI_ASSET: multiAssetRuntime, loaded } = useFeatures();
+
+  useEffect(() => {
+    void useCapabilities.getState().fetch();
+  }, []);
 
   // Runtime gate: a capability-adaptive bundle (build flag ON) talking to a
   // single-asset node has no create-coin flow — redirect home, mirroring the
-  // `!account` redirect below.
+  // `!account` redirect below. Wait for capabilities so fail-closed defaults
+  // do not bounce before /v1/info lands.
   useEffect(() => {
     if (
+      loaded &&
       !multiAssetRuntime &&
       /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
       typeof window !== 'undefined'
     ) {
       router.replace('/');
     }
-  }, [multiAssetRuntime, router]);
+  }, [loaded, multiAssetRuntime, router]);
 
   // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {

@@ -20,7 +20,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { clearWalletState } from './_helpers/wallet';
 import { readAccounts } from './_helpers/fixtures';
-import { getUsernameDomain, zkAddressRegex } from './_helpers/api';
 import { snap, setViewport } from './_helpers/screenshot';
 
 const PASSWORD = 'TestPass123!';
@@ -131,18 +130,19 @@ test.describe('Restore wallet — seed phrase', () => {
 
   // The `restoring` baseline from the plan was dropped for the same
   // reason as `creating` in 02-create-seed: SeedImportFlow's `restore`
-  // callback runs WASM + IDB encrypt in under 50 ms and `setAuth`
-  // swaps `Home` to `WalletScreen` before any DOM screenshot can land
-  // on the "Restoring…" disabled-button state. `wallet-after-restore`
+  // callback runs pure-TS `@zkcoins/sdk` + IDB encrypt in under 50 ms and
+  // `setAuth` swaps `Home` to `WalletScreen` before any DOM screenshot
+  // can land on the "Restoring…" disabled-button state. Ready via
+  // `create-coin-btn` / portfolio-unavailable. `wallet-after-restore`
   // covers the transition functionally. Plan totals updated in
   // e2e/README.md § 8.13.
 
   test('wallet-after-restore', async ({ page }) => {
     // Give the test 60 s — the restore flow itself takes 20-25 s on
-    // the DEV server (WASM derivation + IDB encrypt + first /v1/balance
-    // round-trip) and the snap helper's networkidle wait races against
-    // the 5 s wallet balance-polling tick, so the default 30 s budget
-    // is tight even on a quiet day.
+    // the DEV server (pure-TS `@zkcoins/sdk` derivation + IDB encrypt +
+    // first portfolio tick) and the snap helper's networkidle wait races
+    // against the 5 s portfolio poll, so the default 30 s budget is tight
+    // even on a quiet day.
     test.setTimeout(60_000);
     const { alice } = readAccounts();
     await enterImportFlow(page);
@@ -151,11 +151,8 @@ test.describe('Restore wallet — seed phrase', () => {
     await page.getByTestId('seed-import-password-input').fill(PASSWORD);
     await page.getByTestId('seed-import-password-confirm-input').fill(PASSWORD);
     await page.getByTestId('seed-import-submit-btn').click();
-    // Suffix is server-reported via /v1/info.username_domain (per-stage).
-    const chip = zkAddressRegex(await getUsernameDomain());
-    await expect(page.locator(`text=${chip}`).first()).toBeVisible({
-      timeout: 30_000,
-    });
+    // Wait for the wallet shell — create-coin-btn marks a settled WalletScreen.
+    await expect(page.getByTestId('create-coin-btn')).toBeVisible({ timeout: 30_000 });
     // Wait for Alice's first balance-poll tick — see comment in
     // 02-create-seed.spec.ts::wallet-after-create.
     await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });

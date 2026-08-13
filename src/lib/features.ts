@@ -38,6 +38,7 @@ export const FEATURES = buildTime;
  */
 export function useFeatures() {
   const caps = useCapabilities((s) => s.capabilities);
+  const loaded = useCapabilities((s) => s.loaded);
   return useMemo(
     () =>
       ({
@@ -46,7 +47,8 @@ export function useFeatures() {
         // v1 is multi-asset by construction; the bit stays for screen
         // branching that still reads MULTI_ASSET.
         MULTI_ASSET: caps.multi_asset,
+        loaded,
       }) as const,
-    [caps.username_claim, caps.multi_asset],
+    [caps.username_claim, caps.multi_asset, loaded],
   );
 }

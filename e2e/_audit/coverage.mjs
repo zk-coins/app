@@ -69,44 +69,42 @@ const EXEMPT_TESTIDS = new Set([
   // returns an ApiError; covered by the unit-level mapping tests, not
   // reachable in the happy-path E2E flow.
   'wallet-mint-error',
-  // Not rendered while portfolio is unavailable / multi-asset CI surface
-  // (body only after a successful portfolio read).
-  'asset-detail-balance',
-  // Error-banner twin of asset-detail-unavailable; this suite drives the
-  // unavailable (not error) portfolio-blocked path.
-  'asset-detail-error',
-  'asset-detail-id-short',
-  'asset-detail-name',
-  'asset-history-note',
+  // Seed mnemonic reveal generates faster than Playwright can catch.
+  'seed-generating',
+  // Clipboard feedback is a 1.5s flash after copy — unit-covered.
+  'address-copied-feedback',
+  // Single-asset hero chrome. Hosted E2E forces multi_asset:true via the
+  // info-proxy, so the single-asset surface never mounts in CI.
+  'balance-value',
+  'balance-toggle-btn',
+  // Funded portfolio/asset rows need AccountState inventory — not wired
+  // on the closed v1 thin-client surface (honest unavailable banners only).
   'asset-row',
-  'asset-row-decimals',
-  'asset-row-id',
   'asset-row-name',
+  'asset-row-id',
+  'asset-row-balance',
+  'asset-row-decimals',
   'asset-row-sends',
   'asset-send-btn',
   'asset-tx-row',
-  // Single-asset-only chrome (CI info-proxy forces multi_asset; the
-  // single-asset branch is not driven).
-  'balance-toggle-btn',
-  'balance-value',
-  // Stale/error-only notes (need a successful-then-stale or info-error
-  // fixture this suite does not have).
-  // Only renders on a history-read error; the suite has no such fixture
-  // (same ground as history-stale-note).
-  'history-error-banner',
-  'history-stale-note',
+  'asset-detail-name',
+  'asset-detail-balance',
+  'asset-detail-id-short',
+  'asset-history-note',
+  // Error-banner twin of asset-detail-unavailable; this suite drives the
+  // unavailable (not error) portfolio-blocked path.
+  'asset-detail-error',
+  // Stale notes only render after a successful read that later goes stale —
+  // impossible while portfolio/history remain unavailable by design.
   'portfolio-stale-note',
+  'history-stale-note',
+  // history-error-banner only when historyBlocked (failed history read).
+  // Hosted E2E happy path has a successful read (empty or list); unit-covered
+  // in src/__tests__/components/WalletScreen.history.test.tsx.
+  'history-error-banner',
+  // network-info-error only after /v1/info failure with infoLoaded; unit-tested.
   'network-info-error',
-  // Legacy onboarding (discard/reimport of a pre-v1 stored seed; not in
-  // the current create/restore path).
-  'onboarding-discard-legacy-btn',
-  'seed-reimport-required',
-  // Transient generating flash (02-create-seed.spec.ts already documents
-  // that pure-TS generation is too fast to catch; same ground as
-  // seed-creating-btn).
-  'seed-generating',
-  // QR scanner internals (send is hardcoded unavailable; 15/16 only assert
-  // the modal is absent).
+  // Send is hard-disabled (sendAvailable=false); QrScanModal never mounts.
   'qr-scan-camera-error',
   'qr-scan-close-btn',
   'qr-scan-file-error',
@@ -115,6 +113,17 @@ const EXEMPT_TESTIDS = new Set([
   'qr-scan-starting',
   'qr-scan-upload-btn',
   'qr-scan-video',
+  // Legacy store / IDB failure surfaces — forced only via unit tests of the
+  // wallet store; no durable fixture for E2E without inventing storage state.
+  'seed-reimport-required',
+  'onboarding-discard-legacy-btn',
+  'onboarding-discard-legacy-error',
+  'storage-error',
+  'storage-error-retry',
+  // On-chain explorer link only when the pull record carries a broadcast txid
+  // and an explorer base URL is configured — not guaranteed on the CI mint.
+  'tx-detail-explorer-link',
+  'tx-detail-txid',
 ]);
 
 // Generic wrapper components are allowed to expose <button> without testid
@@ -187,9 +196,12 @@ function rel(file) {
 
 // --- Section A + B: testid universe ---------------------------------------
 
-const SRC_LITERAL_RE = /(?:data-)?testid=["']([a-z0-9-]+)["']/gi;
+// JSX: data-testid="…" / testid="…" / React prop testId="…" (UnavailableBanner).
+const SRC_LITERAL_RE = /(?:data-)?test[Ii]d=["']([a-z0-9-]+)["']/gi;
 // Capture the full template content; the variable parts ${...} become wildcards.
-const SRC_TEMPLATE_RE = /(?:data-)?testid=\{`([^`]+)`\}/gi;
+const SRC_TEMPLATE_RE = /(?:data-)?test[Ii]d=\{`([^`]+)`\}/gi;
+// Ternary / expression forms: data-testid={cond ? 'a' : 'b'} or testId={…}.
+const SRC_EXPR_STRING_RE = /(?:data-)?test[Ii]d=\{[^}]*['"]([a-z0-9-]+)['"]/gi;
 const E2E_GETBY_RE = /getByTestId\(['"]([a-z0-9-]+)['"]\)/g;
 const E2E_LOCATOR_RE = /\[data-testid=["']([a-z0-9-]+)["']\]/g;
 const E2E_STRING_RE = /['"]([a-z][a-z0-9-]{3,})['"]/g; // fallback: any quoted token
@@ -206,14 +218,23 @@ function templateToRegex(template) {
   return new RegExp('^' + pattern + '$');
 }
 
+function registerSrcId(id, file, line) {
+  if (!srcLiteralIds.has(id)) srcLiteralIds.set(id, []);
+  srcLiteralIds.get(id).push({ file: rel(file), line });
+}
+
 for (const file of walk(srcDir, ['.ts', '.tsx'])) {
   const lines = fs.readFileSync(file, 'utf8').split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     for (const m of line.matchAll(SRC_LITERAL_RE)) {
-      const id = m[1];
-      if (!srcLiteralIds.has(id)) srcLiteralIds.set(id, []);
-      srcLiteralIds.get(id).push({ file: rel(file), line: i + 1 });
+      registerSrcId(m[1], file, i + 1);
+    }
+    // Multi-line expressions are rare; also scan the joined ±1 line window
+    // so `data-testid={a ? 'x' : 'y'}` split across lines still registers.
+    const window = lines.slice(Math.max(0, i - 1), Math.min(lines.length, i + 2)).join('\n');
+    for (const m of window.matchAll(SRC_EXPR_STRING_RE)) {
+      registerSrcId(m[1], file, i + 1);
     }
     for (const m of line.matchAll(SRC_TEMPLATE_RE)) {
       const template = m[1];

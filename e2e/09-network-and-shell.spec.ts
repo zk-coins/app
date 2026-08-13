@@ -53,15 +53,15 @@ test.describe('Network info + AppShell', () => {
   test('network-loading', async ({ page }) => {
     // Capture the network-not-loaded state on Settings.
     //
-    // `aliceLogin` mounts WalletScreen, whose `useEffect(api.info, …)`
-    // fires immediately and populates `networkName` in the store.
-    // Wait for that first roundtrip to settle BEFORE installing the
-    // route block — otherwise the in-flight response sneaks past the
-    // intercept and writes `networkName` back to its real value as
-    // soon as Settings has rendered, re-introducing the Network row
-    // and turning the loading baseline into a flake.
+    // `aliceLogin` mounts WalletScreen, whose `useCapabilities.fetch`
+    // fires and populates `network` in the Network store. Wait for that
+    // first roundtrip to settle BEFORE installing the route block —
+    // otherwise the in-flight response sneaks past the intercept and
+    // writes `network` back to its real value as soon as Settings has
+    // rendered, re-introducing the Network row and turning the loading
+    // baseline into a flake.
     type StoreShim = {
-      getState: () => { networkName: string };
+      getState: () => { network: string };
       setState: (s: Record<string, unknown>) => void;
     };
     await expect
@@ -69,7 +69,7 @@ test.describe('Network info + AppShell', () => {
         () =>
           page.evaluate(() => {
             const w = window as unknown as { __useNetworkStore?: StoreShim };
-            return w.__useNetworkStore?.getState().networkName ?? '';
+            return w.__useNetworkStore?.getState().network ?? '';
           }),
         { timeout: 10_000 },
       )
@@ -84,13 +84,13 @@ test.describe('Network info + AppShell', () => {
     });
     await page.evaluate(() => {
       const w = window as unknown as { __useNetworkStore?: StoreShim };
-      w.__useNetworkStore?.setState({ networkName: '' });
+      w.__useNetworkStore?.setState({ network: '' });
     });
     await page.getByTestId('nav-settings').click();
     await expect(page.getByTestId('settings-heading')).toBeVisible({ timeout: 10_000 });
-    // The About "Network" row is `{networkName && …}`-gated, so with an
-    // empty networkName it is absent while the always-present node host
-    // still renders. This baseline captures that network-not-loaded view.
+    // The About "Network" row is `{network && …}`-gated, so with an empty
+    // network it is absent while the always-present node host still
+    // renders. This baseline captures that network-not-loaded view.
     await expect(page.getByTestId('settings-node-host')).toBeVisible({ timeout: 10_000 });
     await snap(page, '09-network-loading');
   });

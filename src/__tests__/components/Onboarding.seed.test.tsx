@@ -178,9 +178,53 @@ describe('Onboarding — reimportRequired', () => {
     expect(onDiscard).toHaveBeenCalled();
   });
 
+  it('disables discard while onDiscardLegacy is pending', async () => {
+    const user = userEvent.setup();
+    let resolveDiscard!: () => void;
+    const onDiscard = vi.fn(
+      () =>
+        new Promise<void>((resolve) => {
+          resolveDiscard = resolve;
+        }),
+    );
+    render(<Onboarding reimportRequired onDiscardLegacy={onDiscard} />);
+    const btn = screen.getByTestId('onboarding-discard-legacy-btn');
+    await user.click(btn);
+    expect(btn).toBeDisabled();
+    expect(onDiscard).toHaveBeenCalled();
+    resolveDiscard();
+    await waitFor(() => {
+      expect(btn).not.toBeDisabled();
+    });
+  });
+
+  it('shows discard error and re-enables the button when onDiscardLegacy rejects', async () => {
+    const user = userEvent.setup();
+    const onDiscard = vi.fn().mockRejectedValue(new Error('discard blew up'));
+    render(<Onboarding reimportRequired onDiscardLegacy={onDiscard} />);
+    const btn = screen.getByTestId('onboarding-discard-legacy-btn');
+    await user.click(btn);
+    expect(await screen.findByTestId('onboarding-discard-legacy-error')).toHaveTextContent(
+      /discard blew up/,
+    );
+    expect(btn).not.toBeDisabled();
+  });
+
+  it('shows generic discard error when onDiscardLegacy rejects a non-Error', async () => {
+    const user = userEvent.setup();
+    const onDiscard = vi.fn().mockRejectedValue('opaque discard');
+    render(<Onboarding reimportRequired onDiscardLegacy={onDiscard} />);
+    const btn = screen.getByTestId('onboarding-discard-legacy-btn');
+    await user.click(btn);
+    expect(await screen.findByTestId('onboarding-discard-legacy-error')).toHaveTextContent(
+      'Failed to discard old wallet data',
+    );
+    expect(btn).not.toBeDisabled();
+  });
+
   it('reimport restore starts at seed-import from welcome next', async () => {
     const user = userEvent.setup();
-    render(<Onboarding reimportRequired />);
+    render(<Onboarding reimportRequired onDiscardLegacy={vi.fn()} />);
     await user.click(screen.getByTestId('onboarding-restore-btn'));
     expect(screen.getByTestId('seed-import-textarea')).toBeInTheDocument();
     expect(screen.queryByTestId('seed-flow')).not.toBeInTheDocument();

@@ -15,8 +15,7 @@ type Mode =
   | { kind: 'ios' } // iOS Safari — share-icon manual instructions
   | { kind: 'manual'; body: string }; // Desktop without BIP — show address-bar hint
 
-function detectMode(): Mode {
-  /* v8 ignore next -- The happy-dom unit environment always defines window; retain this fallback for server pre-rendering. */
+export function detectMode(): Mode {
   if (typeof window === 'undefined') {
     return { kind: 'manual', body: 'Install zkCoins for the smoothest experience.' };
   }

@@ -11,6 +11,7 @@ import { render } from '@/__tests__/_helpers/intl';
 import { WalletScreen } from '@/components/screens/WalletScreen';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
+import { useCapabilities } from '@/stores/capabilities';
 import { api } from '@/lib/api/client';
 
 const HOOK_MOCKS = vi.hoisted(() => ({
@@ -65,6 +66,10 @@ beforeEach(() => {
     storedAuthMethod: null,
     error: null,
   });
+  useCapabilities.setState({
+    capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: false },
+    loaded: false,
+  });
   HOOK_MOCKS.usePortfolio.mockReturnValue({
     assets: [
       {
@@ -92,6 +97,12 @@ beforeEach(() => {
     network: 'regtest',
     features: ['wallet'],
     protocol_version: 'v1',
+    capabilities: {
+      address_list: false,
+      username_claim: false,
+      lnurl: false,
+      multi_asset: true,
+    },
   });
 });
 

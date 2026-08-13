@@ -46,23 +46,23 @@ function StepHeader({ onBack }: { onBack?: () => void }) {
 
 type Step = 'welcome' | 'seed' | 'passkey' | 'seed-import' | 'passkey-restore';
 
-export interface OnboardingProps {
-  /**
-   * Legacy / incompatible wallet detected: guide the user to re-import
-   * their seed. Hides "Create wallet" and keeps the legacy blob until
-   * a successful re-import or an explicit discard.
-   */
-  reimportRequired?: boolean;
-  /** Confirmed discard of the incompatible legacy store. */
-  onDiscardLegacy?: () => void | Promise<void>;
-}
+/**
+ * Legacy / incompatible wallet detected: guide the user to re-import
+ * their seed. Hides "Create wallet" and keeps the legacy blob until
+ * a successful re-import or an explicit discard.
+ */
+export type OnboardingProps =
+  | {
+      reimportRequired: true;
+      onDiscardLegacy: () => void | Promise<void>;
+    }
+  | {
+      reimportRequired?: false;
+    };
 
-export function Onboarding({ reimportRequired = false, onDiscardLegacy }: OnboardingProps = {}) {
+export function Onboarding(props: OnboardingProps) {
   const [step, setStep] = useState<Step>('welcome');
-
-  /* v8 ignore start -- Welcome with reimportRequired renders only onRestore; this function is never invoked from a control. */
-  const onNextWhenReimport = () => setStep('seed-import');
-  /* v8 ignore stop */
+  const reimportRequired = props.reimportRequired === true;
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-bg">
@@ -76,18 +76,19 @@ export function Onboarding({ reimportRequired = false, onDiscardLegacy }: Onboar
           px-6 py-12 overflow-hidden
           md:my-10 md:rounded-2xl md:border md:border-ink md:bg-surface md:px-8 md:py-14 md:shadow-[0_20px_80px_-20px_rgba(247,147,26,0.12)]"
       >
-        {step === 'welcome' && (
-          <Welcome
-            reimportRequired={reimportRequired}
-            onNext={
+        {step === 'welcome' &&
+          (props.reimportRequired === true ? (
+            <Welcome
               reimportRequired
-                ? onNextWhenReimport
-                : () => setStep(FEATURES.PASSKEY ? 'passkey' : 'seed')
-            }
-            onRestore={() => setStep('seed-import')}
-            onDiscardLegacy={onDiscardLegacy}
-          />
-        )}
+              onRestore={() => setStep('seed-import')}
+              onDiscardLegacy={props.onDiscardLegacy}
+            />
+          ) : (
+            <Welcome
+              onNext={() => setStep(FEATURES.PASSKEY ? 'passkey' : 'seed')}
+              onRestore={() => setStep('seed-import')}
+            />
+          ))}
         {FEATURES.PASSKEY && step === 'passkey' && !reimportRequired && (
           <PasskeyFlow onBack={() => setStep('welcome')} onUseSeed={() => setStep('seed')} />
         )}
@@ -110,17 +111,24 @@ export function Onboarding({ reimportRequired = false, onDiscardLegacy }: Onboar
   );
 }
 
-function Welcome({
-  onNext,
-  onRestore,
-  reimportRequired = false,
-  onDiscardLegacy,
-}: {
-  onNext: () => void;
-  onRestore: () => void;
-  reimportRequired?: boolean;
-  onDiscardLegacy?: () => void | Promise<void>;
-}) {
+type WelcomeProps =
+  | {
+      reimportRequired: true;
+      onRestore: () => void;
+      onDiscardLegacy: () => void | Promise<void>;
+    }
+  | {
+      reimportRequired?: false;
+      onNext: () => void;
+      onRestore: () => void;
+    };
+
+function Welcome(props: WelcomeProps) {
+  const reimportRequired = props.reimportRequired === true;
+  const { onRestore } = props;
+  const [discarding, setDiscarding] = useState(false);
+  const [discardError, setDiscardError] = useState<string | null>(null);
+
   return (
     <div className="relative -mx-6 -my-12 min-h-screen overflow-hidden lg:-mx-8 lg:-my-14">
       {/* Hero glow */}
@@ -205,7 +213,7 @@ function Welcome({
         )}
 
         <div className="mt-10">
-          {reimportRequired ? (
+          {props.reimportRequired === true ? (
             <button
               data-testid="onboarding-restore-btn"
               onClick={onRestore}
@@ -217,7 +225,7 @@ function Welcome({
           ) : (
             <button
               data-testid="onboarding-create-btn"
-              onClick={onNext}
+              onClick={props.onNext}
               className="flex w-full items-center justify-center gap-2 rounded-md bg-bitcoin py-4 text-[13px] font-semibold tracking-wider text-bg transition-colors hover:bg-bitcoin-hover"
             >
               <PixelIcon name="plus" size={12} />
@@ -226,17 +234,38 @@ function Welcome({
           )}
         </div>
 
-        {reimportRequired ? (
+        {props.reimportRequired === true ? (
           <div className="mt-6 text-center">
             <button
               data-testid="onboarding-discard-legacy-btn"
+              disabled={discarding}
               onClick={() => {
-                void onDiscardLegacy?.();
+                void (async () => {
+                  setDiscarding(true);
+                  setDiscardError(null);
+                  try {
+                    await props.onDiscardLegacy();
+                  } catch (err) {
+                    setDiscardError(
+                      err instanceof Error ? err.message : 'Failed to discard old wallet data',
+                    );
+                  } finally {
+                    setDiscarding(false);
+                  }
+                })();
               }}
-              className="text-[12px] font-medium text-ink2 transition-colors hover:text-bad"
+              className="text-[12px] font-medium text-ink2 transition-colors hover:text-bad disabled:opacity-50"
             >
               Discard old wallet data
             </button>
+            {discardError && (
+              <p
+                data-testid="onboarding-discard-legacy-error"
+                className="mt-3 text-[12px] text-bad"
+              >
+                <span className="text-ink3">err:</span> {discardError}
+              </p>
+            )}
           </div>
         ) : (
           <div className="mt-6 text-center">

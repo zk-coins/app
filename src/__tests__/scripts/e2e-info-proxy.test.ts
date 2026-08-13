@@ -7,11 +7,9 @@ import type { AddressInfo } from 'node:net';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import {
-  aggregateOwnerBalance,
   createProxyServer,
   forwardHeaders,
   normalizeInfo,
-  soleAssetId,
   startupMessage,
   upstreamFailureBody,
 } from '../../../scripts/e2e-info-proxy.mjs';
@@ -58,23 +56,30 @@ describe('normalizeInfo', () => {
     expect(out.future_field).toBe('kept');
   });
 
-  it('treats non-array features as empty and skips username_domain when unset', () => {
+  it('rejects non-array features fail-closed', () => {
+    expect(() =>
+      normalizeInfo(
+        {
+          network: 'regtest',
+          features: 'wallet' as unknown as string[],
+          username_domain: 'keep-upstream.example',
+        },
+        '',
+      ),
+    ).toThrow(/features missing/);
+  });
+
+  it('keeps upstream username_domain when override domain is empty', () => {
     const out = normalizeInfo(
       {
         network: 'regtest',
-        features: 'wallet' as unknown as string[],
+        features: ['explorer'],
         username_domain: 'keep-upstream.example',
       },
       '',
     );
-    expect(out.features).toEqual([]);
     expect(out.username_domain).toBe('keep-upstream.example');
-    expect(out.capabilities).toEqual({
-      address_list: false,
-      username_claim: false,
-      lnurl: false,
-      multi_asset: true,
-    });
+    expect(out.features).toEqual(['explorer']);
   });
 });
 
@@ -87,51 +92,6 @@ describe('forwardHeaders', () => {
 
   it('skips undefined header values', () => {
     expect(forwardHeaders({ a: undefined, b: '1' })).toEqual({ b: '1' });
-  });
-});
-
-describe('aggregateOwnerBalance', () => {
-  it('sums balance + num_sends across assets and keeps the username', () => {
-    expect(
-      aggregateOwnerBalance({
-        address: 'aa'.repeat(32),
-        username: 'alice',
-        assets: [
-          { asset_id: 'cc'.repeat(32), balance: 100, num_sends: 1 },
-          { asset_id: 'dd'.repeat(32), balance: 50, num_sends: 2 },
-        ],
-      }),
-    ).toEqual({ balance: 150, num_sends: 3, username: 'alice' });
-  });
-
-  it('returns the canonical zero shape for an empty or malformed portfolio', () => {
-    expect(aggregateOwnerBalance({ address: 'aa'.repeat(32), assets: [] })).toEqual({
-      balance: 0,
-      num_sends: 0,
-    });
-    expect(aggregateOwnerBalance({})).toEqual({ balance: 0, num_sends: 0 });
-  });
-});
-
-describe('soleAssetId', () => {
-  it('returns the asset_id when the portfolio holds exactly one asset', () => {
-    expect(soleAssetId({ assets: [{ asset_id: 'cc'.repeat(32), balance: 1, num_sends: 0 }] })).toBe(
-      'cc'.repeat(32),
-    );
-  });
-
-  it('returns null for empty, ambiguous, or malformed portfolios', () => {
-    expect(soleAssetId({ assets: [] })).toBeNull();
-    expect(
-      soleAssetId({
-        assets: [
-          { asset_id: 'cc'.repeat(32), balance: 1, num_sends: 0 },
-          { asset_id: 'dd'.repeat(32), balance: 2, num_sends: 0 },
-        ],
-      }),
-    ).toBeNull();
-    expect(soleAssetId({ assets: [{ balance: 1, num_sends: 0 }] })).toBeNull();
-    expect(soleAssetId({})).toBeNull();
   });
 });
 
@@ -223,5 +183,42 @@ describe('createProxyServer', () => {
     const res = await fetch(`${proxyUrl}/v1/info`);
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({ error: 'e2e-info-proxy upstream failure' });
+  });
+
+  it('returns 400 when the incoming request has no url', async () => {
+    const server = createProxyServer({
+      nodeUrl: 'http://127.0.0.1:1',
+      usernameDomain: 'dev.zkcoins.app',
+    });
+    const { Socket } = await import('node:net');
+    const req = new http.IncomingMessage(new Socket());
+    // Node initialisiert url als ""; der Guard behandelt leere/fehlende URL fail-closed als 400.
+    req.method = 'GET';
+
+    let ended = '';
+    const headers: Record<string, string> = {};
+    const res = {
+      statusCode: 0,
+      setHeader(name: string, value: string | number) {
+        headers[name.toLowerCase()] = String(value);
+      },
+      end(chunk?: string | Buffer) {
+        if (chunk !== undefined && chunk !== null) {
+          ended = Buffer.isBuffer(chunk) ? chunk.toString('utf8') : String(chunk);
+        }
+      },
+    } as unknown as http.ServerResponse;
+
+    const handler = server.listeners('request')[0] as (
+      req: http.IncomingMessage,
+      res: http.ServerResponse,
+    ) => void | Promise<void>;
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(400);
+    expect(headers['content-type']).toBe('application/json');
+    expect(ended).toContain('missing request url');
+    expect(JSON.parse(ended)).toEqual({ error: 'missing request url' });
+    server.close();
   });
 });

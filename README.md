@@ -5,7 +5,7 @@
 
 **Private Bitcoin payments via Shielded CSV** — no new chain, no token, no consensus change, no trusted operator. Only Bitcoin, zero-knowledge proofs, and the user's own keys.
 
-The end-user **wallet** for zkCoins — a Next.js 15 PWA. The seed is encrypted on-device (IndexedDB); BIP-32 derivation and Schnorr signing run via `@zkcoins/sdk` pure-TS crypto on-device. Installable, LNURL receive.
+The end-user **wallet** for zkCoins — a Next.js 15 PWA. The seed is encrypted on-device (IndexedDB); BIP-32 derivation and Schnorr signing run via `@zkcoins/sdk` pure-TS crypto on-device. Installable PWA; Send/Receive are honestly marked not-available in this build (no live LNURL or send path).
 
 > Live: [zkcoins.app](https://zkcoins.app) (PRD) · [dev.zkcoins.app](https://dev.zkcoins.app) (DEV) — Full system docs: **[docs.zkcoins.com](https://docs.zkcoins.com)** · Specification: **[docs.zkcoins.com/specification](https://docs.zkcoins.com/specification)**
 
@@ -19,7 +19,7 @@ zkCoins lets you send value on Bitcoin without anyone seeing the amount, the ass
 
 | Layer                      | What it is                                                                     | Repo                                                                                                        |
 | -------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| **App · Explorer**         | end-user wallet (LNURL receive) · public explorer web-app                      | **[`zk-coins/app`](https://github.com/zk-coins/app)** ← this repo · `zk-coins/explorer` _(planned)_         |
+| **App · Explorer**         | end-user wallet · public explorer web-app _(planned)_                          | **[`zk-coins/app`](https://github.com/zk-coins/app)** ← this repo · `zk-coins/explorer` _(planned)_         |
 | **SDK**                    | thin TypeScript client — on-device keys, signing, node/API calls               | [`zk-coins/sdk`](https://github.com/zk-coins/sdk)                                                           |
 | **zkCoins API**            | public REST + LNURL, hosted-wallet service (optional)                          | currently in [`zk-coins/node`](https://github.com/zk-coins/node); a separate API layer is the target design |
 | **zkCoins node**           | trustless kernel — scan · accumulator · verify · prove · store · publisher     | [`zk-coins/node`](https://github.com/zk-coins/node)                                                         |
@@ -49,7 +49,7 @@ Full rationale: [docs.zkcoins.com/tech-decisions](https://docs.zkcoins.com/tech-
 
 The wallet itself lives **on-device**: seed material is encrypted in IndexedDB (AES-256-GCM), and signing + BIP-32 derivation run via `@zkcoins/sdk` pure-TS crypto. Wallet creation, restore, unlock, and key custody are local operations — the mnemonic never leaves the device unencrypted.
 
-**Send / Receive / Mint reach the node.** ZK proof generation runs on the configured zkCoins node (default `https://api.zkcoins.app`, read from `NEXT_PUBLIC_API_URL` in `src/stores/network.ts`). The app posts the full private witness — sender, recipient, amount, in-coin / out-coin slot layout, source aggregator data, account state — and the node returns a proof. The node that proves for you therefore sees your transaction in cleartext.
+**Send and Receive are not available in the current UI.** The wallet Send CTA is disabled (no input-coin inventory selection yet); `/send` shows an unavailable banner and never posts `/v1/tx`. `/receive` shows `receive-not-available` (no NIP-05/name-claim, no QR; Send also rejects raw `zk1` addresses). Create-coin/mint can reach the node when multi-asset is enabled. A future live send path would post the full private witness — sender, recipient, amount, in-coin / out-coin slot layout, source aggregator data, account state — to the configured zkCoins node (default `https://api.zkcoins.app`, from `NEXT_PUBLIC_API_URL` in `src/stores/network.ts`) for ZK proof generation; that node would therefore see the transaction in cleartext.
 
 This is the **Bitcoin full-node model**: your wallet trusts _your_ node, exactly as a Bitcoin wallet trusts your own `bitcoind`. A foreign operator can never steal, forge, or double-spend your coins — that is enforced cryptographically (recursive proofs + Bitcoin-anchored nullifiers). What it can see is your privacy, and it can affect liveness — the same spectrum as using an Electrum/SPV server instead of your own Bitcoin node. The **on-chain footprint stays private regardless**: nullifiers and Taproot inscriptions carry no readable transaction data. The trust boundary is the **node operator**, not the chain.
 
@@ -87,7 +87,7 @@ npm run lint:fix # auto-fix
 | `npm run test:coverage` | v8 coverage — CI enforces 100% on the default-active surface (everything not behind a `NEXT_PUBLIC_ENABLE_*` flag) |
 | `npm run test:e2e`      | Playwright E2E against `E2E_BASE_URL`                                                                              |
 
-**Prerequisites:** Node 22+, npm 10+. The `@zkcoins/sdk` dependency is `file:../sdk` (sibling checkout of [`zk-coins/sdk`](https://github.com/zk-coins/sdk)). See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup and code style.
+**Prerequisites:** Node 22+, npm 10+. The `@zkcoins/sdk` dependency is the Git dependency `github:zk-coins/sdk#feat/v1-cross-parity` ([`zk-coins/sdk`](https://github.com/zk-coins/sdk), branch `feat/v1-cross-parity`). No sibling checkout is required. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup and code style.
 
 ### Configuration
 
@@ -102,18 +102,18 @@ Build-time `NEXT_PUBLIC_ENABLE_*` flags exist for local-dev previews of gated UI
 
 ### Docker
 
-Build from the monorepo parent so `file:../sdk` resolves (app/ and sdk/ siblings):
+Build from the app repo root (`npm ci` resolves the Git SDK dependency during the image build):
 
 ```bash
-# from the parent of app/ and sdk/
-docker build -f app/Dockerfile -t zkcoins/app .
+# from the app repository root
+docker build -t zkcoins/app .
 docker run -p 3090:3090 \
   -e NEXT_PUBLIC_API_URL=https://api.zkcoins.app \
   -e NEXT_PUBLIC_EXPLORER_URL=https://your-explorer \
   zkcoins/app
 ```
 
-Image base: Node 22 (matches `@zkcoins/sdk` engines). Deploy workflows check out both `zk-coins/app` and `zk-coins/sdk` into that layout.
+Image base: Node 22 (matches `@zkcoins/sdk` engines). The SDK is fetched as a Git dependency — no sibling `zk-coins/sdk` checkout is required.
 
 ### Project layout
 
