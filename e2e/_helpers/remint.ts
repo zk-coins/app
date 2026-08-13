@@ -14,7 +14,7 @@
  *
  * Kept in its own dependency-free module so the predicate stays
  * unit-testable (see `src/__tests__/e2e/remint-guard.test.ts`) without
- * pulling the SDK/wasm-loading `_helpers/api.ts` into vitest.
+ * pulling the SDK `_helpers/api.ts` into vitest.
  */
 
 /** Node message fragment for a rejected re-mint (`account_node.rs`). */

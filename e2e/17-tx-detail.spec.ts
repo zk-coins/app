@@ -3,7 +3,7 @@
  *
  * Covers the tx-detail feature: a funded wallet's history row is
  * clickable and opens a dedicated detail page that renders every field
- * the node's `GET /v1/history/{id}` returns. Alice (funded by
+ * the ownership-pull history adapter (`api.getTransaction`) returns. Alice (funded by
  * globalSetup) has a faucet mint, so her first row's detail is a
  * `mint` with the decoded account-state snapshot.
  *

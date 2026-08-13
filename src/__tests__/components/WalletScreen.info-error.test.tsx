@@ -101,6 +101,5 @@ describe('WalletScreen — info error is visible', () => {
     await waitFor(() => {
       expect(fail).toHaveBeenCalled();
     });
-    expect(applySpy).toBeDefined();
   });
 });

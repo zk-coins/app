@@ -1,6 +1,6 @@
 /**
- * Transaction-list rendering in `WalletScreen` from server `/v1/history`
- * truth (issue #175). Complements `WalletScreen.polling.test.tsx`
+ * Transaction-list rendering in `WalletScreen` from the ownership-pull
+ * `getHistory` adapter (issue #175). Complements `WalletScreen.polling.test.tsx`
  * (portfolio cadence) by exercising the list/empty-state gating and the
  * per-row mapping of the node's `HistoryItem` shape (kind → label,
  * created_at as Unix-seconds or ISO). Labels are German (the default locale).

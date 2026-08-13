@@ -56,7 +56,7 @@ const EXEMPT_TESTIDS = new Set([
   // Self-hosters who flip the server-side feature ship their own E2E.
   'username-claim-btn',
   // Disabled loading states are visually transient -- Playwright cannot
-  // reliably catch them without artificially slowing WASM calls.
+  // reliably catch them without artificially slowing stage transitions.
   'seed-creating-btn',
   'seed-import-restoring-btn',
   // Transient send-job phase label (queued/proving/awaiting_signature/

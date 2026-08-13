@@ -174,5 +174,5 @@ export const SCREENS: readonly Screen[] = [
   },
   // `/simulate` (dev demo-history route) was removed in issue #175: it
   // injected fabricated rows into the retired local transaction store,
-  // which no longer exists — history is server-owned (`GET /v1/history`).
+  // which no longer exists — history is server-owned via the ownership-pull adapter (`api.getHistory`).
 ];

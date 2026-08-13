@@ -87,7 +87,7 @@ async function infoWithRetry(
  *
  * The first `page.goto('/')` after a CI runner boot occasionally exceeds
  * Playwright's default 30 s navigation timeout — Cloudflare cold path,
- * Next.js standalone first-paint, plus the WASM bundle handshake all
+ * Next.js standalone first-paint and the first SDK/network handshake all
  * stack on the very first request. Subsequent navigations in the same
  * context are fast. Bumping the context-wide default to 90 s costs
  * nothing on the happy path and removes a class of flake that only
