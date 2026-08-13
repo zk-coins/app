@@ -158,31 +158,41 @@ const STATUS_LABEL_KEYS: Record<
 function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDomain: string }) {
   const t = useTranslations('wallet');
   const kind = detail.kind;
-  let positive: boolean;
+  let polarity: 'credit' | 'debit' | 'unknown';
   let label: string;
   let HeroIcon: typeof ArrowUpRight;
   if (kind === 'mint') {
-    positive = true;
+    polarity = 'credit';
     label = t('txMint');
     HeroIcon = Plus;
   } else if (kind === 'send') {
-    positive = false;
+    polarity = 'debit';
     label = t('txSent');
     HeroIcon = ArrowUpRight;
   } else if (kind === 'receive') {
-    positive = true;
+    polarity = 'credit';
     label = t('txReceived');
     HeroIcon = ArrowDownLeft;
   } else {
-    positive = false;
+    polarity = 'unknown';
     label = t('txUnknown');
     HeroIcon = Receipt;
   }
 
+  const isDebit = polarity === 'debit';
   const explorerHref = EXPLORER_URL && detail.txid ? `${EXPLORER_URL}/tx/${detail.txid}` : null;
   const accountAddr = detail.address ?? '';
   const zkAddress = accountAddr ? toZkAddress(accountAddr, usernameDomain) : '';
   const amount = typeof detail.amount === 'number' ? detail.amount : undefined;
+  // formatBtcCompact always emits +/−; unknown polarity must not call it.
+  const amountDisplay =
+    amount === undefined
+      ? '—'
+      : polarity === 'debit'
+        ? `${formatBtcCompact(-amount)} BTC`
+        : polarity === 'credit'
+          ? `${formatBtcCompact(amount)} BTC`
+          : `${formatBtc(amount)} BTC`;
   const rawStatus = detail.status;
   const status: TxStatusKey =
     typeof rawStatus === 'string' && rawStatus.length > 0 && KNOWN_STATUSES.has(rawStatus)
@@ -205,7 +215,7 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
       <div className="flex flex-col items-center text-center">
         <div
           className={`flex h-14 w-14 items-center justify-center rounded-full ${
-            positive ? 'bg-line text-ink2' : 'bg-bitcoin/10 text-bitcoin'
+            isDebit ? 'bg-bitcoin/10 text-bitcoin' : 'bg-line text-ink2'
           }`}
         >
           <HeroIcon size={24} strokeWidth={2.25} />
@@ -216,10 +226,10 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
         <p
           data-testid="tx-detail-v-amount"
           className={`mt-1 mono text-[28px] font-bold tabular-nums ${
-            positive ? 'text-ink' : 'text-bitcoin'
+            isDebit ? 'text-bitcoin' : 'text-ink'
           }`}
         >
-          {amount === undefined ? '—' : `${formatBtcCompact(positive ? amount : -amount)} BTC`}
+          {amountDisplay}
         </p>
         <span
           data-testid="tx-detail-status"
@@ -351,7 +361,7 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
       {/* Privacy */}
       <Section title="Privacy">
         <Row label="Counterparty" testid="tx-detail-counterparty">
-          <span className="text-[12px] text-ink3">{detail.counterparty ?? 'Private'}</span>
+          <span className="text-[12px] text-ink3">{detail.counterparty ?? '—'}</span>
         </Row>
         <Row label="Memo" value={detail.memo ?? '—'} testid="tx-detail-memo" />
         <Row label="Source" value="Your node" testid="tx-detail-source" />

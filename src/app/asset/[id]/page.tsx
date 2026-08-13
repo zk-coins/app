@@ -22,6 +22,7 @@ export default function AssetDetailPage() {
   const tWallet = useTranslations('wallet');
   const account = useWalletStore((s) => s.account);
   const infoError = useNetworkStore((s) => s.infoError);
+  const isLoading = useWalletStore((s) => s.isLoading);
   const { MULTI_ASSET: multiAssetRuntime, loaded: featuresLoaded } = useFeatures();
 
   useEffect(() => {
@@ -65,6 +66,12 @@ export default function AssetDetailPage() {
   // not-found only after a successful, available portfolio read without this asset
   const asset = portfolioAvailable ? assets.find((a) => a.asset_id === assetId) : undefined;
   const portfolioBlocked = loaded && (!portfolioAvailable || portfolioError !== null);
+  const walletUnavailable = account == null && !isLoading;
+  const rawDecimals = asset?.decimals;
+  const validDecimals =
+    typeof rawDecimals === 'number' && Number.isInteger(rawDecimals) && rawDecimals >= 0
+      ? rawDecimals
+      : null;
 
   return (
     <AppShell showNav={false}>
@@ -82,7 +89,24 @@ export default function AssetDetailPage() {
         </span>
       </header>
 
-      {portfolioBlocked ? (
+      {walletUnavailable ? (
+        <div
+          data-testid="asset-detail-wallet-unavailable"
+          className="flex min-h-[60vh] flex-col items-center justify-center text-center"
+          role="status"
+        >
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-line bg-surface text-ink4">
+            <Info size={22} strokeWidth={1.75} />
+          </div>
+          <p className="mt-4 text-[15px] font-semibold text-ink">{tWallet('txUnlockToView')}</p>
+          <Link
+            href="/"
+            className="mt-6 rounded-md bg-bitcoin px-6 py-2.5 text-[13px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover"
+          >
+            {t('backToWallet')}
+          </Link>
+        </div>
+      ) : portfolioBlocked ? (
         <div
           data-testid={portfolioError ? 'asset-detail-error' : 'asset-detail-unavailable'}
           className="flex min-h-[60vh] flex-col items-center justify-center text-center"
@@ -136,7 +160,11 @@ export default function AssetDetailPage() {
               data-testid="asset-detail-balance"
               className="mt-1 mono text-[34px] font-bold tabular-nums text-ink"
             >
-              {formatAssetAmount(asset.balance, asset.decimals)}
+              {validDecimals !== null &&
+              Number.isSafeInteger(asset.balance) &&
+              asset.balance >= 0
+                ? formatAssetAmount(asset.balance, validDecimals)
+                : t('unknownAmount')}
             </p>
             <p
               data-testid="asset-detail-id-short"
@@ -162,11 +190,17 @@ export default function AssetDetailPage() {
                 </span>
               </DetailRow>
               <DetailRow label={t('decimals')} testid="asset-row-decimals">
-                <span className="mono text-[12px] text-ink">{asset.decimals ?? 0}</span>
+                <span className="mono text-[12px] text-ink">
+                  {validDecimals !== null ? validDecimals : t('unknownDecimals')}
+                </span>
               </DetailRow>
               <DetailRow label={t('balanceLabel')} testid="asset-row-balance">
                 <span className="mono text-[12px] text-ink">
-                  {formatAssetAmount(asset.balance, asset.decimals)}
+                  {validDecimals !== null &&
+                  Number.isSafeInteger(asset.balance) &&
+                  asset.balance >= 0
+                    ? formatAssetAmount(asset.balance, validDecimals)
+                    : t('unknownAmount')}
                 </span>
               </DetailRow>
               <DetailRow label={t('sends')} testid="asset-row-sends">
@@ -245,26 +279,27 @@ function AssetHistory({
     <ul className="space-y-2">
       {items.map((tx) => {
         const kind = tx.kind;
-        let positive: boolean;
+        let polarity: 'credit' | 'debit' | 'unknown';
         let label: string;
         let Icon: typeof ArrowUpRight;
         if (kind === 'mint') {
-          positive = true;
+          polarity = 'credit';
           label = labels.mint;
           Icon = Plus;
         } else if (kind === 'send') {
-          positive = false;
+          polarity = 'debit';
           label = labels.sent;
           Icon = ArrowUpRight;
         } else if (kind === 'receive') {
-          positive = true;
+          polarity = 'credit';
           label = labels.received;
           Icon = ArrowDownLeft;
         } else {
-          positive = false;
+          polarity = 'unknown';
           label = labels.unknown;
-          Icon = ArrowUpRight;
+          Icon = Receipt;
         }
+        const isDebit = polarity === 'debit';
         const amountText = typeof tx.amount === 'number' ? tx.amount.toLocaleString('en-US') : '—';
         return (
           <li key={tx.id}>
@@ -276,7 +311,7 @@ function AssetHistory({
               <div className="flex items-center gap-3">
                 <div
                   className={`flex h-9 w-9 items-center justify-center rounded-md ${
-                    positive ? 'bg-line text-ink2' : 'bg-bitcoin/10 text-bitcoin'
+                    isDebit ? 'bg-bitcoin/10 text-bitcoin' : 'bg-line text-ink2'
                   }`}
                 >
                   <Icon size={15} strokeWidth={2.25} />

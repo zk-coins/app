@@ -99,6 +99,7 @@ export default function CreateCoinPage() {
           amount: trimmedAmount,
           mnemonic: account.mnemonic,
           nkCommit: account.nkCommit,
+          accountIndex: 0,
         },
         { onPhase: (job: JobStatus) => setPhase(job.phase ?? null) },
       );

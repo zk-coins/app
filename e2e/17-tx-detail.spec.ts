@@ -32,10 +32,6 @@ const VALUE_TESTIDS = [
   'tx-detail-v-txid',
   'tx-detail-v-block-height',
   'tx-detail-v-commit-value',
-  // Non-masked locator ids referenced for audit coverage (explorer-link
-  // may be absent when there is no explorerHref).
-  'tx-detail-txid',
-  'tx-detail-explorer-link',
 ];
 
 /** Log Alice in and open the detail page for her first (newest) tx. */
@@ -54,20 +50,20 @@ test.describe('Transaction detail', () => {
     await openFirstTxDetail(page);
 
     // v1 history never carries a real per-record status (the pull record has
-    // no status/confirmation field), so the UI reports pending and awaiting confirmation.
-    await expect(page.getByTestId('tx-detail-label')).toHaveText('Faucet');
-    await expect(page.getByTestId('tx-detail-status')).toContainText('pending');
-    await expect(page.getByTestId('tx-detail-direction')).toContainText('Faucet');
+    // no status/confirmation field), so the UI reports Status unknown.
+    await expect(page.getByTestId('tx-detail-label')).toHaveText('Created');
+    await expect(page.getByTestId('tx-detail-status')).not.toContainText('pending');
+    await expect(page.getByTestId('tx-detail-direction')).not.toContainText('Faucet');
     await expect(page.getByTestId('tx-detail-account')).toBeVisible();
-    await expect(page.getByTestId('tx-detail-confirmation')).toHaveText('Awaiting confirmation');
-    await expect(page.getByTestId('tx-detail-counterparty')).toContainText('Private');
+    await expect(page.getByTestId('tx-detail-confirmation')).toHaveText('Status unknown');
+    await expect(page.getByTestId('tx-detail-counterparty')).toBeVisible();
+    await expect(page.getByTestId('tx-detail-counterparty')).not.toContainText('Private');
     await expect(page.getByTestId('tx-detail-memo')).toBeVisible();
     await expect(page.getByTestId('tx-detail-source')).toContainText('Your node');
     // Locator fields that always render (value cells may be "—" when the
     // pull record has no decoded snapshot — still present for layout).
     await expect(page.getByTestId('tx-detail-v-balance-after')).toBeVisible();
     await expect(page.getByTestId('tx-detail-v-num-sends')).toBeVisible();
-    await expect(page.getByTestId('tx-detail-txid')).toBeVisible();
     // The loading frame has resolved.
     await expect(page.getByTestId('tx-detail-loading')).toHaveCount(0);
 
@@ -79,7 +75,7 @@ test.describe('Transaction detail', () => {
   test('tx-detail-mobile', async ({ page }) => {
     await setViewport(page, 'mobile');
     await openFirstTxDetail(page);
-    await expect(page.getByTestId('tx-detail-label')).toHaveText('Faucet');
+    await expect(page.getByTestId('tx-detail-label')).toHaveText('Created');
     await snap(page, '17-tx-detail-mobile', {
       fullPage: true,
       mask: VALUE_TESTIDS.map((t) => page.getByTestId(t)),
@@ -107,14 +103,13 @@ test.describe('Transaction detail', () => {
     });
   });
 
-  test('tx-detail-missing', async ({ page }) => {
-    // A hard navigation to a tx URL drops the in-memory account, so the
-    // page resolves to the not-found state without a doomed request — the
-    // same surface a genuinely-unknown id renders. Covers the missing UI.
+  test('tx-detail-wallet-unavailable-after-hard-navigation', async ({ page }) => {
+    // Hard-nav after login drops the in-memory account → wallet-unavailable,
+    // not not-found. Snapshot name kept for golden continuity.
     await setViewport(page, 'mobile');
     await aliceLogin(page);
     await page.goto('/tx/999999999');
-    await expect(page.getByTestId('tx-detail-missing')).toContainText('Transaction not found', {
+    await expect(page.getByTestId('tx-detail-wallet-unavailable')).toBeVisible({
       timeout: 15_000,
     });
     await snap(page, '17-tx-detail-missing', { fullPage: true });

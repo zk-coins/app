@@ -6,6 +6,7 @@ import {
   formatBtcSigned,
   formatBtcCompact,
   formatUsd,
+  MOCK_BTC_USD,
   truncateAddress,
   formatRelative,
   formatTimeOnly,
@@ -110,14 +111,14 @@ describe('formatBtcCompact', () => {
 });
 
 describe('formatUsd', () => {
-  it('formats with default mock BTC price', () => {
+  it('formats with explicit mock BTC price', () => {
     // 100_000_000 sats * $62,000 = $62,000.00
-    const result = formatUsd(100_000_000);
+    const result = formatUsd(100_000_000, MOCK_BTC_USD);
     expect(result).toBe('62,000.00');
   });
 
   it('formats zero', () => {
-    expect(formatUsd(0)).toBe('0.00');
+    expect(formatUsd(0, MOCK_BTC_USD)).toBe('0.00');
   });
 
   it('uses custom price', () => {
@@ -128,7 +129,7 @@ describe('formatUsd', () => {
 
   it('formats small amounts', () => {
     // 10_000 sats * $62,000 = $6.20
-    const result = formatUsd(10_000);
+    const result = formatUsd(10_000, MOCK_BTC_USD);
     expect(result).toBe('6.20');
   });
 });

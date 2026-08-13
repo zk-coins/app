@@ -78,17 +78,22 @@ describe('TransactionDetailPage', () => {
     expect(screen.getByTestId('tx-detail-v-balance-before')).toHaveTextContent('—');
     expect(screen.getByTestId('tx-detail-v-num-sends')).toHaveTextContent('0');
     expect(screen.getByTestId('tx-detail-txid')).toHaveTextContent('Not yet broadcast');
-    expect(screen.getByTestId('tx-detail-counterparty')).toHaveTextContent('Private');
+    expect(screen.getByTestId('tx-detail-counterparty')).toHaveTextContent('—');
     expect(screen.getByTestId('tx-detail-source')).toHaveTextContent('Your node');
     // Pending records stay explicitly unconfirmed.
     expect(screen.getByTestId('tx-detail-confirmation')).toHaveTextContent(
       'Wartet auf Bestätigung',
     );
-    expect(spy).toHaveBeenCalledWith('7', {
-      address: ALICE.address,
-      mnemonic: ALICE.mnemonic,
-      nkCommit: ALICE.nkCommit,
-    });
+    expect(spy).toHaveBeenCalledWith(
+      '7',
+      {
+        address: ALICE.address,
+        mnemonic: ALICE.mnemonic,
+        nkCommit: ALICE.nkCommit,
+        accountIndex: 0,
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it('renders a confirmed send: signed amount, confirmation state, raw txid', async () => {
@@ -123,7 +128,7 @@ describe('TransactionDetailPage', () => {
     expect(await screen.findByTestId('tx-detail-label')).toHaveTextContent('Empfangen');
   });
 
-  it('maps unknown kinds to Unknown with debit chrome, not receive credit', async () => {
+  it('maps unknown kinds to Unknown with neutral chrome, not receive credit', async () => {
     spy.mockResolvedValue({ ...MINT, kind: 'burn', amount: 10_000 });
     render(<TransactionDetailPage />);
 
@@ -131,11 +136,12 @@ describe('TransactionDetailPage', () => {
     expect(screen.getByTestId('tx-detail-direction')).toHaveTextContent('Unbekannt');
     const amount = screen.getByTestId('tx-detail-v-amount');
     expect(amount.textContent).not.toMatch(/^\+/);
-    expect(amount).toHaveTextContent('−');
+    expect(amount.textContent).not.toMatch(/[−-]/);
     const iconCircle = screen.getByTestId('tx-detail-body').querySelector('div.flex.h-14');
     expect(iconCircle).not.toBeNull();
-    expect(iconCircle?.className).toContain('bg-bitcoin/10');
-    expect(iconCircle?.className).not.toContain('bg-line');
+    expect(iconCircle?.className).toContain('bg-line');
+    expect(iconCircle?.className).not.toContain('bg-bitcoin/10');
+    expect(screen.queryByText('Empfangen')).not.toBeInTheDocument();
   });
 
   it('renders a sparse record with every unavailable-field fallback and invalid date', async () => {

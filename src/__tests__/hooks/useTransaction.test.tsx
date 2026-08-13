@@ -60,7 +60,11 @@ describe('useTransaction', () => {
     const { result } = renderHook(() => useTransaction('r1', ACCOUNT));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.detail).toEqual(DETAIL);
-    expect(spy).toHaveBeenCalledWith('r1', ACCOUNT);
+    expect(spy).toHaveBeenCalledWith(
+      'r1',
+      { ...ACCOUNT, accountIndex: 0 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it('maps transaction_not_found to not_found', async () => {
@@ -123,5 +127,28 @@ describe('useTransaction', () => {
       await Promise.resolve();
     });
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts in-flight getTransaction on unmount without committing error state', async () => {
+    let rejectFetch!: (e: unknown) => void;
+    spy.mockReturnValue(
+      new Promise<TxDetail>((_res, rej) => {
+        rejectFetch = rej;
+      }),
+    );
+    const { result, unmount } = renderHook(() => useTransaction('r1', ACCOUNT));
+    expect(spy).toHaveBeenCalledWith(
+      'r1',
+      { ...ACCOUNT, accountIndex: 0 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    unmount();
+    await act(async () => {
+      rejectFetch(new DOMException('Aborted', 'AbortError'));
+      await Promise.resolve();
+    });
+    expect(result.current.error).toBeNull();
+    expect(result.current.detail).toBeNull();
+    expect(result.current.loading).toBe(true);
   });
 });

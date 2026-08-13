@@ -150,11 +150,15 @@ describe('WalletScreen — transaction list from server history', () => {
     const rowEl = await screen.findByTestId('tx-row');
     expect(rowEl).toHaveTextContent('Unbekannt');
     expect(rowEl).not.toHaveTextContent('Empfangen');
+    const amount = screen.getByTestId('tx-row-amount');
+    expect(amount.textContent).not.toMatch(/[−-]/);
+    expect(amount.className).toContain('text-ink');
+    expect(amount.className).not.toContain('text-bitcoin');
     const iconWrap = rowEl.querySelector('div.flex.h-9');
     expect(iconWrap).not.toBeNull();
-    expect(iconWrap?.className).toContain('bg-bitcoin/10');
-    expect(iconWrap?.className).toContain('text-bitcoin');
-    expect(iconWrap?.className).not.toContain('bg-line');
+    expect(iconWrap?.className).toContain('bg-line');
+    expect(iconWrap?.className).toContain('text-ink2');
+    expect(iconWrap?.className).not.toContain('bg-bitcoin/10');
   });
 
   it('renders the row time from a Unix-seconds timestamp (not raw ms)', async () => {

@@ -29,6 +29,7 @@ const HIDDEN = '••••';
 
 export function WalletScreen() {
   const t = useTranslations('wallet');
+  const tAsset = useTranslations('asset');
   const { account } = useWalletStore();
   const historyAccount =
     account && account.mnemonic && account.nkCommit
@@ -246,7 +247,11 @@ export function WalletScreen() {
                     {t('portfolioStaleBody')}
                   </p>
                 )}
-                <AssetList assets={assets} unknownName={t('unknownName')} />
+                <AssetList
+                  assets={assets}
+                  unknownName={t('unknownName')}
+                  unknownAmount={tAsset('unknownAmount')}
+                />
               </>
             ) : !account || portfolioEmpty ? (
               <EmptyPortfolio
@@ -371,45 +376,64 @@ function PrimaryButton({
   );
 }
 
-function AssetList({ assets, unknownName }: { assets: AssetBalance[]; unknownName: string }) {
+function AssetList({
+  assets,
+  unknownName,
+  unknownAmount,
+}: {
+  assets: AssetBalance[];
+  unknownName: string;
+  unknownAmount: string;
+}) {
   return (
     <ul data-testid="asset-list" className="space-y-2">
-      {assets.map((asset) => (
-        <li key={asset.asset_id}>
-          <Link
-            href={`/asset/${asset.asset_id}`}
-            data-testid="asset-row"
-            className="flex items-center justify-between rounded-md border border-line bg-surface px-4 py-3 transition-colors hover:border-line2"
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-bitcoin/10 text-bitcoin">
-                <CircleDollarSign size={15} strokeWidth={2.25} />
-              </div>
-              <div className="min-w-0">
-                <p
-                  data-testid="asset-row-name"
-                  className="truncate text-[13px] font-medium text-ink"
-                >
-                  {asset.name ?? unknownName}
-                </p>
-                <p
-                  data-testid="asset-row-id"
-                  className="mono text-[11px] text-ink3"
-                  title={asset.asset_id}
-                >
-                  {shortAssetId(asset.asset_id)}
-                </p>
-              </div>
-            </div>
-            <span
-              data-testid="asset-row-balance"
-              className="mono text-[13px] font-medium tabular-nums text-ink"
+      {assets.map((asset) => {
+        const decimals = asset.decimals;
+        const amountText =
+          typeof decimals === 'number' &&
+          Number.isInteger(decimals) &&
+          decimals >= 0 &&
+          Number.isSafeInteger(asset.balance) &&
+          asset.balance >= 0
+            ? formatAssetAmount(asset.balance, decimals)
+            : unknownAmount;
+        return (
+          <li key={asset.asset_id}>
+            <Link
+              href={`/asset/${asset.asset_id}`}
+              data-testid="asset-row"
+              className="flex items-center justify-between rounded-md border border-line bg-surface px-4 py-3 transition-colors hover:border-line2"
             >
-              {formatAssetAmount(asset.balance, asset.decimals)}
-            </span>
-          </Link>
-        </li>
-      ))}
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-bitcoin/10 text-bitcoin">
+                  <CircleDollarSign size={15} strokeWidth={2.25} />
+                </div>
+                <div className="min-w-0">
+                  <p
+                    data-testid="asset-row-name"
+                    className="truncate text-[13px] font-medium text-ink"
+                  >
+                    {asset.name ?? unknownName}
+                  </p>
+                  <p
+                    data-testid="asset-row-id"
+                    className="mono text-[11px] text-ink3"
+                    title={asset.asset_id}
+                  >
+                    {shortAssetId(asset.asset_id)}
+                  </p>
+                </div>
+              </div>
+              <span
+                data-testid="asset-row-balance"
+                className="mono text-[13px] font-medium tabular-nums text-ink"
+              >
+                {amountText}
+              </span>
+            </Link>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -476,38 +500,39 @@ function TransactionsList({
     <ul className="space-y-2">
       {items.map((tx) => {
         const kind = tx.kind;
-        let positive: boolean;
+        let polarity: 'credit' | 'debit' | 'unknown';
         let label: string;
         let Icon: typeof ArrowUpRight;
         if (kind === 'mint') {
-          positive = true;
+          polarity = 'credit';
           label = labels.mint;
           Icon = Plus;
         } else if (kind === 'send') {
-          positive = false;
+          polarity = 'debit';
           label = labels.sent;
           Icon = ArrowUpRight;
         } else if (kind === 'receive') {
-          positive = true;
+          polarity = 'credit';
           label = labels.received;
           Icon = ArrowDownLeft;
         } else {
-          positive = false;
+          polarity = 'unknown';
           label = labels.unknown;
-          Icon = ArrowUpRight;
+          Icon = Receipt;
         }
+        const isDebit = polarity === 'debit';
         // Single-asset history renders BTC-denominated amounts; multi-asset
         // history renders raw atomic counts (per-asset decimals differ, so a
         // single unit suffix would be wrong). Amount is optional on thin
-        // pull-session locators.
+        // pull-session locators. Unknown polarity keeps the raw amount.
         const amount = typeof tx.amount === 'number' ? tx.amount : undefined;
-        const signed = amount === undefined ? undefined : positive ? amount : -amount;
+        const displayAmount = amount === undefined ? undefined : isDebit ? -amount : amount;
         const amountText =
-          signed === undefined
+          displayAmount === undefined
             ? '—'
             : multiAsset
-              ? signed.toLocaleString('en-US')
-              : `${formatBtc(signed)} BTC`;
+              ? displayAmount.toLocaleString('en-US')
+              : `${formatBtc(displayAmount)} BTC`;
         const when = historyItemDate(tx);
         const timeText = Number.isNaN(when.getTime())
           ? '—'
@@ -522,7 +547,7 @@ function TransactionsList({
               <div className="flex items-center gap-3">
                 <div
                   className={`flex h-9 w-9 items-center justify-center rounded-md ${
-                    positive ? 'bg-line text-ink2' : 'bg-bitcoin/10 text-bitcoin'
+                    isDebit ? 'bg-bitcoin/10 text-bitcoin' : 'bg-line text-ink2'
                   }`}
                 >
                   <Icon size={15} strokeWidth={2.25} />
@@ -537,7 +562,7 @@ function TransactionsList({
               <span
                 data-testid="tx-row-amount"
                 className={`mono text-[13px] font-medium tabular-nums ${
-                  positive ? 'text-ink' : 'text-bitcoin'
+                  isDebit ? 'text-bitcoin' : 'text-ink'
                 }`}
               >
                 {amountText}

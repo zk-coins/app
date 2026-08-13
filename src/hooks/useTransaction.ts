@@ -51,8 +51,13 @@ export function useTransaction(
     }
 
     let cancelled = false;
+    const controller = new AbortController();
     api
-      .getTransaction(id, { address, mnemonic, nkCommit })
+      .getTransaction(
+        id,
+        { address, mnemonic, nkCommit, accountIndex: 0 },
+        { signal: controller.signal },
+      )
       .then((d) => {
         if (cancelled) return;
         setDetail(d);
@@ -77,6 +82,7 @@ export function useTransaction(
 
     return () => {
       cancelled = true;
+      controller.abort();
     };
   }, [id, address, mnemonic, nkCommit]);
 

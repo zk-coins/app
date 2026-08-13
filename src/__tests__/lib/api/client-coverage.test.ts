@@ -299,7 +299,12 @@ describe('api.accountState / getHistory / getTransaction', () => {
       send_counter: 3,
       current_pubkey: 'ab'.repeat(32),
     }));
-    const head = await api.accountState({ address: ADDR, mnemonic: MNEMONIC, nkCommit: NK });
+    const head = await api.accountState({
+      address: ADDR,
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+      accountIndex: 0,
+    });
     expect(head.send_counter).toBe(3);
   });
 
@@ -308,7 +313,7 @@ describe('api.accountState / getHistory / getTransaction', () => {
       throw new V1ApiError(401, 'unauthorized', '');
     });
     await expect(
-      api.accountState({ address: ADDR, mnemonic: MNEMONIC, nkCommit: NK }),
+      api.accountState({ address: ADDR, mnemonic: MNEMONIC, nkCommit: NK, accountIndex: 0 }),
     ).rejects.toMatchObject({ status: 401 });
   });
 
@@ -341,7 +346,7 @@ describe('api.accountState / getHistory / getTransaction', () => {
       ],
     }));
     const res = await api.getHistory(
-      { address: ADDR, mnemonic: MNEMONIC, nkCommit: NK },
+      { address: ADDR, mnemonic: MNEMONIC, nkCommit: NK, accountIndex: 0 },
       { limit: 1, offset: 1 },
     );
     expect(res.total).toBe(3);
@@ -356,7 +361,12 @@ describe('api.accountState / getHistory / getTransaction', () => {
     expect(res.items[0]).not.toHaveProperty('index');
 
     // Only mint stays mint; send/missing transition_kind → unknown
-    const all = await api.getHistory({ address: ADDR, mnemonic: MNEMONIC, nkCommit: NK });
+    const all = await api.getHistory({
+      address: ADDR,
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+      accountIndex: 0,
+    });
     expect(all.items.map((i) => i.kind)).toEqual(['mint', 'unknown', 'unknown']);
   });
 
@@ -366,14 +376,19 @@ describe('api.accountState / getHistory / getTransaction', () => {
       session_expiry: '2099-01-01T00:00:00.000Z',
       records: [],
     }));
-    const empty = await api.getHistory({ address: ADDR, mnemonic: MNEMONIC, nkCommit: NK });
+    const empty = await api.getHistory({
+      address: ADDR,
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+      accountIndex: 0,
+    });
     expect(empty).toEqual({ items: [], total: 0, limit: 50, offset: 0 });
 
     spyProto('openOwnershipPullSession', async () => {
       throw new Error('pull down');
     });
     await expect(
-      api.getHistory({ address: ADDR, mnemonic: MNEMONIC, nkCommit: NK }),
+      api.getHistory({ address: ADDR, mnemonic: MNEMONIC, nkCommit: NK, accountIndex: 0 }),
     ).rejects.toThrow('pull down');
   });
 
@@ -395,12 +410,18 @@ describe('api.accountState / getHistory / getTransaction', () => {
       address: ADDR,
       mnemonic: MNEMONIC,
       nkCommit: NK,
+      accountIndex: 0,
     });
     expect(found.id).toBe('tx-7');
     expect(found.kind).toBe('unknown');
 
     await expect(
-      api.getTransaction('missing', { address: ADDR, mnemonic: MNEMONIC, nkCommit: NK }),
+      api.getTransaction('missing', {
+        address: ADDR,
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
     ).rejects.toMatchObject({
       status: 404,
       serverError: 'transaction not found',
@@ -410,8 +431,60 @@ describe('api.accountState / getHistory / getTransaction', () => {
 
   it('rejects malformed nkCommit hex fail-closed', async () => {
     await expect(
-      api.accountState({ address: ADDR, mnemonic: MNEMONIC, nkCommit: 'zz' }),
+      api.accountState({ address: ADDR, mnemonic: MNEMONIC, nkCommit: 'zz', accountIndex: 0 }),
     ).rejects.toThrow(/nkCommit/);
+  });
+
+  it('forwards optional AbortSignal to openOwnershipPullSession and getAccountState', async () => {
+    const ac = new AbortController();
+    const pullSpy = spyProto('openOwnershipPullSession', async (_input, signal) => {
+      expect(signal).toBe(ac.signal);
+      return {
+        session: 's1',
+        session_expiry: '2099-01-01T00:00:00.000Z',
+        records: [
+          {
+            record_id: 'r0',
+            record_type: 'coin',
+            transition_kind: 'mint',
+            blob_id: 'blob-r0',
+            occurred_at: '2024-01-01T00:00:00.000Z',
+          },
+        ],
+      };
+    });
+    const stateSpy = spyProto('getAccountState', async (_session, signal) => {
+      expect(signal).toBe(ac.signal);
+      return {
+        account_state: 'ac'.repeat(32),
+        state_head: 'ad'.repeat(32),
+        send_counter: 0,
+        current_pubkey: 'ab'.repeat(32),
+      };
+    });
+
+    await api.accountState(
+      { address: ADDR, mnemonic: MNEMONIC, nkCommit: NK, accountIndex: 0 },
+      { signal: ac.signal },
+    );
+    expect(pullSpy).toHaveBeenCalledTimes(1);
+    expect(stateSpy).toHaveBeenCalledTimes(1);
+
+    await api.getHistory(
+      { address: ADDR, mnemonic: MNEMONIC, nkCommit: NK, accountIndex: 0 },
+      { signal: ac.signal },
+    );
+    expect(pullSpy).toHaveBeenCalledTimes(2);
+    // getHistory never calls getAccountState.
+    expect(stateSpy).toHaveBeenCalledTimes(1);
+
+    await api.getTransaction(
+      'r0',
+      { address: ADDR, mnemonic: MNEMONIC, nkCommit: NK, accountIndex: 0 },
+      { signal: ac.signal },
+    );
+    expect(pullSpy).toHaveBeenCalledTimes(3);
+    expect(stateSpy).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -472,6 +545,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         amount: '10',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       },
       { onPhase: (s) => phases.push(s.phase ?? s.status) },
     );
@@ -520,6 +594,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         amount: '10',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toThrow(/send_counter is 5 \(non-genesis\)/);
     expect(refuse).not.toHaveBeenCalled();
@@ -552,6 +627,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         amount: '10',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({ status: 500 });
     expect(pullCalls).toBe(2);
@@ -591,6 +667,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         amount: '0001',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       });
     } catch (err) {
       thrown = err;
@@ -622,6 +699,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         amount: 1 as unknown as string,
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       });
     } catch (err) {
       thrown = err;
@@ -653,6 +731,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       });
     } catch (err) {
       thrown = err;
@@ -684,6 +763,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       });
     } catch (err) {
       thrown = err;
@@ -720,6 +800,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       });
     } catch (err) {
       thrown = err;
@@ -751,6 +832,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         amount: '0',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       });
     } catch (err) {
       thrown = err;
@@ -795,6 +877,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       status: 'timeout',
@@ -819,6 +902,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toThrow('transport disconnected');
   });
@@ -853,6 +937,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
           amount: '1',
           mnemonic: MNEMONIC,
           nkCommit: NK,
+          accountIndex: 0,
         });
       } catch (err) {
         thrown = err;
@@ -891,6 +976,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toBeInstanceOf(JobFailedError);
   });
@@ -912,6 +998,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
@@ -938,6 +1025,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
@@ -966,6 +1054,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
@@ -994,11 +1083,12 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
       status: 'timeout',
-      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+      serverError: 'timed out waiting for submit after 180000ms',
     });
   });
 
@@ -1019,11 +1109,12 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
       status: 'timeout',
-      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+      serverError: 'timed out waiting for submit after 180000ms',
     });
   });
 
@@ -1044,11 +1135,12 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
       status: 'timeout',
-      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+      serverError: 'timed out waiting for submit after 180000ms',
     });
   });
 
@@ -1069,6 +1161,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
@@ -1110,12 +1203,13 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
       jobId: JOB_ID,
       status: 'timeout',
-      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+      serverError: 'timed out waiting for rehydrate after 180000ms',
     });
     expect(refuse).not.toHaveBeenCalled();
   });
@@ -1146,12 +1240,54 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
       jobId: JOB_ID,
       status: 'timeout',
-      serverError: 'timed out waiting for awaiting_signature after 180000ms',
+      serverError: 'timed out waiting for rehydrate after 180000ms',
+    });
+    expect(refuse).not.toHaveBeenCalled();
+  });
+
+  it('maps aborted signal plus 404 during rehydration to timeout, not genesis', async () => {
+    const controller = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
+
+    let pullCalls = 0;
+    spyProto('openOwnershipPullSession', async () => {
+      pullCalls += 1;
+      if (pullCalls === 1) {
+        throw new V1ApiError(404, 'not_found', '');
+      }
+      controller.abort();
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('getAccountState', async () => {
+      throw new Error('getAccountState must not run when rehydration pull 404s');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
+      throw new Error('must not run after rehydration abort+404');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'RehydrateAbort404',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({
+      name: 'JobFailedError',
+      jobId: JOB_ID,
+      status: 'timeout',
+      serverError: 'timed out waiting for rehydrate after 180000ms',
     });
     expect(refuse).not.toHaveBeenCalled();
   });
@@ -1181,6 +1317,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
@@ -1226,6 +1363,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       amount: '1',
       mnemonic: MNEMONIC,
       nkCommit: NK,
+      accountIndex: 0,
     });
     expect(job.status).toBe('completed');
     expect(submit).toHaveBeenCalledTimes(1);
@@ -1268,6 +1406,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
@@ -1310,6 +1449,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
@@ -1346,6 +1486,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       amount: '1',
       mnemonic: MNEMONIC,
       nkCommit: NK,
+      accountIndex: 0,
     });
     expect(job.status).toBe('completed');
     expect(submit).toHaveBeenCalledTimes(1);
@@ -1436,13 +1577,14 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toBeInstanceOf(JobFailedError);
   });
 
   it('throws JobFailedError when handshake signal aborts after awaiting_signature and before sign', async () => {
-    // Abort only after waitForAwaitingSignature succeeds so the check at
-    // signal.aborted before refuseOrSignAndSubmit is hit, not the wait catch.
+    // Abort only after rehydrate succeeds so the check at signal.aborted
+    // before refuseOrSignAndSubmit is hit (sign phase), not rehydrate.
     const controller = new AbortController();
     vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
 
@@ -1452,11 +1594,20 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       if (pullCalls === 1) {
         throw new V1ApiError(404, 'not_found', '');
       }
-      controller.abort();
-      throw new V1ApiError(404, 'not_found', '');
+      return {
+        session: 'pull-sess',
+        session_expiry: '2099-01-01T00:00:00.000Z',
+        records: [],
+      };
     });
     spyProto('getAccountState', async () => {
-      throw new Error('getAccountState must not run when every pull 404s');
+      controller.abort();
+      return {
+        account_state: 'ac'.repeat(32),
+        state_head: 'ad'.repeat(32),
+        send_counter: 0,
+        current_pubkey: 'aa'.repeat(32),
+      };
     });
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
@@ -1472,13 +1623,14 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
       jobId: JOB_ID,
       status: 'timeout',
-      serverError: 'timed out waiting for awaiting_signature after 180000ms',
-      message: 'timed out waiting for awaiting_signature after 180000ms',
+      serverError: 'timed out waiting for sign after 180000ms',
+      message: 'timed out waiting for sign after 180000ms',
     });
     expect(refuse).not.toHaveBeenCalled();
   });
@@ -1501,6 +1653,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toBe(jobErr);
     expect(jobErr.status).toBe('failed');
@@ -1527,6 +1680,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toBe(jobErr);
     expect(jobErr.status).toBe('cancelled');
@@ -1569,6 +1723,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
@@ -1612,6 +1767,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({ serverError: 'prove exploded' });
   });
@@ -1651,6 +1807,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({ serverError: 'user_cancelled_only' });
   });
@@ -1694,6 +1851,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       },
       { onPhase: (j) => phases.push(String(j.phase)) },
     );
@@ -1735,6 +1893,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       });
 
       const assertion = expect(pending).rejects.toMatchObject({
@@ -1784,6 +1943,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       });
       const assertion = expect(pending).rejects.toMatchObject({
         name: 'JobFailedError',
@@ -1831,6 +1991,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       });
       const assertion = expect(pending).rejects.toMatchObject({
         name: 'JobFailedError',
@@ -1881,6 +2042,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
           amount: '1',
           mnemonic: MNEMONIC,
           nkCommit: NK,
+          accountIndex: 0,
         }),
       ).rejects.toMatchObject({
         name: 'JobFailedError',
@@ -1918,6 +2080,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
           amount: '1',
           mnemonic: MNEMONIC,
           nkCommit: NK,
+          accountIndex: 0,
         }),
       ).rejects.toMatchObject({
         name: 'JobFailedError',
@@ -1954,6 +2117,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toMatchObject({
       name: 'JobFailedError',
@@ -1988,6 +2152,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
         amount: '1',
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
       }),
     ).rejects.toBe(jobErr);
     expect(jobErr.status).toBe('failed');
@@ -2009,6 +2174,7 @@ describe('api.send failure mapping (no delivery crypto)', () => {
         asset_id: 'aa'.repeat(32),
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
         delivery: invoiceDelivery,
         input_coins: ['ff'.repeat(32)],
       }),
@@ -2032,6 +2198,7 @@ describe('api.send failure mapping (no delivery crypto)', () => {
         asset_id: 'aa'.repeat(32),
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
         delivery: invoiceDelivery,
         input_coins: ['ff'.repeat(32)],
       });
@@ -2065,6 +2232,7 @@ describe('api.send failure mapping (no delivery crypto)', () => {
         asset_id: 'aa'.repeat(32),
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
         delivery: invoiceDelivery,
         input_coins: ['ff'.repeat(32)],
       });

@@ -128,6 +128,8 @@
     "decimals": "Nachkommastellen",
     "sends": "Sende-Zähler",
     "unknownName": "Unbekanntes Asset",
+    "unknownAmount": "Betrag nicht verfügbar",
+    "unknownDecimals": "Unbekannt",
     "historyTitle": "Verlauf",
     "historyNote": "Der Verlauf ist pro Wallet, nicht pro Asset — diese Liste zeigt alle Bewegungen dieses Wallets.",
     "sendAsset": "Dieses Asset senden"

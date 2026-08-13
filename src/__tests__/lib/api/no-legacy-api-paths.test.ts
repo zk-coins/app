@@ -124,6 +124,7 @@ describe('no legacy /api/ node paths', () => {
         mnemonic:
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
         nkCommit: '00'.repeat(32),
+        accountIndex: 0,
         delivery: {
           type: 'invoice',
           invoice: {
@@ -151,6 +152,7 @@ describe('no legacy /api/ node paths', () => {
         mnemonic:
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
         nkCommit: '00'.repeat(32),
+        accountIndex: 0,
         delivery: {
           type: 'invoice',
           invoice: {

@@ -203,7 +203,7 @@ export interface CreateCoinParams {
   delivery?: DeliveryCredential;
   /** Hex asset id for explicit output templates (mint to self uses zeros until node assigns). */
   asset_id?: string;
-  accountIndex?: number;
+  accountIndex: number;
 }
 
 export interface SendParams {
@@ -225,8 +225,8 @@ export interface SendParams {
   confirmPinMismatch?: boolean;
   /** Record a pin on first successful credential verification. */
   pinOnFirstUse?: boolean;
-  /** Account index under the BIP-43 purpose (default 0). */
-  accountIndex?: number;
+  /** Account index under the BIP-43 purpose. */
+  accountIndex: number;
   /** nk_commit hex for pull-session ownership proofs when needed. */
   nkCommit: string;
 }
@@ -439,7 +439,12 @@ function isAbortLike(err: unknown, signal: AbortSignal): boolean {
  * Map handshake abort/deadline to JobFailedError(status: 'timeout').
  * Existing JobFailedError instances pass through unchanged.
  */
-function mapHandshakeAbort(err: unknown, jobId: string, signal: AbortSignal): never {
+function mapHandshakeAbort(
+  err: unknown,
+  jobId: string,
+  signal: AbortSignal,
+  phase: 'submit' | 'rehydrate' | 'sign',
+): never {
   if (err instanceof JobFailedError) {
     throw err;
   }
@@ -447,7 +452,7 @@ function mapHandshakeAbort(err: unknown, jobId: string, signal: AbortSignal): ne
     throw new JobFailedError(
       jobId,
       'timeout',
-      `timed out waiting for awaiting_signature after ${WAIT_TIMEOUT_MS}ms`,
+      `timed out waiting for ${phase} after ${WAIT_TIMEOUT_MS}ms`,
     );
   }
   throw err;
@@ -522,7 +527,7 @@ async function runTransitionHandshake(
     });
     jobId = accepted.job_id;
   } catch (err) {
-    mapHandshakeAbort(err, jobId, signal);
+    mapHandshakeAbort(err, jobId, signal, 'submit');
   }
 
   let awaiting: V1Job;
@@ -584,8 +589,13 @@ async function runTransitionHandshake(
     );
     accountState = await client.getAccountState(pull.session, signal);
   } catch (err) {
+    // Abort wins over 404-genesis: a deadline/abort must not fall through
+    // isAccountNotFoundError into the genesis fallback.
+    if (isAbortLike(err, signal)) {
+      mapHandshakeAbort(err, jobId, signal, 'rehydrate');
+    }
     if (!isAccountNotFoundError(err)) {
-      mapHandshakeAbort(err, jobId, signal);
+      mapHandshakeAbort(err, jobId, signal, 'rehydrate');
     }
     // Counter from the node job field — not a local invention.
     const jobCounter = awaiting.awaiting_signature.send_counter;
@@ -612,7 +622,7 @@ async function runTransitionHandshake(
     throw new JobFailedError(
       jobId,
       'timeout',
-      `timed out waiting for awaiting_signature after ${WAIT_TIMEOUT_MS}ms`,
+      `timed out waiting for sign after ${WAIT_TIMEOUT_MS}ms`,
     );
   }
 
@@ -731,7 +741,7 @@ export const api = {
     }
     try {
       const client = v1Client();
-      const accountIndex = params.accountIndex ?? 0;
+      const accountIndex = params.accountIndex;
       const npkRand = freshNpkRand();
       // send_counter comes from the authoritative head after pull; for the
       // request we still need next_pubkey at counter+1. Hydrate counter from
@@ -843,7 +853,7 @@ export const api = {
       const amountStr = params.amount;
 
       const client = v1Client();
-      const accountIndex = params.accountIndex ?? 0;
+      const accountIndex = params.accountIndex;
       const npkRand = freshNpkRand();
 
       // Pre-pull only seeds next_pubkey / request sendCounter. The sign path
@@ -936,6 +946,7 @@ export const api = {
         amount,
         mnemonic: params.mnemonic,
         nkCommit: params.nkCommit,
+        accountIndex: 0,
       },
       opts,
     ),
@@ -958,21 +969,27 @@ export const api = {
    * Authoritative account head (ownership pull). Requires signing material.
    * Exposes send_counter / current_pubkey only — not coin balances.
    */
-  accountState: async (params: {
-    address: string;
-    mnemonic: string;
-    nkCommit: string;
-    accountIndex?: number;
-  }): Promise<V1AccountState> => {
+  accountState: async (
+    params: {
+      address: string;
+      mnemonic: string;
+      nkCommit: string;
+      accountIndex: number;
+    },
+    opts?: { signal?: AbortSignal },
+  ): Promise<V1AccountState> => {
     try {
       const client = v1Client();
-      const sk0 = spendKeyAt(params.mnemonic, 0, params.accountIndex ?? 0);
-      const pull = await client.openOwnershipPullSession({
-        subject: params.address,
-        sk0: sk0.secretKey,
-        nkCommit: hexToBytesExact(params.nkCommit, 32, 'nkCommit'),
-      });
-      return await client.getAccountState(pull.session);
+      const sk0 = spendKeyAt(params.mnemonic, 0, params.accountIndex);
+      const pull = await client.openOwnershipPullSession(
+        {
+          subject: params.address,
+          sk0: sk0.secretKey,
+          nkCommit: hexToBytesExact(params.nkCommit, 32, 'nkCommit'),
+        },
+        opts?.signal,
+      );
+      return await client.getAccountState(pull.session, opts?.signal);
     } catch (err) {
       mapV1Error(err);
     }
@@ -1013,17 +1030,21 @@ export const api = {
       address: string;
       mnemonic: string;
       nkCommit: string;
+      accountIndex: number;
     },
-    opts: { limit?: number; offset?: number } = {},
+    opts: { limit?: number; offset?: number; signal?: AbortSignal } = {},
   ): Promise<HistoryResponse> => {
     try {
       const client = v1Client();
-      const sk0 = spendKeyAt(params.mnemonic, 0, 0);
-      const pull: V1PullResult = await client.openOwnershipPullSession({
-        subject: params.address,
-        sk0: sk0.secretKey,
-        nkCommit: hexToBytesExact(params.nkCommit, 32, 'nkCommit'),
-      });
+      const sk0 = spendKeyAt(params.mnemonic, 0, params.accountIndex);
+      const pull: V1PullResult = await client.openOwnershipPullSession(
+        {
+          subject: params.address,
+          sk0: sk0.secretKey,
+          nkCommit: hexToBytesExact(params.nkCommit, 32, 'nkCommit'),
+        },
+        opts.signal,
+      );
       const limit = opts.limit ?? 50;
       const offset = opts.offset ?? 0;
       const slice = pull.records.slice(offset, offset + limit);
@@ -1045,12 +1066,16 @@ export const api = {
 
   getTransaction: async (
     id: number | string,
-    params: { address: string; mnemonic: string; nkCommit: string },
+    params: { address: string; mnemonic: string; nkCommit: string; accountIndex: number },
+    opts?: { signal?: AbortSignal },
   ): Promise<TxDetail> => {
     // pull.records is already fully resident after a single pull session —
     // request everything so a deep link past the default page size never
     // false-404s.
-    const history = await api.getHistory(params, { limit: Number.MAX_SAFE_INTEGER });
+    const history = await api.getHistory(params, {
+      limit: Number.MAX_SAFE_INTEGER,
+      ...(opts?.signal !== undefined ? { signal: opts.signal } : {}),
+    });
     const found = history.items.find((item) => String(item.id) === String(id));
     if (!found) {
       throw new ApiError(404, 'transaction not found', undefined, 'transaction_not_found');

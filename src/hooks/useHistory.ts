@@ -69,9 +69,13 @@ export function useHistory(account: HistoryAccount | undefined): UseHistoryResul
 
     let cancelled = false;
     let timeout: ReturnType<typeof setTimeout> | undefined;
+    const controller = new AbortController();
     const tick = async () => {
       try {
-        const res = await api.getHistory({ address, mnemonic, nkCommit });
+        const res = await api.getHistory(
+          { address, mnemonic, nkCommit, accountIndex: 0 },
+          { signal: controller.signal },
+        );
         if (cancelled) return;
         setItems(res.items);
         setAvailable(true);
@@ -105,6 +109,7 @@ export function useHistory(account: HistoryAccount | undefined): UseHistoryResul
     void schedule();
     return () => {
       cancelled = true;
+      controller.abort();
       if (timeout !== undefined) clearTimeout(timeout);
     };
   }, [address, mnemonic, nkCommit]);

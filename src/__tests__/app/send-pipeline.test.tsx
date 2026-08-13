@@ -17,6 +17,7 @@ const baseParams = {
   asset_id: 'aa'.repeat(32),
   mnemonic: MNEMONIC,
   nkCommit: '00'.repeat(32),
+  accountIndex: 0,
   delivery: {
     type: 'invoice' as const,
     invoice: {

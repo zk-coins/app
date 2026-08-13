@@ -104,6 +104,7 @@ describe('api without resolved network', () => {
         mnemonic:
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
         nkCommit: '00'.repeat(32),
+        accountIndex: 0,
         delivery: {
           type: 'invoice',
           invoice: {
@@ -196,6 +197,7 @@ describe('api.createCoin account-state fail-loud', () => {
         mnemonic:
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
         nkCommit: '00'.repeat(32),
+        accountIndex: 0,
       }),
     ).rejects.toBeTruthy();
 
@@ -235,6 +237,7 @@ describe('read paths refuse invented empty wallets', () => {
         mnemonic:
           'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
         nkCommit: '00'.repeat(32),
+        accountIndex: 0,
         delivery: {
           type: 'invoice',
           invoice: {

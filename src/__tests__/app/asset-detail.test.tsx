@@ -220,9 +220,10 @@ describe('AssetDetailPage', () => {
     expect(row).not.toHaveTextContent('Empfangen');
     const iconWrap = row.querySelector('div.flex.h-9');
     expect(iconWrap).not.toBeNull();
-    expect(iconWrap?.className).toContain('bg-bitcoin/10');
-    expect(iconWrap?.className).toContain('text-bitcoin');
-    expect(iconWrap?.className).not.toContain('bg-line');
+    expect(iconWrap?.className).toContain('bg-line');
+    expect(iconWrap?.className).toContain('text-ink2');
+    expect(iconWrap?.className).not.toContain('bg-bitcoin/10');
+    expect(iconWrap?.className).not.toContain('text-bitcoin');
   });
   it('shows no terminal state while the first portfolio request is pending', () => {
     ownerSpy.mockReturnValue(new Promise<never>(() => {}));
@@ -261,6 +262,7 @@ describe('AssetDetailPage', () => {
     render(<AssetDetailPage />);
     expect(ownerSpy).not.toHaveBeenCalled();
     expect(historySpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId('asset-detail-wallet-unavailable')).toBeInTheDocument();
   });
 
   it('parks history when signing material is incomplete while portfolio still loads', async () => {

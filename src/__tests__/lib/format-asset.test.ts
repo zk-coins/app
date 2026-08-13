@@ -18,12 +18,31 @@ describe('formatAssetAmount', () => {
     expect(formatAssetAmount(10_000, 8)).toBe('0.0001');
   });
 
-  it('treats a missing decimals as 0 (no guessed scaling)', () => {
-    expect(formatAssetAmount(500, undefined)).toBe('500');
+  it('rejects missing decimals (no guessed scaling)', () => {
+    expect(() => formatAssetAmount(500, undefined as unknown as number)).toThrow(
+      /non-negative integer/,
+    );
   });
 
-  it('treats a negative decimals as 0 (defensive)', () => {
-    expect(formatAssetAmount(500, -1)).toBe('500');
+  it('rejects negative decimals', () => {
+    expect(() => formatAssetAmount(500, -1)).toThrow(/non-negative integer/);
+  });
+
+  it('formats high decimals via string path without RangeError', () => {
+    expect(formatAssetAmount(1, 255)).toBe(formatAssetAmountString('1', 255));
+  });
+
+  it('rejects non-integer and negative amounts', () => {
+    expect(() => formatAssetAmount(1.5, 2)).toThrow(/non-negative integer/);
+    expect(() => formatAssetAmount(-1, 2)).toThrow(/non-negative integer/);
+  });
+
+  it('rejects unsafe integers so they are not silently rounded', () => {
+    expect(() => formatAssetAmount(Number.MAX_SAFE_INTEGER + 1, 0)).toThrow(/non-negative integer/);
+  });
+
+  it('formats Number.MAX_SAFE_INTEGER with decimals 0', () => {
+    expect(formatAssetAmount(Number.MAX_SAFE_INTEGER, 0)).toBe('9,007,199,254,740,991');
   });
 });
 

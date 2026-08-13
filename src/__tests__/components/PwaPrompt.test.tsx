@@ -258,6 +258,28 @@ describe('PwaPrompt — dismiss + appinstalled lifecycle', () => {
     expect(screen.queryByTestId('pwa-prompt-manual')).not.toBeInTheDocument();
   });
 
+  it('does not crash when localStorage.getItem throws on mount', async () => {
+    vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('storage disabled');
+    });
+    expect(() => {
+      render(<PwaPrompt />);
+    }).not.toThrow();
+    await act(async () => {});
+    expect(screen.queryByTestId('pwa-prompt-manual')).not.toBeInTheDocument();
+  });
+
+  it('dismisses the card when localStorage.setItem throws', async () => {
+    render(<PwaPrompt />);
+    await act(async () => {});
+    expect(screen.getByTestId('pwa-prompt-manual')).toBeInTheDocument();
+    vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new Error('storage disabled');
+    });
+    fireEvent.click(screen.getByLabelText('Dismiss'));
+    expect(screen.queryByTestId('pwa-prompt-manual')).not.toBeInTheDocument();
+  });
+
   it('removes its beforeinstallprompt listener on unmount', async () => {
     const { unmount } = render(<PwaPrompt />);
     await act(async () => {});

@@ -40,7 +40,10 @@ describe('useHistory', () => {
     expect(result.current.items).toHaveLength(1);
     expect(result.current.available).toBe(true);
     expect(result.current.error).toBeNull();
-    expect(spy).toHaveBeenCalledWith(ACCOUNT);
+    expect(spy).toHaveBeenCalledWith(
+      { ...ACCOUNT, accountIndex: 0 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
   it('parks when account is undefined', async () => {
@@ -106,7 +109,12 @@ describe('useHistory', () => {
       address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpr',
     };
     rerender({ acc: other });
-    await waitFor(() => expect(spy).toHaveBeenLastCalledWith(other));
+    await waitFor(() =>
+      expect(spy).toHaveBeenLastCalledWith(
+        { ...other, accountIndex: 0 },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
+    );
   });
 
   it('surfaces ApiError.serverError (or message) on first failure', async () => {
@@ -161,5 +169,27 @@ describe('useHistory', () => {
       await Promise.resolve();
     });
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts in-flight getHistory on unmount without committing error state', async () => {
+    let rejectFetch!: (e: unknown) => void;
+    spy.mockReturnValue(
+      new Promise<HistoryResponse>((_res, rej) => {
+        rejectFetch = rej;
+      }),
+    );
+    const { result, unmount } = renderHook(() => useHistory(ACCOUNT));
+    expect(spy).toHaveBeenCalledWith(
+      { ...ACCOUNT, accountIndex: 0 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    unmount();
+    await act(async () => {
+      rejectFetch(new DOMException('Aborted', 'AbortError'));
+      await Promise.resolve();
+    });
+    expect(result.current.error).toBeNull();
+    expect(result.current.loaded).toBe(false);
+    expect(result.current.available).toBe(false);
   });
 });

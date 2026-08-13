@@ -6,6 +6,7 @@ import {
   deleteEncryptedWallet,
   clearLegacyStorage,
 } from '@/lib/crypto/storage';
+import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
 
 /**
  * On-disk / in-memory wallet payload version.
@@ -21,6 +22,24 @@ export class IncompatibleWalletError extends Error {
     super(message);
     this.name = 'IncompatibleWalletError';
     Object.setPrototypeOf(this, new.target.prototype);
+  }
+}
+
+/** Fail closed when stored address/nkCommit do not match the mnemonic. */
+function assertCustodyTriple(account: Account): void {
+  let derived;
+  try {
+    derived = accountKeysFromMnemonic(account.mnemonic);
+  } catch (err) {
+    throw new IncompatibleWalletError(
+      err instanceof Error ? err.message : 'Custody key derivation failed',
+    );
+  }
+  if (derived.address !== account.address) {
+    throw new IncompatibleWalletError('Stored address does not match mnemonic-derived address');
+  }
+  if (derived.nkCommit.toLowerCase() !== account.nkCommit.toLowerCase()) {
+    throw new IncompatibleWalletError('Stored nkCommit does not match mnemonic-derived nkCommit');
   }
 }
 
@@ -273,6 +292,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     try {
       const account = parseWalletPayload(decrypted);
+      assertCustodyTriple(account);
       set({
         account,
         isLocked: false,
@@ -280,8 +300,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         error: null,
       });
     } catch (err) {
-      // parseWalletPayload only throws IncompatibleWalletError; surface it as
-      // a forced re-import rather than leaving a half-unlocked store.
+      // parseWalletPayload + assertCustodyTriple throw IncompatibleWalletError;
+      // surface as forced re-import rather than a half-unlocked store.
       set({
         account: null,
         isLocked: true,
@@ -306,6 +326,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     try {
       const account = parseWalletPayload(decrypted);
+      assertCustodyTriple(account);
       set({
         account,
         isLocked: false,
@@ -313,8 +334,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
         error: null,
       });
     } catch (err) {
-      // Same as unlockWithPassword: parseWalletPayload is the only thrower
-      // and only raises IncompatibleWalletError.
+      // parse + custody throw IncompatibleWalletError; keep store locked.
       set({
         account: null,
         isLocked: true,

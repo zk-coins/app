@@ -33,7 +33,7 @@ export function formatBtcCompact(sats: number): string {
 // Mock USD price during mock-prover phase. Wire to a real oracle later.
 export const MOCK_BTC_USD = 62_000;
 
-export function formatUsd(sats: number, price = MOCK_BTC_USD): string {
+export function formatUsd(sats: number, price: number): string {
   const usd = (sats / SATS_PER_BTC) * price;
   return usd.toLocaleString('en-US', {
     minimumFractionDigits: 2,
@@ -90,17 +90,21 @@ export function formatRelative(ts: number): string {
  * Format a raw integer asset amount (atomic units) using the asset's
  * `decimals`. Neutral multi-asset: there is no BTC/sats assumption — an
  * asset minted with `decimals: 0` renders as a plain integer, one with
- * `decimals: 8` like BTC. A missing `decimals` (received-only asset whose
- * genesis metadata the node never saw) falls back to `0` so the raw
- * integer is shown rather than a guessed scaling.
+ * `decimals: 8` like BTC. Invalid `decimals` or `amount` throw; callers
+ * must show an unavailable label rather than invent a scale.
  */
-export function formatAssetAmount(amount: number, decimals: number | undefined): string {
-  const d = decimals ?? 0;
-  if (d <= 0) return amount.toLocaleString('en-US');
-  return (amount / 10 ** d).toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: d,
-  });
+export function formatAssetAmount(amount: number, decimals: number): string {
+  if (!Number.isInteger(decimals) || decimals < 0) {
+    throw new Error(
+      `formatAssetAmount: decimals must be a non-negative integer, got ${JSON.stringify(decimals)}`,
+    );
+  }
+  if (!Number.isSafeInteger(amount) || amount < 0) {
+    throw new Error(
+      `formatAssetAmount: amount must be a non-negative integer, got ${JSON.stringify(amount)}`,
+    );
+  }
+  return formatAssetAmountString(String(amount), decimals);
 }
 
 /** Format an arbitrary-precision atomic-unit digit string without numeric conversion. */

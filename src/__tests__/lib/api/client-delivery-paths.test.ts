@@ -142,6 +142,7 @@ describe('api.send with delivery placement', () => {
         asset_id: 'aa'.repeat(32),
         mnemonic: MNEMONIC,
         nkCommit: NK,
+        accountIndex: 0,
         delivery: invoiceDelivery,
         input_coins: ['ff'.repeat(32)],
         confirmPinMismatch: true,
@@ -163,6 +164,7 @@ describe('api.send with delivery placement', () => {
       asset_id: 'aa'.repeat(32),
       mnemonic: MNEMONIC,
       nkCommit: NK,
+      accountIndex: 0,
       delivery: invoiceDelivery,
       input_coins: ['ee'.repeat(32)],
     });
@@ -197,6 +199,7 @@ describe('api.createCoin with delivery', () => {
       amount: '1',
       mnemonic: MNEMONIC,
       nkCommit: NK,
+      accountIndex: 0,
       delivery: invoiceDelivery,
     });
     expect(job.status).toBe('completed');

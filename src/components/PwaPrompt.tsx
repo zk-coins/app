@@ -46,7 +46,11 @@ export function PwaPrompt() {
   useEffect(() => {
     /* v8 ignore next -- React effects never execute during SSR, so window is necessarily defined whenever this callback runs. */
     if (typeof window === 'undefined') return;
-    setDismissed(localStorage.getItem(KEY) === '1');
+    try {
+      setDismissed(localStorage.getItem(KEY) === '1');
+    } catch {
+      // Keep initial dismissed=true when storage is unavailable.
+    }
     setInstalled(
       window.matchMedia?.('(display-mode: standalone)').matches ||
         // @ts-expect-error iOS legacy
@@ -83,7 +87,11 @@ export function PwaPrompt() {
     setDismissed(true);
     /* v8 ignore next -- Dismiss is reachable only from browser-rendered buttons in this client component. */
     if (typeof window !== 'undefined') {
-      localStorage.setItem(KEY, '1');
+      try {
+        localStorage.setItem(KEY, '1');
+      } catch {
+        // React state still dismisses when storage is unavailable.
+      }
     }
   };
 

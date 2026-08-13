@@ -6,12 +6,21 @@ import {
   WALLET_PAYLOAD_VERSION,
 } from '@/stores/wallet';
 import type { Account } from '@/stores/wallet';
+import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
 
+// Syntactically valid drift fixture: address/nkCommit do NOT match the mnemonic.
 const testAccount: Account = {
   address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
   mnemonic:
     'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
   nkCommit: '00'.repeat(32),
+};
+
+const consistentKeys = accountKeysFromMnemonic(testAccount.mnemonic);
+const consistentAccount: Account = {
+  address: consistentKeys.address,
+  mnemonic: consistentKeys.mnemonic,
+  nkCommit: consistentKeys.nkCommit,
 };
 
 beforeEach(() => {
@@ -300,23 +309,35 @@ describe('wallet store — unlock edge cases', () => {
 
 describe('wallet store — password encryption', () => {
   it('saves and unlocks with password (v2 payload)', async () => {
-    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPassword('testpassword123');
 
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     const stored = await loadEncryptedWallet();
     expect(stored).not.toBeNull();
     expect(stored?.authMethod).toBe('seed');
-    expect(stored?.address).toBe(testAccount.address);
+    expect(stored?.address).toBe(consistentAccount.address);
     expect(stored?.payloadVersion).toBe(WALLET_PAYLOAD_VERSION);
 
     useWalletStore.setState({ account: null });
 
     await useWalletStore.getState().unlockWithPassword('testpassword123');
     const state = useWalletStore.getState();
-    expect(state.account).toEqual(testAccount);
+    expect(state.account).toEqual(consistentAccount);
     expect(state.isLocked).toBe(false);
     expect(state.needsSeedReimport).toBe(false);
+  });
+
+  it('refuses unlock when address/nkCommit drift from the mnemonic', async () => {
+    await useWalletStore.getState().saveWithPassword('testpassword123', testAccount);
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const state = useWalletStore.getState();
+    expect(state.account).toBeNull();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.isLocked).toBe(true);
   });
 
   it('fails to unlock with wrong password', async () => {
@@ -337,7 +358,7 @@ describe('wallet store — PRF encryption', () => {
   it('saves and unlocks with PRF output', async () => {
     const prfOutput = crypto.getRandomValues(new Uint8Array(32));
 
-    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPrf(prfOutput);
 
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
@@ -348,7 +369,20 @@ describe('wallet store — PRF encryption', () => {
     useWalletStore.setState({ account: null });
 
     await useWalletStore.getState().unlockWithPrf(prfOutput);
-    expect(useWalletStore.getState().account).toEqual(testAccount);
+    expect(useWalletStore.getState().account).toEqual(consistentAccount);
+  });
+
+  it('refuses PRF unlock when address/nkCommit drift from the mnemonic', async () => {
+    const prfOutput = crypto.getRandomValues(new Uint8Array(32));
+    await useWalletStore.getState().saveWithPrf(prfOutput, testAccount);
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPrf(prfOutput)).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const state = useWalletStore.getState();
+    expect(state.account).toBeNull();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.isLocked).toBe(true);
   });
 
   it('throws when no stored wallet exists', async () => {
@@ -458,7 +492,7 @@ describe('wallet store — clearNeedsSeedReimport', () => {
 
 describe('wallet store — serialize username branch', () => {
   it('persists username when present on the account', async () => {
-    const withUser = { ...testAccount, username: 'alice' };
+    const withUser = { ...consistentAccount, username: 'alice' };
     await useWalletStore.getState().saveWithPassword('password123', withUser);
     useWalletStore.setState({ account: null, isLocked: true });
     await useWalletStore.getState().unlockWithPassword('password123');

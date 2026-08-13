@@ -206,6 +206,7 @@ describe('CreateCoinPage — happy path', () => {
         amount: '1000',
         mnemonic: ALICE.mnemonic,
         nkCommit: ALICE.nkCommit,
+        accountIndex: 0,
       }),
       expect.any(Object),
     );
