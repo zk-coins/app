@@ -436,6 +436,23 @@ describe('CreateCoinPage — error surfacing', () => {
     await user.click(screen.getByTestId('create-submit-btn'));
     expect(await screen.findByTestId('create-error')).toBeInTheDocument();
   });
+
+  it('treats sessionStorage.getItem throw as fail-closed create lock', async () => {
+    const getItemSpy = vi.spyOn(sessionStorage, 'getItem').mockImplementation(() => {
+      throw new Error('storage disabled');
+    });
+    try {
+      const user = userEvent.setup();
+      render(<CreateCoinPage />);
+
+      // Fill fields so disabled is not due to empty name/amount.
+      await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+      await user.type(screen.getByTestId('create-amount-input'), '1000');
+      expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+    } finally {
+      getItemSpy.mockRestore();
+    }
+  });
 });
 
 describe('CreateCoinPage — redirect guard', () => {
