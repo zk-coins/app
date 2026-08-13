@@ -165,6 +165,22 @@ describe('TransactionDetailPage', () => {
     expect(screen.getByTestId('tx-detail-confirmation')).toHaveTextContent('Status unbekannt');
   });
 
+  it.each([Number.NaN, Infinity, -5, Number.MAX_SAFE_INTEGER + 1])(
+    'renders em-dash for non-safe amount %s',
+    async (badAmount) => {
+      spy.mockResolvedValue({ ...MINT, amount: badAmount });
+      render(<TransactionDetailPage />);
+      expect(await screen.findByTestId('tx-detail-v-amount')).toHaveTextContent('—');
+      expect(screen.getByTestId('tx-detail-v-amount-full')).toHaveTextContent('—');
+    },
+  );
+
+  it('renders em-dash for non-safe balance_after', async () => {
+    spy.mockResolvedValue({ ...MINT, balance_after: Number.NaN });
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-v-balance-after')).toHaveTextContent('—');
+  });
+
   it('renders a detail without status as unknown', async () => {
     const { status: _status, ...withoutStatus } = MINT;
     void _status;

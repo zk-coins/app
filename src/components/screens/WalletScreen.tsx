@@ -20,7 +20,13 @@ import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
 import { useCapabilities } from '@/stores/capabilities';
 import { historyItemDate, type HistoryItem, type AssetBalance } from '@/lib/api/client';
-import { formatAssetAmount, formatBtc, shortAssetId, toZkAddress } from '@/lib/format';
+import {
+  formatAssetAmount,
+  formatBtc,
+  shortAssetId,
+  toZkAddress,
+  isNonNegativeSafeInteger,
+} from '@/lib/format';
 import { useFeatures } from '@/lib/features';
 import { useHistory } from '@/hooks/useHistory';
 import { usePortfolio } from '@/hooks/usePortfolio';
@@ -525,7 +531,7 @@ function TransactionsList({
         // history renders raw atomic counts (per-asset decimals differ, so a
         // single unit suffix would be wrong). Amount is optional on thin
         // pull-session locators. Unknown polarity keeps the raw amount.
-        const amount = typeof tx.amount === 'number' ? tx.amount : undefined;
+        const amount = isNonNegativeSafeInteger(tx.amount) ? tx.amount : undefined;
         const displayAmount = amount === undefined ? undefined : isDebit ? -amount : amount;
         const amountText =
           displayAmount === undefined

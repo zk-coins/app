@@ -9,6 +9,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   ZkCoinsV1Client,
   V1ApiError,
+  KeyBindingRefusalError,
   encodeHexLower,
   type DeliveryCredential,
   type V1Job,
@@ -31,6 +32,11 @@ const MNEMONIC =
 const ADDR = 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
 const NK = '00'.repeat(32);
 const JOB_ID = 'job-cover-1';
+
+const DUMMY_SIG = {
+  signature: new Uint8Array(64),
+  s2cNonce: new Uint8Array(32),
+};
 
 const invoiceDelivery: DeliveryCredential = {
   type: 'invoice',
@@ -130,10 +136,8 @@ function mockHappyHandshake(opts: { sendCounter?: number; phases?: string[] } = 
       },
     }),
   );
-  spyProto('refuseOrSignAndSubmit', async () => ({
-    signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-    job: completedJob({ phase: 'signed' }),
-  }));
+  spyProto('signAwaiting', () => DUMMY_SIG);
+  spyProto('signJob', async () => completedJob({ phase: 'signed' }));
 
   let getJobCalls = 0;
   const phases = opts.phases ?? ['proving', 'completed'];
@@ -520,7 +524,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
       events.push('awaiting_signature');
       return awaitingJob();
     });
-    const refuse = spyProto('refuseOrSignAndSubmit', async (args) => {
+    const signAwaiting = spyProto('signAwaiting', (args) => {
       events.push('sign');
       expect(args.accountState.send_counter).toBe(0);
       expect(args.accountState.current_pubkey).toBe(
@@ -529,11 +533,9 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
       expect(args.localPubkey).toEqual(
         spendKeyAt(MNEMONIC, args.awaiting.send_counter, 0).publicKey,
       );
-      return {
-        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-        job: completedJob(),
-      };
+      return DUMMY_SIG;
     });
+    spyProto('signJob', async () => completedJob());
     spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
 
     const phases: string[] = [];
@@ -552,7 +554,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     expect(job.status).toBe('completed');
     expect(phases.length).toBeGreaterThan(0);
     expect(pull).toHaveBeenCalledTimes(2);
-    expect(refuse).toHaveBeenCalled();
+    expect(signAwaiting).toHaveBeenCalled();
     expect(events.indexOf('submit')).toBeLessThan(events.indexOf('awaiting_signature'));
     expect(events.indexOf('awaiting_signature')).toBeLessThan(events.indexOf('second pull'));
     expect(events.indexOf('second pull')).toBeLessThan(events.indexOf('sign'));
@@ -581,8 +583,11 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         },
       }),
     );
-    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
-      throw new Error('refuseOrSignAndSubmit must not run when job counter is non-genesis on 404');
+    const signAwaiting = spyProto('signAwaiting', () => {
+      throw new Error('signAwaiting must not run when job counter is non-genesis on 404');
+    });
+    const signJob = spyProto('signJob', async () => {
+      throw new Error('signJob must not run when job counter is non-genesis on 404');
     });
     spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
 
@@ -597,7 +602,8 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
         accountIndex: 0,
       }),
     ).rejects.toThrow(/send_counter is 5 \(non-genesis\)/);
-    expect(refuse).not.toHaveBeenCalled();
+    expect(signAwaiting).not.toHaveBeenCalled();
+    expect(signJob).not.toHaveBeenCalled();
   });
 
   it('pre-pull 404 + sign-pull 5xx aborts without signing', async () => {
@@ -614,8 +620,11 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     });
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
-      throw new Error('refuseOrSignAndSubmit must not run after sign-pull 5xx');
+    const signAwaiting = spyProto('signAwaiting', () => {
+      throw new Error('signAwaiting must not run after sign-pull 5xx');
+    });
+    const signJob = spyProto('signJob', async () => {
+      throw new Error('signJob must not run after sign-pull 5xx');
     });
     spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
 
@@ -632,7 +641,8 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     ).rejects.toMatchObject({ status: 500 });
     expect(pullCalls).toBe(2);
     expect(getState).not.toHaveBeenCalled();
-    expect(refuse).not.toHaveBeenCalled();
+    expect(signAwaiting).not.toHaveBeenCalled();
+    expect(signJob).not.toHaveBeenCalled();
   });
 
   it('uses live send_counter when account state is present', async () => {
@@ -1191,7 +1201,10 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     });
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
+    const signAwaiting = spyProto('signAwaiting', () => {
+      throw new Error('must not run after rehydration timeout');
+    });
+    const signJob = spyProto('signJob', async () => {
       throw new Error('must not run after rehydration timeout');
     });
 
@@ -1211,7 +1224,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       status: 'timeout',
       serverError: 'timed out waiting for rehydrate after 180000ms',
     });
-    expect(refuse).not.toHaveBeenCalled();
+    expect(signAwaiting).not.toHaveBeenCalled();
+    expect(signJob).not.toHaveBeenCalled();
   });
 
   it('maps AbortError during rehydration pull without signal abort to timeout', async () => {
@@ -1228,7 +1242,10 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     });
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
+    const signAwaiting = spyProto('signAwaiting', () => {
+      throw new Error('must not run after rehydration AbortError');
+    });
+    const signJob = spyProto('signJob', async () => {
       throw new Error('must not run after rehydration AbortError');
     });
 
@@ -1248,7 +1265,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       status: 'timeout',
       serverError: 'timed out waiting for rehydrate after 180000ms',
     });
-    expect(refuse).not.toHaveBeenCalled();
+    expect(signAwaiting).not.toHaveBeenCalled();
+    expect(signJob).not.toHaveBeenCalled();
   });
 
   it('maps aborted signal plus 404 during rehydration to timeout, not genesis', async () => {
@@ -1269,7 +1287,10 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     });
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
+    const signAwaiting = spyProto('signAwaiting', () => {
+      throw new Error('must not run after rehydration abort+404');
+    });
+    const signJob = spyProto('signJob', async () => {
       throw new Error('must not run after rehydration abort+404');
     });
 
@@ -1289,7 +1310,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       status: 'timeout',
       serverError: 'timed out waiting for rehydrate after 180000ms',
     });
-    expect(refuse).not.toHaveBeenCalled();
+    expect(signAwaiting).not.toHaveBeenCalled();
+    expect(signJob).not.toHaveBeenCalled();
   });
 
   it('maps network error after successful refuseOrSignAndSubmit to unknown via reconcileSignedJob', async () => {
@@ -1301,10 +1323,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       status: 'accepted',
     }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    spyProto('refuseOrSignAndSubmit', async () => ({
-      signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob({ phase: 'signed' }),
-    }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob({ phase: 'signed' }));
     spyProto('getJob', async () => {
       throw new Error('network down');
     });
@@ -1347,7 +1367,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       status: 'accepted',
     }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    spyProto('refuseOrSignAndSubmit', async () => {
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => {
       controller.abort();
       throw new Error('sign submit aborted by deadline');
     });
@@ -1386,7 +1407,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       status: 'accepted',
     }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    spyProto('refuseOrSignAndSubmit', async () => {
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => {
       controller.abort();
       throw new Error('sign submit aborted by deadline');
     });
@@ -1433,7 +1455,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       status: 'accepted',
     }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    spyProto('refuseOrSignAndSubmit', async () => {
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => {
       controller.abort();
       throw new Error('sign submit aborted by deadline');
     });
@@ -1471,7 +1494,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       status: 'accepted',
     }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    spyProto('refuseOrSignAndSubmit', async () => {
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => {
       throw Object.assign(new Error('aborted'), { name: 'AbortError' });
     });
     spyProto('getJob', async () => ({
@@ -1501,7 +1525,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       status: 'accepted',
     }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    spyProto('refuseOrSignAndSubmit', async () => {
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => {
       throw new Error('sign post network blip');
     });
     spyProto('getJob', async () => ({
@@ -1530,7 +1555,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       status: 'accepted',
     }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    spyProto('refuseOrSignAndSubmit', async () => {
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => {
       throw new Error('sign post network blip');
     });
     spyProto('getJob', async () => {
@@ -1584,7 +1610,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
 
   it('throws JobFailedError when handshake signal aborts after awaiting_signature and before sign', async () => {
     // Abort only after rehydrate succeeds so the check at signal.aborted
-    // before refuseOrSignAndSubmit is hit (sign phase), not rehydrate.
+    // before signAwaiting is hit (sign phase), not rehydrate.
     const controller = new AbortController();
     vi.spyOn(AbortSignal, 'timeout').mockReturnValue(controller.signal);
 
@@ -1611,7 +1637,10 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     });
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    const refuse = spyProto('refuseOrSignAndSubmit', async () => {
+    const signAwaiting = spyProto('signAwaiting', () => {
+      throw new Error('must not run after handshake signal abort');
+    });
+    const signJob = spyProto('signJob', async () => {
       throw new Error('must not run after handshake signal abort');
     });
 
@@ -1632,7 +1661,41 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       serverError: 'timed out waiting for sign after 180000ms',
       message: 'timed out waiting for sign after 180000ms',
     });
-    expect(refuse).not.toHaveBeenCalled();
+    expect(signAwaiting).not.toHaveBeenCalled();
+    expect(signJob).not.toHaveBeenCalled();
+  });
+
+  it('propagates KeyBindingRefusalError from signAwaiting without reconciling', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('getAccountState', async () => {
+      throw new Error('getAccountState must not run when every pull 404s');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('waitForAwaitingSignature', async () => awaitingJob());
+    spyProto('signAwaiting', () => {
+      throw new KeyBindingRefusalError({
+        localPubkey: new Uint8Array(32),
+        currentPubkey: new Uint8Array(32),
+        txnPubkey: new Uint8Array(32),
+        sendCounter: 0,
+      });
+    });
+    const getJob = spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'KeyBindRefuse',
+        decimals: 0,
+        amount: '10',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toBeInstanceOf(KeyBindingRefusalError);
+    expect(getJob).not.toHaveBeenCalled();
   });
 
   // mapHandshakeAbort must rethrow the same JobFailedError instance (not wrap as timeout).
@@ -1706,10 +1769,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
       send_counter: 0,
       current_pubkey: 'aa'.repeat(32),
     }));
-    spyProto('refuseOrSignAndSubmit', async () => ({
-      signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob({ status: 'proving', phase: 'proving' }),
-    }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
     spyProto('getJob', async () => ({
       job: completedJob({ status: 'proving', phase: 'proving' }),
       retryAfterMs: null,
@@ -1747,10 +1808,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
     }));
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    spyProto('refuseOrSignAndSubmit', async () => ({
-      signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob({ status: 'proving' }),
-    }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob({ status: 'proving' }));
     spyProto('getJob', async () => ({
       job: completedJob({
         status: 'failed',
@@ -1787,10 +1846,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
       if (opts?.sleep) await opts.sleep(5);
       return awaitingJob();
     });
-    spyProto('refuseOrSignAndSubmit', async () => ({
-      signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob({ status: 'proving' }),
-    }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob({ status: 'proving' }));
     spyProto('getJob', async () => ({
       job: completedJob({
         status: 'cancelled',
@@ -1825,10 +1882,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
     }));
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    spyProto('refuseOrSignAndSubmit', async () => ({
-      signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob({ status: 'proving', phase: 'proving' }),
-    }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
 
     let poll = 0;
     spyProto('getJob', async () => {
@@ -1872,10 +1927,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
       spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
       // Resolve immediately — no sleep on AbortSignal, so handshake timeout does not steal.
       spyProto('waitForAwaitingSignature', async () => awaitingJob());
-      spyProto('refuseOrSignAndSubmit', async () => ({
-        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-        job: completedJob({ status: 'proving', phase: 'proving' }),
-      }));
+      spyProto('signAwaiting', () => DUMMY_SIG);
+      spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
       // retryAfterMs above MAX_POLL_SLEEP_MS — waitForJob must cap sleep and time out.
       let seenSignal: AbortSignal | undefined;
       spyProto('getJob', async (_id, signal) => {
@@ -1919,10 +1972,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
       });
       spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
       spyProto('waitForAwaitingSignature', async () => awaitingJob());
-      spyProto('refuseOrSignAndSubmit', async () => ({
-        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-        job: completedJob({ status: 'proving', phase: 'proving' }),
-      }));
+      spyProto('signAwaiting', () => DUMMY_SIG);
+      spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
 
       let releaseGetJob!: (value: { job: V1Job; retryAfterMs: number }) => void;
       let resolveSaw!: () => void;
@@ -1975,10 +2026,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
       });
       spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
       spyProto('waitForAwaitingSignature', async () => awaitingJob());
-      spyProto('refuseOrSignAndSubmit', async () => ({
-        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-        job: completedJob({ status: 'proving', phase: 'proving' }),
-      }));
+      spyProto('signAwaiting', () => DUMMY_SIG);
+      spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
       spyProto('getJob', async () => ({
         job: completedJob({ status: 'proving', phase: 'proving' }),
         retryAfterMs: 10,
@@ -2019,10 +2068,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
       });
       spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
       spyProto('waitForAwaitingSignature', async () => awaitingJob());
-      spyProto('refuseOrSignAndSubmit', async () => ({
-        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-        job: completedJob({ status: 'proving', phase: 'proving' }),
-      }));
+      spyProto('signAwaiting', () => DUMMY_SIG);
+      spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
 
       let getJobCalls = 0;
       spyProto('getJob', async () => {
@@ -2064,10 +2111,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
       });
       spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
       spyProto('waitForAwaitingSignature', async () => awaitingJob());
-      spyProto('refuseOrSignAndSubmit', async () => ({
-        signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-        job: completedJob({ status: 'proving', phase: 'proving' }),
-      }));
+      spyProto('signAwaiting', () => DUMMY_SIG);
+      spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
       spyProto('getJob', async () => {
         throw new Error('node unavailable');
       });
@@ -2101,10 +2146,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
     });
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    spyProto('refuseOrSignAndSubmit', async () => ({
-      signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob({ status: 'proving', phase: 'proving' }),
-    }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
     spyProto('getJob', async () => {
       throw Object.assign(new Error('aborted'), { name: 'AbortError' });
     });
@@ -2136,10 +2179,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
     });
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
-    spyProto('refuseOrSignAndSubmit', async () => ({
-      signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob({ status: 'proving', phase: 'proving' }),
-    }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
     spyProto('getJob', async () => {
       throw jobErr;
     });

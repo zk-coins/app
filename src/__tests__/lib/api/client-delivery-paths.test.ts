@@ -34,6 +34,11 @@ const ADDR = 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq';
 const NK = '00'.repeat(32);
 const JOB_ID = 'job-deliv-1';
 
+const DUMMY_SIG = {
+  signature: new Uint8Array(64),
+  s2cNonce: new Uint8Array(32),
+};
+
 const invoiceDelivery: DeliveryCredential = {
   type: 'invoice',
   invoice: {
@@ -109,10 +114,8 @@ function mockHandshake(sendCounter = 0) {
   }));
   spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
   spyProto('waitForAwaitingSignature', async () => awaitingJob(sendCounter));
-  spyProto('refuseOrSignAndSubmit', async () => ({
-    signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-    job: completedJob(),
-  }));
+  spyProto('signAwaiting', () => DUMMY_SIG);
+  spyProto('signJob', async () => completedJob());
   spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
 }
 
@@ -186,10 +189,8 @@ describe('api.createCoin with delivery', () => {
     }));
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
     spyProto('waitForAwaitingSignature', async () => awaitingJob(0));
-    spyProto('refuseOrSignAndSubmit', async () => ({
-      signature: { signature: '33'.repeat(64), s2c_nonce: '44'.repeat(32) } as never,
-      job: completedJob(),
-    }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob());
     spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
 
     const job = await api.createCoin({

@@ -225,6 +225,22 @@ describe('AssetDetailPage', () => {
     expect(iconWrap?.className).not.toContain('bg-bitcoin/10');
     expect(iconWrap?.className).not.toContain('text-bitcoin');
   });
+
+  it('renders an em-dash for a non-safe history amount', async () => {
+    ownerSpy.mockResolvedValue(
+      portfolio([{ asset_id: ASSET_ID, name: 'MyCoin', decimals: 0, balance: 100, num_sends: 0 }]),
+    );
+    historySpy.mockResolvedValue({
+      items: [{ id: 1, kind: 'mint', amount: Number.NaN, created_at: 1_780_000_000 }],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    render(<AssetDetailPage />);
+    const row = await screen.findByTestId('asset-tx-row');
+    expect(row).toHaveTextContent('—');
+    expect(row).not.toHaveTextContent('NaN');
+  });
   it('shows no terminal state while the first portfolio request is pending', () => {
     ownerSpy.mockReturnValue(new Promise<never>(() => {}));
     render(<AssetDetailPage />);

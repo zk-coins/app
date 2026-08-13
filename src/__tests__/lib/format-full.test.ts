@@ -10,7 +10,25 @@ import {
   truncateAddress,
   formatRelative,
   formatTimeOnly,
+  isNonNegativeSafeInteger,
 } from '@/lib/format';
+
+describe('isNonNegativeSafeInteger', () => {
+  it('accepts 0 and 1', () => {
+    expect(isNonNegativeSafeInteger(0)).toBe(true);
+    expect(isNonNegativeSafeInteger(1)).toBe(true);
+  });
+  it('rejects non-safe, negative, non-number values', () => {
+    expect(isNonNegativeSafeInteger(-1)).toBe(false);
+    expect(isNonNegativeSafeInteger(1.5)).toBe(false);
+    expect(isNonNegativeSafeInteger(Number.NaN)).toBe(false);
+    expect(isNonNegativeSafeInteger(Infinity)).toBe(false);
+    expect(isNonNegativeSafeInteger(Number.MAX_SAFE_INTEGER + 1)).toBe(false);
+    expect(isNonNegativeSafeInteger('1')).toBe(false);
+    expect(isNonNegativeSafeInteger(null)).toBe(false);
+    expect(isNonNegativeSafeInteger(undefined)).toBe(false);
+  });
+});
 
 describe('SATS_PER_BTC constant', () => {
   it('equals 100_000_000', () => {

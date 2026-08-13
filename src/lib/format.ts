@@ -86,6 +86,10 @@ export function formatRelative(ts: number): string {
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
+export function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
 /**
  * Format a raw integer asset amount (atomic units) using the asset's
  * `decimals`. Neutral multi-asset: there is no BTC/sats assumption — an

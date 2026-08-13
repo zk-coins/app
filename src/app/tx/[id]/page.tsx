@@ -10,7 +10,13 @@ import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
 import { useTransaction } from '@/hooks/useTransaction';
 import { historyItemDate, type TxDetail } from '@/lib/api/client';
-import { formatBtc, formatBtcCompact, truncateAddress, toZkAddress } from '@/lib/format';
+import {
+  formatBtc,
+  formatBtcCompact,
+  truncateAddress,
+  toZkAddress,
+  isNonNegativeSafeInteger,
+} from '@/lib/format';
 
 // Block explorer base (build-time, like the network-activity chart).
 // Empty in dev / PRD bundles that ship no explorer yet → no outbound link,
@@ -183,7 +189,7 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
   const explorerHref = EXPLORER_URL && detail.txid ? `${EXPLORER_URL}/tx/${detail.txid}` : null;
   const accountAddr = detail.address ?? '';
   const zkAddress = accountAddr ? toZkAddress(accountAddr, usernameDomain) : '';
-  const amount = typeof detail.amount === 'number' ? detail.amount : undefined;
+  const amount = isNonNegativeSafeInteger(detail.amount) ? detail.amount : undefined;
   // formatBtcCompact always emits +/−; unknown polarity must not call it.
   const amountDisplay =
     amount === undefined
@@ -266,7 +272,7 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
         <Row
           label="Balance after"
           value={
-            typeof detail.balance_after === 'number'
+            isNonNegativeSafeInteger(detail.balance_after)
               ? `${formatBtc(detail.balance_after)} BTC`
               : '—'
           }
@@ -276,7 +282,7 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
         <Row
           label="Balance before"
           value={
-            typeof detail.balance_before === 'number'
+            isNonNegativeSafeInteger(detail.balance_before)
               ? `${formatBtc(detail.balance_before)} BTC`
               : '—'
           }
@@ -349,7 +355,7 @@ function TxDetailBody({ detail, usernameDomain }: { detail: TxDetail; usernameDo
         <Row
           label="Commit value"
           value={
-            typeof detail.commit_output_value === 'number'
+            isNonNegativeSafeInteger(detail.commit_output_value)
               ? `${formatBtc(detail.commit_output_value)} BTC`
               : '—'
           }

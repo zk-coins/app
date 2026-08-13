@@ -7,6 +7,7 @@ import {
 } from '@/stores/wallet';
 import type { Account } from '@/stores/wallet';
 import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
+import * as accountKeys from '@/lib/crypto/account-keys';
 
 // Syntactically valid drift fixture: address/nkCommit do NOT match the mnemonic.
 const testAccount: Account = {
@@ -22,6 +23,52 @@ const consistentAccount: Account = {
   mnemonic: consistentKeys.mnemonic,
   nkCommit: consistentKeys.nkCommit,
 };
+
+async function persistRawV2Password(account: Account, password: string): Promise<void> {
+  const { encrypt, deriveKeyFromPassword } = await import('@/lib/crypto/encryption');
+  const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
+  const { key, salt } = await deriveKeyFromPassword(password);
+  const payload = JSON.stringify({
+    version: WALLET_PAYLOAD_VERSION,
+    account: {
+      address: account.address,
+      mnemonic: account.mnemonic,
+      nkCommit: account.nkCommit,
+      ...(account.username !== undefined ? { username: account.username } : {}),
+    },
+  });
+  const encrypted = await encrypt(payload, key, salt);
+  await saveEncryptedWallet({
+    encrypted,
+    authMethod: 'seed',
+    address: account.address,
+    createdAt: Date.now(),
+    payloadVersion: WALLET_PAYLOAD_VERSION,
+  });
+}
+
+async function persistRawV2Prf(account: Account, prfOutput: Uint8Array): Promise<void> {
+  const { encrypt, deriveKeyFromPrf } = await import('@/lib/crypto/encryption');
+  const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
+  const key = await deriveKeyFromPrf(prfOutput);
+  const payload = JSON.stringify({
+    version: WALLET_PAYLOAD_VERSION,
+    account: {
+      address: account.address,
+      mnemonic: account.mnemonic,
+      nkCommit: account.nkCommit,
+      ...(account.username !== undefined ? { username: account.username } : {}),
+    },
+  });
+  const encrypted = await encrypt(payload, key);
+  await saveEncryptedWallet({
+    encrypted,
+    authMethod: 'passkey',
+    address: account.address,
+    createdAt: Date.now(),
+    payloadVersion: WALLET_PAYLOAD_VERSION,
+  });
+}
 
 beforeEach(() => {
   useWalletStore.setState({
@@ -197,7 +244,7 @@ describe('wallet store — unlock edge cases', () => {
   });
 
   it('marks needsSeedReimport when decrypting an incompatible payload', async () => {
-    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPassword('testpassword123');
 
     // Overwrite ciphertext with a valid-password encrypt of a legacy blob
@@ -280,9 +327,9 @@ describe('wallet store — unlock edge cases', () => {
 
   it('saveWithPassword activates the account only after a successful write', async () => {
     expect(useWalletStore.getState().account).toBeNull();
-    await useWalletStore.getState().saveWithPassword('pw12345678', testAccount);
+    await useWalletStore.getState().saveWithPassword('pw12345678', consistentAccount);
     const state = useWalletStore.getState();
-    expect(state.account).toEqual(testAccount);
+    expect(state.account).toEqual(consistentAccount);
     expect(state.hasStoredWallet).toBe(true);
     expect(state.needsSeedReimport).toBe(false);
     expect(state.isLocked).toBe(false);
@@ -296,7 +343,7 @@ describe('wallet store — unlock edge cases', () => {
 
     useWalletStore.setState({ needsSeedReimport: true, account: null });
     await expect(
-      useWalletStore.getState().saveWithPassword('pw12345678', testAccount),
+      useWalletStore.getState().saveWithPassword('pw12345678', consistentAccount),
     ).rejects.toThrow('IDB write failed');
 
     const state = useWalletStore.getState();
@@ -329,7 +376,7 @@ describe('wallet store — password encryption', () => {
   });
 
   it('refuses unlock when address/nkCommit drift from the mnemonic', async () => {
-    await useWalletStore.getState().saveWithPassword('testpassword123', testAccount);
+    await persistRawV2Password(testAccount, 'testpassword123');
     useWalletStore.setState({ account: null, isLocked: true });
     await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
       IncompatibleWalletError,
@@ -346,7 +393,7 @@ describe('wallet store — password encryption', () => {
       mnemonic: consistentAccount.mnemonic,
       nkCommit: '11'.repeat(32),
     };
-    await useWalletStore.getState().saveWithPassword('testpassword123', driftedNkCommitAccount);
+    await persistRawV2Password(driftedNkCommitAccount, 'testpassword123');
     useWalletStore.setState({ account: null, isLocked: true });
     await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
       IncompatibleWalletError,
@@ -358,10 +405,10 @@ describe('wallet store — password encryption', () => {
   it('marks needsSeedReimport when mnemonic derivation throws', async () => {
     const invalidMnemonicAccount: Account = {
       address: consistentAccount.address,
-      mnemonic: ('notavalidmnemonicword '.repeat(12)).trim(),
+      mnemonic: 'notavalidmnemonicword '.repeat(12).trim(),
       nkCommit: '00'.repeat(32),
     };
-    await useWalletStore.getState().saveWithPassword('testpassword123', invalidMnemonicAccount);
+    await persistRawV2Password(invalidMnemonicAccount, 'testpassword123');
     useWalletStore.setState({ account: null, isLocked: true });
     await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
       IncompatibleWalletError,
@@ -370,11 +417,65 @@ describe('wallet store — password encryption', () => {
     expect(useWalletStore.getState().account).toBeNull();
   });
 
+  it('marks needsSeedReimport with fallback message when derivation throws a non-Error', async () => {
+    await useWalletStore.getState().saveWithPassword('testpassword123', consistentAccount);
+    useWalletStore.setState({ account: null, isLocked: true });
+
+    const spy = vi.spyOn(accountKeys, 'accountKeysFromMnemonic').mockImplementation(() => {
+      throw 'not-an-error';
+    });
+    try {
+      await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
+        IncompatibleWalletError,
+      );
+      expect(useWalletStore.getState().error).toBe('Custody key derivation failed');
+      expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+      expect(useWalletStore.getState().account).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('fails to unlock with wrong password', async () => {
-    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPassword('correctpassword');
     useWalletStore.setState({ account: null });
     await expect(useWalletStore.getState().unlockWithPassword('wrongpassword')).rejects.toThrow();
+  });
+
+  it('saveWithPassword refuses a drifted custody triple without writing', async () => {
+    await expect(
+      useWalletStore.getState().saveWithPassword('pw12345678', testAccount),
+    ).rejects.toThrow(IncompatibleWalletError);
+    const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    expect(await loadEncryptedWallet()).toBeNull();
+    expect(useWalletStore.getState().account).toBeNull();
+    expect(useWalletStore.getState().needsSeedReimport).toBe(false);
+  });
+
+  it('saveWithPassword refuses an invalid mnemonic without writing', async () => {
+    const invalidMnemonicAccount: Account = {
+      address: consistentAccount.address,
+      mnemonic: 'notavalidmnemonicword '.repeat(12).trim(),
+      nkCommit: '00'.repeat(32),
+    };
+    await expect(
+      useWalletStore.getState().saveWithPassword('pw12345678', invalidMnemonicAccount),
+    ).rejects.toThrow(IncompatibleWalletError);
+    const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    expect(await loadEncryptedWallet()).toBeNull();
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
+  it('saveWithPassword asserts get().account when no second argument is given', async () => {
+    useWalletStore.getState().setAccount(testAccount);
+    await expect(useWalletStore.getState().saveWithPassword('pw12345678')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    expect(await loadEncryptedWallet()).toBeNull();
+    expect(useWalletStore.getState().account).toEqual(testAccount);
+    expect(useWalletStore.getState().needsSeedReimport).toBe(false);
   });
 
   it('throws when no stored wallet exists', async () => {
@@ -404,7 +505,7 @@ describe('wallet store — PRF encryption', () => {
 
   it('refuses PRF unlock when address/nkCommit drift from the mnemonic', async () => {
     const prfOutput = crypto.getRandomValues(new Uint8Array(32));
-    await useWalletStore.getState().saveWithPrf(prfOutput, testAccount);
+    await persistRawV2Prf(testAccount, prfOutput);
     useWalletStore.setState({ account: null, isLocked: true });
     await expect(useWalletStore.getState().unlockWithPrf(prfOutput)).rejects.toThrow(
       IncompatibleWalletError,
@@ -426,16 +527,27 @@ describe('wallet store — PRF encryption', () => {
     const prf1 = crypto.getRandomValues(new Uint8Array(32));
     const prf2 = crypto.getRandomValues(new Uint8Array(32));
 
-    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPrf(prf1);
     useWalletStore.setState({ account: null });
 
     await expect(useWalletStore.getState().unlockWithPrf(prf2)).rejects.toThrow();
   });
 
+  it('saveWithPrf refuses a drifted custody triple without writing', async () => {
+    const prf = crypto.getRandomValues(new Uint8Array(32));
+    await expect(useWalletStore.getState().saveWithPrf(prf, testAccount)).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    expect(await loadEncryptedWallet()).toBeNull();
+    expect(useWalletStore.getState().account).toBeNull();
+    expect(useWalletStore.getState().needsSeedReimport).toBe(false);
+  });
+
   it('marks needsSeedReimport when PRF-decrypt yields an incompatible payload', async () => {
     const prf = crypto.getRandomValues(new Uint8Array(32));
-    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPrf(prf);
 
     // Envelope stays at WALLET_PAYLOAD_VERSION so decrypt-then-parse runs.
@@ -635,7 +747,7 @@ describe('wallet store — checkForStoredWallet', () => {
     };
     localStorage.setItem('zkcoins_wallet', JSON.stringify(legacyData));
     useWalletStore.setState({
-      account: testAccount,
+      account: consistentAccount,
       needsSeedReimport: true,
     });
 
@@ -853,7 +965,7 @@ describe('wallet store — checkForStoredWallet', () => {
 
 describe('wallet store — deleteWallet', () => {
   it('clears IndexedDB, localStorage, and state', async () => {
-    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPassword('pw12345678');
     localStorage.setItem('zkcoins_transactions', JSON.stringify([{ id: 'x' }]));
 

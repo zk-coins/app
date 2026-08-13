@@ -249,6 +249,17 @@ describe('WalletScreen — transaction list from server history', () => {
     expect(screen.getByTestId('tx-row-time')).toHaveTextContent('—');
   });
 
+  it('renders an em-dash for a non-safe transaction amount', async () => {
+    historySpy.mockResolvedValue({
+      items: [row({ amount: Number.NaN })],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    render(<WalletScreen />);
+    expect(await screen.findByTestId('tx-row-amount')).toHaveTextContent('—');
+  });
+
   it('marks retained portfolio and history data stale after later poll failures', async () => {
     vi.useFakeTimers();
     historySpy.mockResolvedValueOnce({ items: [row()], total: 1, limit: 50, offset: 0 });

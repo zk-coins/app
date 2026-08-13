@@ -12,6 +12,7 @@ import {
   encodeHexLower,
   freshNpkRand,
   placeDeliveryCredential,
+  signBodyFromSignature,
   type DeliveryCredential,
   type Network,
   type TransitionRequest,
@@ -627,21 +628,20 @@ async function runTransitionHandshake(
   }
 
   const nodeNetwork = client.network;
+  const signature = client.signAwaiting({
+    localPubkey: spend.publicKey,
+    secretKey: spend.secretKey,
+    accountState: {
+      current_pubkey: accountState.current_pubkey,
+      send_counter: accountState.send_counter,
+    },
+    awaiting: awaiting.awaiting_signature,
+    nextPubkey: next.publicKey,
+    npkRand,
+    nodeNetwork,
+  });
   try {
-    await client.refuseOrSignAndSubmit({
-      jobId,
-      localPubkey: spend.publicKey,
-      secretKey: spend.secretKey,
-      accountState: {
-        current_pubkey: accountState.current_pubkey,
-        send_counter: accountState.send_counter,
-      },
-      awaiting: awaiting.awaiting_signature,
-      nextPubkey: next.publicKey,
-      npkRand,
-      nodeNetwork,
-      signal,
-    });
+    await client.signJob(jobId, signBodyFromSignature(signature), signal);
   } catch {
     return reconcileSignedJob(client, jobId, opts);
   }

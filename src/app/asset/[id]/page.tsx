@@ -11,7 +11,7 @@ import { useNetworkStore } from '@/stores/network';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { useHistory } from '@/hooks/useHistory';
 import type { HistoryItem } from '@/lib/api/client';
-import { formatAssetAmount, shortAssetId } from '@/lib/format';
+import { formatAssetAmount, shortAssetId, isNonNegativeSafeInteger } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
 import { useCapabilities } from '@/stores/capabilities';
 
@@ -298,7 +298,9 @@ function AssetHistory({
           Icon = Receipt;
         }
         const isDebit = polarity === 'debit';
-        const amountText = typeof tx.amount === 'number' ? tx.amount.toLocaleString('en-US') : '—';
+        const amountText = isNonNegativeSafeInteger(tx.amount)
+          ? tx.amount.toLocaleString('en-US')
+          : '—';
         return (
           <li key={tx.id}>
             <Link

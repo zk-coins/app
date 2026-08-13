@@ -212,6 +212,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     const account = accountToSave ?? get().account;
     if (!account) return;
 
+    assertCustodyTriple(account);
+
     const walletData = serializeWalletPayload(account);
     const { key, salt } = await deriveKeyFromPassword(password);
     const encrypted = await encrypt(walletData, key, salt);
@@ -240,6 +242,8 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   saveWithPrf: async (prfOutput: Uint8Array, accountToSave?: Account) => {
     const account = accountToSave ?? get().account;
     if (!account) return;
+
+    assertCustodyTriple(account);
 
     const walletData = serializeWalletPayload(account);
     const key = await deriveKeyFromPrf(prfOutput);
