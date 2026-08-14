@@ -170,7 +170,7 @@ export function MyComponent() {
   if (!account) return null;
 
   return (
-    <div className="rounded-xl border border-zkcoins-border bg-zkcoins-card p-6">
+    <div className="rounded-xl border border-line bg-surface p-6">
       {/* content */}
     </div>
   );
@@ -180,18 +180,23 @@ export function MyComponent() {
 ### Styling
 
 - **Tailwind CSS** only — no CSS files, no styled-components
-- **Dark theme** — use `zkcoins-*` custom colors from `tailwind.config.ts`
-- **Bitcoin orange** — `bg-bitcoin`, `text-bitcoin`, `hover:bg-bitcoin-dark`
+- **Dark theme** — use tokens from `tailwind.config.ts`: `bg`, `ink`, `ink2`, `ink3`, `ink4`, `surface`, `line`, `line2`
+- **Bitcoin orange** — `bg-bitcoin`, `text-bitcoin`, `hover:bg-bitcoin-hover` (also `bitcoin-dim`)
 - **Consistent spacing** — `p-6` for cards, `gap-3` for form fields, `space-y-6` for sections
 
-| Color          | Tailwind class          | Hex       |
-| -------------- | ----------------------- | --------- |
-| Background     | `bg-zkcoins-bg`         | `#0a0a0a` |
-| Card           | `bg-zkcoins-card`       | `#141414` |
-| Border         | `border-zkcoins-border` | `#1f1f1f` |
-| Text           | `text-zkcoins-text`     | `#e5e5e5` |
-| Muted          | `text-zkcoins-muted`    | `#737373` |
-| Bitcoin Orange | `bg-bitcoin`            | `#f7931a` |
+| Color            | Tailwind class       | Hex       |
+| ---------------- | -------------------- | --------- |
+| Background       | `bg-bg`              | `#000000` |
+| Surface          | `bg-surface`         | `#0c0c0c` |
+| Line / border    | `border-line`        | `#1c1c1c` |
+| Line 2           | `border-line2`       | `#262626` |
+| Text             | `text-ink`           | `#ffffff` |
+| Text secondary   | `text-ink2`          | `#a1a1aa` |
+| Text muted       | `text-ink3`          | `#909099` |
+| Text dim         | `text-ink4`          | `#3f3f46` |
+| Bitcoin Orange   | `bg-bitcoin`         | `#f7931a` |
+| Bitcoin hover    | `bg-bitcoin-hover`   | `#ff9f2a` |
+| Bitcoin dim      | `bg-bitcoin-dim`     | `#c9761a` |
 
 ### State Management
 
@@ -259,13 +264,14 @@ The Dockerfile sets placeholder values at build time (`NEXT_PUBLIC_API_URL_PLACE
 
 ## CI/CD
 
-| Workflow                       | Trigger             | Action                                                   |
-| ------------------------------ | ------------------- | -------------------------------------------------------- |
-| `ci.yaml`                      | Push to develop, PR | Lint + Build                                             |
-| `deploy-dev.yaml`              | Push to develop     | Docker build → push `zkcoins/app:beta` → deploy to DEV   |
-| `deploy-prd.yaml`              | Push to main        | Docker build → push `zkcoins/app:latest` → deploy to PRD |
-| `auto-release-pr-staging.yaml` | Push to staging     | Creates Promote PR (staging → develop)                   |
-| `auto-release-pr.yaml`         | Push to develop     | Creates Release PR (develop → main)                      |
+| Workflow                       | Trigger                        | Action                                                                          |
+| ------------------------------ | ------------------------------ | ------------------------------------------------------------------------------- |
+| `ci.yaml`                      | Push to develop, PR            | Lint + Build; Unit Tests (including 100% coverage); E2E Tests                   |
+| `handbook-deploy.yaml`         | Handbook paths / dispatch      | Build and deploy the handbook image                                             |
+| `deploy-dev.yaml`              | Push to develop                | Docker build → push `zkcoins/app:beta` → deploy to DEV                          |
+| `deploy-prd.yaml`              | Push to main                   | Docker build → push `zkcoins/app:latest` → deploy to PRD                        |
+| `auto-release-pr-staging.yaml` | Push to staging                | Creates Promote PR (staging → develop)                                          |
+| `auto-release-pr.yaml`         | Push to develop                | Creates Release PR (develop → main)                                             |
 
 ### Before Pushing
 

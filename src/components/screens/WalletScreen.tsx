@@ -100,7 +100,7 @@ export function WalletScreen() {
     <>
       {infoLoaded && infoError && (
         <p data-testid="network-info-error" className="text-[12px] text-bad" role="alert">
-          Could not load node info: {infoError}
+          {t('networkInfoError', { error: infoError })}
         </p>
       )}
       {displayName && (

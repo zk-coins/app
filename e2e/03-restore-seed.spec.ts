@@ -13,8 +13,8 @@
  *
  * Locators: testid-based. The three import-error paths (wrong-count,
  * bad-bip39, password-validation) still assert on literal English text
- * because they all share the `seed-import-error` container. Marked
- * `i18n-todo` — discriminate via `data-error-kind` when i18n lands.
+ * because they all share the `seed-import-error` container. Onboarding copy
+ * is not in the message catalog yet; assert data-error-kind, not literal text.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -59,7 +59,7 @@ test.describe('Restore wallet — seed phrase', () => {
     await page.getByTestId('seed-import-textarea').fill('only five words pasted here');
     await page.getByTestId('seed-import-continue-btn').click();
     await expect(page.getByTestId('seed-import-error')).toBeVisible({ timeout: 5_000 });
-    // i18n-todo: discriminate count vs bip39 via data-error-kind.
+    // Onboarding copy is not in the message catalog yet; assert data-error-kind, not literal text
     await expect(page.getByTestId('seed-import-error')).toHaveText(/Enter exactly 12 words/);
     await snap(page, '03-restore-input-wrong-count');
   });
@@ -72,7 +72,7 @@ test.describe('Restore wallet — seed phrase', () => {
       .fill('zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz zzz');
     await page.getByTestId('seed-import-continue-btn').click();
     await expect(page.getByTestId('seed-import-error')).toBeVisible({ timeout: 5_000 });
-    // i18n-todo: discriminate count vs bip39 via data-error-kind.
+    // Onboarding copy is not in the message catalog yet; assert data-error-kind, not literal text
     await expect(page.getByTestId('seed-import-error')).toHaveText(/Invalid seed phrase/);
     await snap(page, '03-restore-input-bad-bip39');
   });
@@ -107,7 +107,7 @@ test.describe('Restore wallet — seed phrase', () => {
     await page.getByTestId('seed-import-password-confirm-input').fill('short');
     await page.getByTestId('seed-import-submit-btn').click();
     await expect(page.getByTestId('seed-import-error')).toBeVisible({ timeout: 5_000 });
-    // i18n-todo: discriminate too-short vs mismatch via data-error-kind.
+    // Onboarding copy is not in the message catalog yet; assert data-error-kind, not literal text
     await expect(page.getByTestId('seed-import-error')).toHaveText(
       /Password must be at least 8 characters/,
     );
@@ -123,7 +123,7 @@ test.describe('Restore wallet — seed phrase', () => {
     await page.getByTestId('seed-import-password-confirm-input').fill('DifferentPass456!');
     await page.getByTestId('seed-import-submit-btn').click();
     await expect(page.getByTestId('seed-import-error')).toBeVisible({ timeout: 5_000 });
-    // i18n-todo: discriminate too-short vs mismatch via data-error-kind.
+    // Onboarding copy is not in the message catalog yet; assert data-error-kind, not literal text
     await expect(page.getByTestId('seed-import-error')).toHaveText(/Passwords do not match/);
     await snap(page, '03-restore-password-mismatch');
   });

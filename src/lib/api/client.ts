@@ -910,10 +910,20 @@ export const api = {
       } catch (err) {
         // Node 404 = no account. sendCounter 0 only derives next_pubkey for the mint
         // request (protocol genesis). Signing still requires awaiting.send_counter === 0.
-        if (!isAccountNotFoundError(err)) {
+        // Other pre-pull failures wrap as ApiError so page-lock unlocks (ApiError = unlock).
+        if (isAccountNotFoundError(err)) {
+          sendCounter = 0;
+        } else if (err instanceof ApiError) {
           throw err;
+        } else if (err instanceof V1ApiError) {
+          throw new ApiError(err.status, err.message);
+        } else if (err instanceof JobFailedError) {
+          throw err;
+        } else if (err instanceof Error) {
+          throw new ApiError(0, err.message);
+        } else {
+          throw new ApiError(0, String(err));
         }
-        sendCounter = 0;
       }
 
       const next = spendKeyAt(params.mnemonic, sendCounter + 1, accountIndex);

@@ -52,7 +52,8 @@
     "emptyReceiveBody": "Teile deine Adresse über <receive>Empfangen</receive>.",
     "faucet": "Faucet",
     "minting": "Wird gemintet…",
-    "nameClaimUnavailable": "Namens-Claim ist in diesem Build noch nicht verfügbar."
+    "nameClaimUnavailable": "Namens-Claim ist in diesem Build noch nicht verfügbar.",
+    "networkInfoError": "Node-Info konnte nicht geladen werden: {error}"
   },
   "createCoin": {
     "back": "Zurück",
@@ -110,6 +111,13 @@
     "done": "Fertig",
     "headingBtc": "Bitcoin senden",
     "noFundsBody": " Hol dir Sats über <receive>Empfangen</receive><dfx> oder DFX</dfx>."
+  },
+  "receive": {
+    "back": "Zurück",
+    "redirecting": "Weiterleitung zum Wallet…",
+    "heading": "Empfangen",
+    "subtitle": "Empfangen über Namen ist in diesem Build noch nicht verfügbar. Rohe Account-Adressen sind kein gültiger Senden-Empfänger, daher wird kein QR angeboten.",
+    "unavailable": "Empfangen ist noch nicht verfügbar — NIP-05 / Namensclaim ist nicht angebunden, und der Senden-Pfad lehnt rohe zk1…-Adressen ab. Es wird kein teilbares Payload angeboten, bis ein Name oder Invoice-Credential produktiv aufgelöst werden kann."
   },
   "asset": {
     "back": "Zurück",

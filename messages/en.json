@@ -52,7 +52,8 @@
     "emptyReceiveBody": "Share your address via <receive>Receive</receive>.",
     "faucet": "Faucet",
     "minting": "Minting…",
-    "nameClaimUnavailable": "Name claim is not available yet in this build."
+    "nameClaimUnavailable": "Name claim is not available yet in this build.",
+    "networkInfoError": "Could not load node info: {error}"
   },
   "createCoin": {
     "back": "Back",
@@ -110,6 +111,13 @@
     "done": "Done",
     "headingBtc": "Send Bitcoin",
     "noFundsBody": " Get sats via <receive>Receive</receive><dfx> or DFX</dfx>."
+  },
+  "receive": {
+    "back": "Back",
+    "redirecting": "Redirecting to wallet…",
+    "heading": "Receive",
+    "subtitle": "Name-based receive is not available yet in this build. Raw account addresses are not a valid Send recipient, so no QR is offered.",
+    "unavailable": "Receive is not available yet — NIP-05 / name claim is not wired, and the Send path rejects raw zk1… addresses. No shareable payload is offered until a name or invoice credential can be resolved productively."
   },
   "asset": {
     "back": "Back",

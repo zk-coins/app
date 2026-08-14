@@ -3,7 +3,7 @@
  *
  * Covers § 8.2 of e2e/README.md. Drives Welcome → CREATE WALLET → (PasskeyFlow
  * intro — traversed, no shot) → OTHER LOGIN OPTIONS → SeedFlow through every
- * stage. 10 tests, 9 linux baselines, 1 no-shot. The `creating` shot from
+ * stage. 9 tests / 8 shots, 1 no-shot. The `creating` shot from
  * the original plan was dropped — the state is too transient to snapshot.
  *
  * `beforeEach` wipes IDB + localStorage so every test starts from a blank
@@ -12,8 +12,8 @@
  * Locators are testid-based. The two password-validation error tests
  * (too-short, mismatch) still assert on the literal English message
  * because both errors share the `seed-error` container — distinguishing
- * them by text is the only way today. Both lines are marked `i18n-todo`
- * to be replaced with `data-error-kind` discriminators when i18n lands.
+ * them by text is the only way today. Onboarding copy is not in the message
+ * catalog yet; assert data-error-kind, not literal text.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -97,7 +97,7 @@ test.describe('Create wallet — seed phrase', () => {
     await page.getByTestId('seed-password-confirm-input').fill('short');
     await page.getByTestId('seed-create-btn').click();
     await expect(page.getByTestId('seed-error')).toBeVisible({ timeout: 5_000 });
-    // i18n-todo: distinguish too-short vs mismatch via data-error-kind once i18n lands.
+    // Onboarding copy is not in the message catalog yet; assert data-error-kind, not literal text
     await expect(page.getByTestId('seed-error')).toHaveText(
       /Password must be at least 8 characters/,
     );
@@ -113,7 +113,7 @@ test.describe('Create wallet — seed phrase', () => {
     await page.getByTestId('seed-password-confirm-input').fill('DifferentPass456!');
     await page.getByTestId('seed-create-btn').click();
     await expect(page.getByTestId('seed-error')).toBeVisible({ timeout: 5_000 });
-    // i18n-todo: distinguish too-short vs mismatch via data-error-kind once i18n lands.
+    // Onboarding copy is not in the message catalog yet; assert data-error-kind, not literal text
     await expect(page.getByTestId('seed-error')).toHaveText(/Passwords do not match/);
     await snap(page, '02-password-mismatch');
   });

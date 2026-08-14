@@ -702,6 +702,150 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     expect(job.status).toBe('completed');
   });
 
+  it('pre-pull openOwnershipPullSession transport failure wraps as ApiError and does not submit', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new Error('Failed to fetch');
+    });
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run after pre-pull failure');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.createCoin({
+        account_address: ADDR,
+        name: 'PullFail',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(ApiError);
+    expect(thrown).toMatchObject({ status: 0, message: 'Failed to fetch' });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('pre-pull openOwnershipPullSession ApiError is rethrown and does not submit', async () => {
+    const pullErr = new ApiError(503, 'upstream down');
+    spyProto('openOwnershipPullSession', async () => {
+      throw pullErr;
+    });
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run after pre-pull failure');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.createCoin({
+        account_address: ADDR,
+        name: 'PullFail',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBe(pullErr);
+    expect(thrown).toBeInstanceOf(ApiError);
+    expect(thrown).toMatchObject({ status: 503, message: 'upstream down' });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('pre-pull openOwnershipPullSession V1ApiError wraps as ApiError and does not submit', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(422, 'insufficient_funds', 'nope');
+    });
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run after pre-pull failure');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.createCoin({
+        account_address: ADDR,
+        name: 'PullFail',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(ApiError);
+    expect(thrown).toMatchObject({ status: 422 });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('pre-pull openOwnershipPullSession JobFailedError is rethrown and does not submit', async () => {
+    const pullErr = new JobFailedError('j1', 'unknown', 'x');
+    spyProto('openOwnershipPullSession', async () => {
+      throw pullErr;
+    });
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run after pre-pull failure');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.createCoin({
+        account_address: ADDR,
+        name: 'PullFail',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBe(pullErr);
+    expect(thrown).toBeInstanceOf(JobFailedError);
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it('pre-pull openOwnershipPullSession non-Error value wraps as ApiError and does not submit', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw 'offline';
+    });
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run after pre-pull failure');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.createCoin({
+        account_address: ADDR,
+        name: 'PullFail',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(ApiError);
+    expect(thrown).toMatchObject({ status: 0 });
+    expect((thrown as ApiError).message).toContain('offline');
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it('rejects a non-canonical amount with leading zeros', async () => {
     const pull = spyProto('openOwnershipPullSession', async () => {
       throw new Error('openOwnershipPullSession must not run for an invalid amount');

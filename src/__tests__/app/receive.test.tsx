@@ -7,7 +7,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen } from '@/__tests__/_helpers/intl';
 import ReceivePage from '@/app/receive/page';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
@@ -58,7 +58,7 @@ afterEach(() => {
 describe('ReceivePage — send acceptance contract', () => {
   it('stays unavailable even when a local username is stored (resolveUsername is 501)', async () => {
     render(<ReceivePage />);
-    expect(screen.getByTestId('receive-heading')).toHaveTextContent('Receive');
+    expect(screen.getByTestId('receive-heading')).toHaveTextContent('Empfangen');
     expect(screen.getByTestId('receive-not-available')).toBeInTheDocument();
     expect(screen.queryByTestId('qr-code')).not.toBeInTheDocument();
     expect(screen.queryByTestId('receive-copy-btn')).not.toBeInTheDocument();
