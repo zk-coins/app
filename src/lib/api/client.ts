@@ -531,10 +531,19 @@ async function runTransitionHandshake(
     return abortableSleep(capped, signal);
   };
 
+  // Key gen must stay outside the submit catch: missing UUID is pre-admit, not JobFailedError unknown.
+  const idempotencyKey = (() => {
+    try {
+      return newIdempotencyKey();
+    } catch (err) {
+      throw new ApiError(0, err instanceof Error ? err.message : 'idempotency key unavailable');
+    }
+  })();
+
   let jobId = '';
   try {
     const accepted = await client.submitTransition(body, {
-      idempotencyKey: newIdempotencyKey(),
+      idempotencyKey,
       signal,
       ...(opts.confirmPinMismatch !== undefined
         ? { confirmPinMismatch: opts.confirmPinMismatch }

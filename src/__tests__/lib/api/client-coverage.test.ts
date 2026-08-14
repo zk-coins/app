@@ -1056,6 +1056,70 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
 });
 
 describe('runTransitionHandshake error branches via createCoin', () => {
+  it('surfaces newIdempotencyKey throw as ApiError(0) and does not submit', async () => {
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(() => {
+      throw new Error('no uuid');
+    });
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.createCoin({
+        account_address: ADDR,
+        name: 'NoUuid',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(ApiError);
+    expect(thrown).not.toBeInstanceOf(JobFailedError);
+    expect(thrown).toMatchObject({ status: 0, message: 'no uuid' });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
+  it("surfaces newIdempotencyKey non-Error throw as ApiError(0, 'idempotency key unavailable') and does not submit", async () => {
+    vi.spyOn(crypto, 'randomUUID').mockImplementation(() => {
+      throw 'offline';
+    });
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run');
+    });
+
+    let thrown: unknown;
+    try {
+      await api.createCoin({
+        account_address: ADDR,
+        name: 'NoUuidNonError',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      });
+    } catch (err) {
+      thrown = err;
+    }
+
+    expect(thrown).toBeInstanceOf(ApiError);
+    expect(thrown).not.toBeInstanceOf(JobFailedError);
+    expect(thrown).toMatchObject({ status: 0, message: 'idempotency key unavailable' });
+    expect(submit).not.toHaveBeenCalled();
+  });
+
   it('handles a signal that was already aborted before the SDK asks to sleep', async () => {
     const controller = new AbortController();
     controller.abort('deadline elapsed');
