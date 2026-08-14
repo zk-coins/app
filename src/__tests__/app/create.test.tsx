@@ -573,6 +573,36 @@ describe('CreateCoinPage — lock', () => {
     expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
   });
 
+  it('does not unlock when another tab clears the lock while mint is in-flight', async () => {
+    let resolveCreate!: (job: JobStatus) => void;
+    createSpy.mockImplementation(
+      () =>
+        new Promise<JobStatus>((resolve) => {
+          resolveCreate = resolve;
+        }),
+    );
+    const lockKey = `zkcoins.create.lock.${ALICE.address}`;
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+
+    expect(createSpy).toHaveBeenCalled();
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: lockKey,
+          newValue: null,
+        }),
+      );
+    });
+    expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+
+    resolveCreate(completed);
+  });
+
   it('does not start create when localStorage already has the create lock', async () => {
     localStorage.setItem(`zkcoins.create.lock.${ALICE.address}`, '1');
     const user = userEvent.setup();
@@ -583,6 +613,28 @@ describe('CreateCoinPage — lock', () => {
     expect(createSpy).not.toHaveBeenCalled();
     expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
     expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBe('1');
+  });
+
+  it('does not mint on pre-seeded lock and re-enables when another tab clears it', async () => {
+    const lockKey = `zkcoins.create.lock.${ALICE.address}`;
+    localStorage.setItem(lockKey, '1');
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: lockKey,
+          newValue: null,
+        }),
+      );
+    });
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
   });
 
   it('starts createCoin only once when submit fires twice in the same tick', async () => {

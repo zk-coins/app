@@ -715,6 +715,15 @@ export function capabilitiesFromV1Features(features: string[]): Capabilities {
 
 const MAX_ISSUANCE_DECIMALS = 18;
 
+export function isCanonicalIssuanceAmount(amount: string): boolean {
+  return /^(0|[1-9][0-9]*)$/.test(amount) && amount !== '0';
+}
+export function parseIssuanceDecimals(raw: string): number | null {
+  const dec = Number.parseInt(raw, 10);
+  if (!Number.isInteger(dec) || dec < 0 || dec > MAX_ISSUANCE_DECIMALS) return null;
+  return dec;
+}
+
 export const api = {
   newIdempotencyKey,
 
@@ -875,14 +884,9 @@ export const api = {
           `createCoin: decimals must be an integer in 0..18, got ${JSON.stringify(params.decimals)}`,
         );
       }
-      if (typeof params.amount !== 'string' || !/^(0|[1-9][0-9]*)$/.test(params.amount)) {
+      if (typeof params.amount !== 'string' || !isCanonicalIssuanceAmount(params.amount)) {
         throw new Error(
-          `createCoin: amount must be a non-empty unsigned decimal digit string, got ${JSON.stringify(params.amount)}`,
-        );
-      }
-      if (params.amount === '0') {
-        throw new Error(
-          'createCoin: amount must be a positive unsigned decimal digit string, got "0"',
+          `createCoin: amount must be a positive unsigned decimal digit string, got ${JSON.stringify(params.amount)}`,
         );
       }
       const amountStr = params.amount;

@@ -8,7 +8,14 @@ import { ArrowLeft, Check, CircleDollarSign, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client';
+import {
+  ApiError,
+  JobFailedError,
+  api,
+  isCanonicalIssuanceAmount,
+  parseIssuanceDecimals,
+  type JobStatus,
+} from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
 import { formatAssetAmountString } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
@@ -141,12 +148,12 @@ export default function CreateCoinPage() {
       setError(t('errInvalidAmount'));
       return;
     }
-    if (!/^(0|[1-9][0-9]*)$/.test(trimmedAmount) || trimmedAmount === '0') {
+    if (!isCanonicalIssuanceAmount(trimmedAmount)) {
       setError(t('errInvalidAmount'));
       return;
     }
-    const dec = Number.parseInt(decimals, 10);
-    if (!Number.isInteger(dec) || dec < 0 || dec > 18) {
+    const dec = parseIssuanceDecimals(decimals);
+    if (dec === null) {
       setError(t('errInvalidDecimals'));
       return;
     }
@@ -155,7 +162,6 @@ export default function CreateCoinPage() {
       return;
     }
 
-    mintInFlight.current = true;
     setCreating(true);
     setPhase(null);
     setError(null);
@@ -163,8 +169,10 @@ export default function CreateCoinPage() {
     if (!writeCreateLock(account.address)) {
       keepCreatingLocked = true;
       setError(t('errUnexpected'));
+      mintInFlight.current = false;
       return;
     }
+    mintInFlight.current = true;
     try {
       await api.createCoin(
         {

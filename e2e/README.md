@@ -1,6 +1,6 @@
 # E2E + Visual Regression Plan
 
-Status: **implementing** — PR-1 (helpers + global setup + playwright.config wiring) has landed. No specs migrated yet. This document is the working contract between human reviewers and any agent (Claude session, human contributor, CI worker) that picks up the work. Every implementation PR must reference the section it satisfies.
+Status: **v1 implemented** — Specs 01–21 exist. This document is the working contract between human reviewers and any agent (Claude session, human contributor, CI worker) that picks up the work. Every implementation PR must reference the section it satisfies.
 
 ## 1. Goal
 
@@ -11,7 +11,7 @@ Cover **every single default-active user step** of the zkCoins web app with:
 
 "Every step" means: every button that can be clicked, every form state the user can reach, every screen that gets rendered. No exceptions for the 10 default-active functions listed below.
 
-Env-gated code — behind a `NEXT_PUBLIC_ENABLE_*` flag in `src/lib/features.ts` (passkey, apps, dev-routes) — is build-time dead-stripped from the shipped bundle and is **exempt** from coverage; it is kept in `e2e/webauthn.spec.ts` etc. for the DEV bundle. Everything else, faucet (shown off-mainnet) and username resolve included, is default-active and **in scope**.
+Env-gated code — behind a `NEXT_PUBLIC_ENABLE_*` flag in `src/lib/features.ts` (passkey, apps, dev-routes) — is build-time dead-stripped from the shipped bundle and is **exempt** from coverage; it is kept in `e2e/webauthn.spec.ts` etc. for the DEV bundle. Faucet and username-resolve are **not** default-active (username-claim is unavailable — `name-claim-unavailable` in WalletScreen). The 10 functions listed in §1.1 are default-active and **in scope**.
 
 ### 1.1 Default-active functions in scope
 
@@ -32,16 +32,16 @@ The exhaustive list — these are the 10 default-active user-facing functions (e
 
 What exists today in `e2e/`:
 
-| Spec                  | Lines | Screenshots                                      | Notes                                                    |
-| --------------------- | ----- | ------------------------------------------------ | -------------------------------------------------------- |
-| `visual.spec.ts`      | 89    | 4 tests / 6 darwin baselines / 6 linux baselines | Landing × 3 viewports, seed setup, mnemonic, seed import |
-| `wallet.spec.ts`      | 57    | 0                                                | Functional onboarding click-throughs                     |
-| `send-flow.spec.ts`   | 142   | 0                                                | Wallet display, send page, receive page                  |
-| `settings.spec.ts`    | 101   | 0                                                | Settings nav + disconnect                                |
-| `webauthn.spec.ts`    | 132   | 0                                                | **Env-gated** — passkey flow                             |
-| `screenshot-flow.mjs` | —     | n/a                                              | Ad-hoc script, not a Playwright spec                     |
+| Group              | Specs                                                             | Notes                                                       |
+| ------------------ | ----------------------------------------------------------------- | ----------------------------------------------------------- |
+| Onboarding         | `01-onboarding-welcome` … `05-disconnect`                         | Welcome, create/restore seed, unlock, disconnect            |
+| Wallet / shell     | `06-balance` … `11-cross-spec-redirects`                          | Balance, send, receive, network/shell, PWA, redirects       |
+| A11y               | `12-a11y`                                                         | Accessibility checks                                        |
+| Send variants      | `13-send-server-errors` … `16-send-scan-fallback`                 | Server errors, network activity, QR scan paths              |
+| Remaining surfaces | `17-tx-detail` … `21-asset-detail`                                | Tx detail, create-coin, portfolio, send-asset, asset detail |
+| Shared / gated     | `_helpers/`, `_audit/`, `webauthn.spec.ts`, `screenshot-flow.mjs` | Helpers, audit tooling; WebAuthn is **env-gated**           |
 
-**Diagnosis**: ~10% of default-active steps have screenshot baselines, ~70% have functional E2E, two default-active functions (Unlock-password, PWA) have neither.
+Legacy `visual.spec.ts` / `wallet.spec.ts` / `send-flow.spec.ts` no longer exist; coverage lives in the numeric specs above.
 
 ## 3. Decisions (locked)
 

@@ -728,7 +728,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     expect(thrown).toBeInstanceOf(Error);
     expect(thrown).toMatchObject({
       name: 'Error',
-      message: 'createCoin: amount must be a non-empty unsigned decimal digit string, got "0001"',
+      message: 'createCoin: amount must be a positive unsigned decimal digit string, got "0001"',
     });
     expect(pull).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();
@@ -760,7 +760,7 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     expect(thrown).toBeInstanceOf(Error);
     expect(thrown).toMatchObject({
       name: 'Error',
-      message: 'createCoin: amount must be a non-empty unsigned decimal digit string, got 1',
+      message: 'createCoin: amount must be a positive unsigned decimal digit string, got 1',
     });
     expect(pull).not.toHaveBeenCalled();
     expect(submit).not.toHaveBeenCalled();

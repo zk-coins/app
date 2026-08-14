@@ -19,7 +19,7 @@ zkCoins lets you send value on Bitcoin without anyone seeing the amount, the ass
 
 | Layer                      | What it is                                                                     | Repo                                                                                                        |
 | -------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| **App · Explorer**         | end-user wallet · public explorer web-app _(planned)_                          | **[`zk-coins/app`](https://github.com/zk-coins/app)** ← this repo · `zk-coins/explorer` _(planned)_         |
+| **App · Explorer**         | end-user wallet · public explorer web-app (scaffold / preview)                 | **[`zk-coins/app`](https://github.com/zk-coins/app)** ← this repo · [`zk-coins/explorer`](https://github.com/zk-coins/explorer) |
 | **SDK**                    | thin TypeScript client — on-device keys, signing, node/API calls               | [`zk-coins/sdk`](https://github.com/zk-coins/sdk)                                                           |
 | **zkCoins API**            | public REST + LNURL, hosted-wallet service (optional)                          | currently in [`zk-coins/node`](https://github.com/zk-coins/node); a separate API layer is the target design |
 | **zkCoins node**           | trustless kernel — scan · accumulator · verify · prove · store · publisher     | [`zk-coins/node`](https://github.com/zk-coins/node)                                                         |
@@ -87,7 +87,7 @@ npm run lint:fix # auto-fix
 | `npm run test:coverage` | v8 coverage — CI enforces 100% on the default-active surface (everything not behind a `NEXT_PUBLIC_ENABLE_*` flag) |
 | `npm run test:e2e`      | Playwright E2E against `E2E_BASE_URL`                                                                              |
 
-**Prerequisites:** Node 22+, npm 10+. The `@zkcoins/sdk` dependency is the Git dependency `github:zk-coins/sdk#feat/v1-cross-parity` ([`zk-coins/sdk`](https://github.com/zk-coins/sdk), branch `feat/v1-cross-parity`). No sibling checkout is required. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup and code style.
+**Prerequisites:** Node 22+, npm 10+. The `@zkcoins/sdk` dependency is the Git dependency `github:zk-coins/sdk#dbea285e4d23cd393514065ec2f59cfd77595c68` ([`zk-coins/sdk`](https://github.com/zk-coins/sdk), commit `dbea285e4d23cd393514065ec2f59cfd77595c68`). No sibling checkout is required. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup and code style.
 
 ### Configuration
 

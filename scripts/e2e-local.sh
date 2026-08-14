@@ -44,7 +44,7 @@ set -euo pipefail
 # ──────────────────────────────────────────────────────────────────────
 # IN-CONTAINER ENTRYPOINT
 # When invoked with the internal flag we are already inside the Playwright
-# Linux image. Build, serve, and run the two-leg suite here.
+# Linux image. Build, serve, and run the single chromium suite here.
 # ──────────────────────────────────────────────────────────────────────
 if [[ "${1:-}" == "__in_container" ]]; then
   shift
