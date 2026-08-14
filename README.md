@@ -37,7 +37,7 @@ The zkCoins **wallet** — a thin, installable web client. It holds the keys; th
 | --------- | ------------------------- | -------------------------------------------------------------- |
 | Framework | Next.js 15 (App Router)   | SSR, standalone Docker output, largest React ecosystem         |
 | Language  | TypeScript (strict)       | Type safety                                                    |
-| Styling   | Tailwind CSS              | Dark theme (#0a0a0a), Bitcoin orange (#f7931a)                 |
+| Styling   | Tailwind CSS              | Dark theme (#000000), Bitcoin orange (#f7931a)                 |
 | State     | Zustand                   | Minimal boilerplate, encrypted IndexedDB persistence           |
 | Crypto    | `@zkcoins/sdk` (pure TS)  | BIP-39/32 + BIP-340 via `@scure/*` / noble — on-device custody |
 | Client    | `@zkcoins/sdk`            | Typed `/v1/*` client, shared response schemas                  |

@@ -784,7 +784,11 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     }
 
     expect(thrown).toBeInstanceOf(ApiError);
-    expect(thrown).toMatchObject({ status: 422 });
+    expect(thrown).toMatchObject({
+      status: 422,
+      serverError: 'nope',
+      code: 'insufficient_funds',
+    });
     expect(submit).not.toHaveBeenCalled();
   });
 

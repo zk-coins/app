@@ -916,7 +916,7 @@ export const api = {
         } else if (err instanceof ApiError) {
           throw err;
         } else if (err instanceof V1ApiError) {
-          throw new ApiError(err.status, err.message);
+          mapV1Error(err);
         } else if (err instanceof JobFailedError) {
           throw err;
         } else if (err instanceof Error) {
