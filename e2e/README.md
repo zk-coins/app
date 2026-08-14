@@ -111,9 +111,9 @@ The committed baselines are `*-chromium-linux.png` — rendered on Linux. A nati
 
 #### Why a `/v1/info` capability-normalisation proxy
 
-The baselines were captured against the hosted DEV stack, whose `/v1/info` reports every opt-in capability **OFF** and `username_domain = dev.zkcoins.app`. A locally-run node built with `--all-features` reports them **ON** (`address_list/username_claim/lnurl = true`), a different `username_domain`, and an extra `bitcoin_network` field. In particular `username_claim:true` makes `WalletScreen` render an extra "Claim a username" form row (≈ +36 px) that shifts **~16 baselines** and fails the diff.
+The username-claim UI shifts **~16 baselines** when a live node advertises it. `scripts/e2e-info-proxy.mjs` is a **test-only** reverse-proxy (E2E infra, never bundled, never shipped) whose `normalizeInfo` keeps that surface off for local/CI parity: it drops the `wallet` feature so username-claim UI stays off, forces `username_claim: false` and `multi_asset: true` in the legacy capabilities object, optionally overrides `username_domain` (default `dev.zkcoins.app`), and deletes `bitcoin_network`.
 
-To get baseline parity in local mode the `/v1/info` surface must match DEV. `scripts/e2e-info-proxy.mjs` is a **test-only** reverse-proxy (E2E infra, never bundled, never shipped) that normalises **only `GET /v1/info`** to the DEV surface (caps `false`, `username_domain = dev.zkcoins.app`, drops `bitcoin_network`) and passes **everything else** — `/v1/tx`, jobs, balance, health — straight through to the real local node 1:1. (Rebuilding the node with a DEV-matching Cargo feature set was the alternative; the proxy is preferred because it is self-contained and does not couple this repo's E2E run to the node's build config.)
+Only the normalised `GET /v1/info` body is rewritten; every other request passes through to the real node 1:1. (Rebuilding the node with a matching feature set was the alternative; the proxy is preferred because it is self-contained and does not couple this repo's E2E run to the node's build config.)
 
 #### Topology (all inside the one Playwright container)
 
@@ -191,7 +191,7 @@ export const api = {
 };
 ```
 
-Uses Node's built-in `fetch` (Node ≥ 20). Targets `E2E_API_URL`. Mirrors the runtime API client in `src/lib/api/client.ts` so a server contract change surfaces here too.
+Uses Node's built-in `fetch` (Node ≥ 22). Targets `E2E_API_URL`. Mirrors the runtime API client in `src/lib/api/client.ts` so a server contract change surfaces here too.
 
 ### `_helpers/wallet.ts`
 
@@ -302,9 +302,9 @@ The `setViewport` helper defaults to `mobile` when called without an explicit vi
 
 This section is the result of a line-by-line audit of every default-active component (`src/components/onboarding/Onboarding.tsx`, `src/components/screens/WalletScreen.tsx`, `src/app/page.tsx`, `src/app/send/page.tsx`, `src/app/receive/page.tsx`, `src/app/settings/page.tsx`, `src/components/AppShell.tsx`, `src/components/BottomNav.tsx`, `src/components/PwaPrompt.tsx`). **Every button, every visible visual state, every conditional render** that the default-active user can reach is enumerated below. Each row is one `test()` and one screenshot baseline (unless marked `(no shot)`).
 
-### 8.0 DEV-bundle vs PRD-bundle — what we screenshot
+### 8.0 CI/local bundle vs gated-UI differences — what we screenshot
 
-The E2E suite runs against the **DEV-built frontend** (https://dev.zkcoins.app) because that's where fixture minting via `POST /v1/tx` kind=mint is available for seeding Alice every run. The DEV bundle has every `FEATURES.*` flag ON. That introduces two categories of difference from PRD:
+CI and local E2E (`E2E_TARGET=local`) screenshot the **PR standalone build** served on the runner/developer machine — not the hosted DEV frontend. Fixture minting still goes through the connected node (`POST /v1/tx` kind=mint) to seed Alice every run. Optional deployed-stack smoke against `dev` (`E2E_TARGET=dev`, https://dev.zkcoins.app) is separate and is **not** what CI captures. When a build has gated `FEATURES.*` flags ON, that introduces two categories of difference from a minimal PRD-like surface:
 
 **(a) Pure navigation detours — traversed silently, not screenshotted.**
 
@@ -354,17 +354,17 @@ is no stable window for that state. `wallet-after-create` covers the
 transition functionally. `seed-generating` does not exist; the spec
 starts at `seed-reveal-hidden`.
 
-| #   | Step                       | Notes                                                                                                                                                                   |
-| --- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | seed-reveal-hidden         | `stage='reveal'`, `revealed=false`. 12-word grid blurred + "Tap to reveal" overlay button.                                                                              |
-| 2   | seed-reveal-shown          | `stage='reveal'`, `revealed=true`. Mnemonic grid revealed (masked), "Important" warning box, "I've written it down" button.                                             |
-| 3   | seed-acknowledged          | `stage='confirm'`. Word grid still revealed, warning box + I've-written-it-down gone, "Continue" button alone.                                                          |
-| 4   | password-empty             | `stage='password'`. Both inputs empty, "Create wallet" button disabled.                                                                                                 |
-| 5   | password-filled            | Both inputs filled. Button enabled.                                                                                                                                     |
-| 6   | password-too-short         | Confirm a < 8 char password — error "Password must be at least 8 characters", `stage` reverts.                                                                          |
-| 7   | password-mismatch          | Mismatched confirms — error "Passwords do not match".                                                                                                                   |
-| 8   | wallet-after-create        | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, portfolio-unavailable-banner shown.                                                         |
-| 9   | back-from-reveal (no shot) | At `stage='reveal'`, click StepHeader Back (twice on DEV — passkey-intro is the intermediate, see §8.0(a)) → returns to Welcome. Asserts URL only.                      |
+| #   | Step                       | Notes                                                                                                                                              |
+| --- | -------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | seed-reveal-hidden         | `stage='reveal'`, `revealed=false`. 12-word grid blurred + "Tap to reveal" overlay button.                                                         |
+| 2   | seed-reveal-shown          | `stage='reveal'`, `revealed=true`. Mnemonic grid revealed (masked), "Important" warning box, "I've written it down" button.                        |
+| 3   | seed-acknowledged          | `stage='confirm'`. Word grid still revealed, warning box + I've-written-it-down gone, "Continue" button alone.                                     |
+| 4   | password-empty             | `stage='password'`. Both inputs empty, "Create wallet" button disabled.                                                                            |
+| 5   | password-filled            | Both inputs filled. Button enabled.                                                                                                                |
+| 6   | password-too-short         | Confirm a < 8 char password — error "Password must be at least 8 characters", `stage` reverts.                                                     |
+| 7   | password-mismatch          | Mismatched confirms — error "Passwords do not match".                                                                                              |
+| 8   | wallet-after-create        | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, portfolio-unavailable-banner shown.                                    |
+| 9   | back-from-reveal (no shot) | At `stage='reveal'`, click StepHeader Back (twice on DEV — passkey-intro is the intermediate, see §8.0(a)) → returns to Welcome. Asserts URL only. |
 
 ### 8.3 `03-restore-seed.spec.ts` (10 tests / 9 shots, 1 no-shot)
 

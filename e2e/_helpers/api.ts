@@ -155,7 +155,10 @@ export interface OwnerBalance {
 
 export const api = {
   info: async (): Promise<
-    V1Info & { capabilities?: { multi_asset?: boolean; username_claim?: boolean } }
+    V1Info & {
+      capabilities?: { multi_asset?: boolean; username_claim?: boolean };
+      username_domain?: string;
+    }
   > => {
     // Construction placeholder network — info is network-agnostic.
     const client = new ZkCoinsV1Client({ apiUrl: API_URL, network: 'regtest' });
@@ -388,7 +391,7 @@ let cachedUsernameDomain: string | null = null;
 export async function getUsernameDomain(): Promise<string> {
   if (cachedUsernameDomain !== null) return cachedUsernameDomain;
   const info = await api.info();
-  const domain = (info as { username_domain?: string }).username_domain;
+  const domain = info.username_domain;
   if (!domain) {
     throw new Error(
       `api helper: /v1/info (${API_URL}) did not return username_domain. ` +

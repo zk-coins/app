@@ -1632,8 +1632,9 @@
             </div>
           </summary>
           <p class="spec-intro">
-            Der Wallet-Hauptscreen nach dem Login. Balance via 5-Sekunden-Polling von
-            <code>GET /api/balance</code>. Eye-Toggle versteckt den Betrag für
+            Der Wallet-Hauptscreen nach dem Login. Portfolio-Salden werden in diesem Build nicht aus
+            AccountState dekodiert; der Hauptscreen landet auf dem Unavailable-Portfolio-Banner statt
+            auf einem Live-Balance-Polling. Eye-Toggle versteckt den Betrag für
             Streaming/Screenshots. Auf der leeren Wallet ersetzt das No-Funds-Banner die
             Transaktionsliste.
             <span class="tag mvp">MVP · View balance</span>
@@ -1966,7 +1967,7 @@
           </summary>
           <p class="spec-intro">
             Globale App-Shell: Bottom-Nav für die drei Hauptbereiche, Footer-Links (Row + Grid),
-            Network-Badge mit Live-Status aus <code>/api/info</code>. Network-Badge ist eine
+            Network-Badge mit Live-Status aus <code>GET /v1/info</code>. Network-Badge ist eine
             MVP-Funktion; die anderen Tests covern den umgebenden Chrome.
             <span class="tag mvp">MVP · Network Badge</span>
           </p>
@@ -2042,7 +2043,7 @@
                 <img src="/handbook/screenshots/09-network-loading.png" alt="network loading" />
               </div>
               <div class="desc">
-                Spec interceptet <code>/api/info</code> mit 8 s Delay → Netzwerk-nicht-geladen-
+                Spec interceptet <code>GET /v1/info</code> mit 8 s Delay → Netzwerk-nicht-geladen-
                 Zustand (Network-Zeile fehlt, Node-Host weiterhin sichtbar).
               </div>
             </div>
@@ -2542,8 +2543,8 @@
           </summary>
           <p class="spec-intro">
             Die <code>/tx/[id]</code>-Detailseite: jede Verlaufszeile ist klickbar und öffnet eine
-            eigene Seite, die das vollständige Detail des Knotens (<code>GET /api/history/{id}</code
-            >) rendert — Richtung, Status, der dekodierte Kontostand-Snapshot (Saldo davor/danach,
+            eigene Seite, die das vollständige Detail des Knotens (<code>api.getTransaction</code>)
+            rendert — Richtung, Status, der dekodierte Kontostand-Snapshot (Saldo davor/danach,
             Sende-Zähler, Commitment-Key), der Verifier-Circuit-Digest und die On-Chain-Referenz.
             Laufabhängige Werte (ID, Zeitstempel, Beträge, Hashes) tragen
             <code>tx-detail-v-*</code>-Testids und werden maskiert + breitenfixiert, sodass die

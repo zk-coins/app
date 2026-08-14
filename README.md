@@ -17,13 +17,13 @@ zkCoins lets you send value on Bitcoin without anyone seeing the amount, the ass
 
 ## The system, end to end
 
-| Layer                      | What it is                                                                     | Repo                                                                                                        |
-| -------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Layer                      | What it is                                                                     | Repo                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
 | **App · Explorer**         | end-user wallet · public explorer web-app (scaffold / preview)                 | **[`zk-coins/app`](https://github.com/zk-coins/app)** ← this repo · [`zk-coins/explorer`](https://github.com/zk-coins/explorer) |
-| **SDK**                    | thin TypeScript client — on-device keys, signing, node/API calls               | [`zk-coins/sdk`](https://github.com/zk-coins/sdk)                                                           |
-| **zkCoins API**            | public REST + LNURL, hosted-wallet service (optional)                          | currently in [`zk-coins/node`](https://github.com/zk-coins/node); a separate API layer is the target design |
-| **zkCoins node**           | trustless kernel — scan · accumulator · verify · prove · store · publisher     | [`zk-coins/node`](https://github.com/zk-coins/node)                                                         |
-| **bitcoind · Nostr relay** | Bitcoin L1 settlement and ordering · off-chain transport and data availability | upstream (own or external)                                                                                  |
+| **SDK**                    | thin TypeScript client — on-device keys, signing, node/API calls               | [`zk-coins/sdk`](https://github.com/zk-coins/sdk)                                                                               |
+| **zkCoins API**            | public REST + LNURL, hosted-wallet service (optional)                          | currently in [`zk-coins/node`](https://github.com/zk-coins/node); a separate API layer is the target design                     |
+| **zkCoins node**           | trustless kernel — scan · accumulator · verify · prove · store · publisher     | [`zk-coins/node`](https://github.com/zk-coins/node)                                                                             |
+| **bitcoind · Nostr relay** | Bitcoin L1 settlement and ordering · off-chain transport and data availability | upstream (own or external)                                                                                                      |
 
 Supporting repos: [`zk-coins/research`](https://github.com/zk-coins/research), [`zk-coins/plonky2`](https://github.com/zk-coins/plonky2), [`zk-coins/docs`](https://github.com/zk-coins/docs).
 
@@ -98,7 +98,7 @@ Both `_URL` variables are injected at **runtime** by `entrypoint.sh`, so one Doc
 | `NEXT_PUBLIC_API_URL`      | container start | `https://api.zkcoins.app` | zkCoins node API base URL (`src/stores/network.ts`)                               |
 | `NEXT_PUBLIC_EXPLORER_URL` | container start | _(empty)_                 | Live network-activity / tx-detail source; empty → `/network` shows simulated data |
 
-Build-time `NEXT_PUBLIC_ENABLE_*` flags exist for local-dev previews of gated UI only — they are not set in the deployed images. Server-gated UI is driven at runtime by `GET /v1/info.features`, so the same shipped bundle matches whatever the connected node advertises. Full table and gating details in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Build-time `NEXT_PUBLIC_ENABLE_*` flags exist for local-dev previews of gated UI only — they are not set in the deployed images. Server-gated UI is driven at runtime by `GET /v1/info.features`, so the same shipped bundle matches whatever the connected node advertises. Flag definitions live in [`src/lib/features.ts`](src/lib/features.ts): build-time `PASSKEY`, `APPS_DIRECTORY`, `DEV_ROUTES`, `AUTO_LOCK`, `ADDRESS_ROTATION`, `TOR_ROUTING`; runtime `USERNAME_CLAIM` / `MULTI_ASSET` from `GET /v1/info.features`.
 
 ### Docker
 

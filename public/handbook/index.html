@@ -1629,8 +1629,9 @@
             </div>
           </summary>
           <p class="spec-intro">
-            The wallet home screen after login. Balance polled every 5 s from
-            <code>GET /api/balance</code>. The eye toggle hides the amount for screen-sharing. On an
+            The wallet home screen after login. Portfolio balances are not decoded from AccountState
+            in this build, so the home screen settles on the unavailable-portfolio banner rather than
+            polling a live balance endpoint. The eye toggle hides the amount for screen-sharing. On an
             empty wallet, the no-funds banner replaces the transactions list.
             <span class="tag mvp">MVP · View balance</span>
             <span class="tag mvp">MVP · Tx history</span>
@@ -1962,7 +1963,7 @@
           </summary>
           <p class="spec-intro">
             Global app shell: bottom nav (Wallet + Settings), footer links (row + grid), network
-            badge with live status from <code>/api/info</code>. The network badge is an MVP
+            badge with live status from <code>GET /v1/info</code>. The network badge is an MVP
             function; the other tests cover the surrounding chrome.
             <span class="tag mvp">MVP · Network badge</span>
           </p>
@@ -2038,7 +2039,7 @@
                 <img src="/handbook/screenshots/09-network-loading.png" alt="network loading" />
               </div>
               <div class="desc">
-                Spec intercepts <code>/api/info</code> with an 8 s delay → network-not-loaded state
+                Spec intercepts <code>GET /v1/info</code> with an 8 s delay → network-not-loaded state
                 (Network row absent, node host still shown).
               </div>
             </div>
@@ -2537,7 +2538,7 @@
           <p class="spec-intro">
             The <code>/tx/[id]</code> transaction-detail page: every history row is clickable and
             opens a dedicated page rendering the node's full
-            <code>GET /api/history/{id}</code> detail — direction, status, the decoded account-state
+            <code>api.getTransaction</code> detail — direction, status, the decoded account-state
             snapshot (balance before/after, send counter, commitment key), the verifier circuit
             digest, and the on-chain reference. Per-run values (id, timestamp, amounts, hashes)
             carry <code>tx-detail-v-*</code> testids and are masked + width-pinned, so the goldens
