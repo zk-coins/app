@@ -316,6 +316,12 @@ export const api = {
           accountState = await client.getAccountState(pull.session, signal);
         } catch (err) {
           if (
+            signal.aborted ||
+            (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError'))
+          ) {
+            throw err;
+          }
+          if (
             !(err instanceof V1ApiError) ||
             err.status !== 404 ||
             err.machineCode !== 'not_found'
@@ -337,6 +343,7 @@ export const api = {
         const spend = deriveSpendKey(seed, 0, sendCounterFromAwaiting);
         const nextAfter = deriveSpendKey(seed, 0, sendCounterFromAwaiting + 1);
 
+        if (signal.aborted) throw new DOMException('The operation was aborted.', 'AbortError');
         await client.refuseOrSignAndSubmit({
           jobId,
           localPubkey: spend.publicKey,
