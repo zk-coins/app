@@ -43,6 +43,10 @@ export const useCapabilities = create<CapabilitiesState>((set) => ({
           features: info.features,
           username_domain: info.username_domain,
         });
+        if (useNetworkStore.getState().infoError) {
+          set({ capabilities: FAIL_CLOSED, loaded: true });
+          return;
+        }
         set({
           capabilities: info.capabilities,
           loaded: true,

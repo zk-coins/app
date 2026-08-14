@@ -103,6 +103,21 @@ describe('useCapabilities.fetch — server response handling', () => {
     expect(useNetworkStore.getState().infoError).toMatch(/capabilities missing/);
   });
 
+  it('fail-closes capabilities when applyInfo rejects an unknown network tag', async () => {
+    vi.spyOn(api, 'info').mockResolvedValue({
+      network: 'not-a-v1-network',
+      protocol_version: 'v1',
+      features: ['wallet'],
+      capabilities: ALL_ON,
+    });
+
+    await useCapabilities.getState().fetch();
+
+    expect(useCapabilities.getState().capabilities).toEqual(FAIL_CLOSED);
+    expect(useCapabilities.getState().loaded).toBe(true);
+    expect(useNetworkStore.getState().infoError).toMatch(/unsupported network tag/);
+  });
+
   it('coalesces concurrent fetch() into a single api.info call', async () => {
     let resolveInfo!: (v: {
       network: string;

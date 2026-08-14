@@ -151,8 +151,8 @@ if [[ "${1:-}" == "__in_container" ]]; then
   PROXY_INFO="$(curl -s "http://127.0.0.1:${PROXY_PORT}/v1/info")"
   echo "▶ [container] proxied /v1/info → ${PROXY_INFO}"
   case "$PROXY_INFO" in
-    *'"username_claim":true'*)
-      echo "✗ proxy did not normalise username_claim to false — baselines would break" >&2
+    *'"wallet"'*)
+      echo "✗ proxy did not normalise features away from wallet (username claim)" >&2
       exit 1
       ;;
   esac

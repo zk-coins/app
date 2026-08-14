@@ -158,7 +158,7 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
 
   // Branch the seeding strategy on the REPORTED multi-asset capability.
   // The E2E api helper hits E2E_API_URL (the info-proxy in CI, which
-  // normalises `multi_asset` to false and passes /v1/jobs/* through 1:1).
+  // sets `multi_asset: true` and passes all other /v1/* through 1:1).
   // Either way the seed itself is the creator-signed create-coin flow —
   // the node's neutral permissionless model has no server-mediated faucet,
   // so a wallet is funded by minting an asset it owns. The branches differ

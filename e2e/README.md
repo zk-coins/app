@@ -343,7 +343,7 @@ The landing entry plus both onward affordances. Onboarding has its own visual st
 | 4   | welcome-create-hover  | Hover on "CREATE WALLET" — colour shift to `bg-bitcoin-hover`. (Trace `:hover` via `page.hover()`.) |
 | 5   | welcome-restore-hover | Hover on "Restore existing wallet" — text colour shifts to bitcoin orange.                          |
 
-### 8.2 `02-create-seed.spec.ts` (10 tests / 9 shots, 1 no-shot)
+### 8.2 `02-create-seed.spec.ts` (9 tests / 8 shots, 1 no-shot)
 
 Drives `Welcome → CREATE WALLET → (PasskeyFlow intro — traversed, no shot) → OTHER LOGIN OPTIONS → SeedFlow` through every stage. Resets IDB+localStorage in `beforeEach`. The DEV passkey-intro screen is clicked through but **not** screenshotted — see §8.0 (a).
 
@@ -351,20 +351,20 @@ The originally-planned `creating` shot was dropped: SeedFlow's
 `create()` finishes the Pure-TS / `@zkcoins/sdk` + IDB work in under 50 ms and `Home`
 swaps to `WalletScreen` before any DOM screenshot can land — there
 is no stable window for that state. `wallet-after-create` covers the
-transition functionally.
+transition functionally. `seed-generating` does not exist; the spec
+starts at `seed-reveal-hidden`.
 
 | #   | Step                       | Notes                                                                                                                                                                   |
 | --- | -------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | seed-generating            | After clicking through to SeedFlow — `stage='generating'`, "Generating seed phrase…" text. Pure TypeScript via @zkcoins/sdk; there is no WASM pause to hold this state. |
-| 2   | seed-reveal-hidden         | `stage='reveal'`, `revealed=false`. 12-word grid blurred + "Tap to reveal" overlay button.                                                                              |
-| 3   | seed-reveal-shown          | `stage='reveal'`, `revealed=true`. Mnemonic grid revealed (masked), "Important" warning box, "I've written it down" button.                                             |
-| 4   | seed-acknowledged          | `stage='confirm'`. Word grid still revealed, warning box + I've-written-it-down gone, "Continue" button alone.                                                          |
-| 5   | password-empty             | `stage='password'`. Both inputs empty, "Create wallet" button disabled.                                                                                                 |
-| 6   | password-filled            | Both inputs filled. Button enabled.                                                                                                                                     |
-| 7   | password-too-short         | Confirm a < 8 char password — error "Password must be at least 8 characters", `stage` reverts.                                                                          |
-| 8   | password-mismatch          | Mismatched confirms — error "Passwords do not match".                                                                                                                   |
-| 9   | wallet-after-create        | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, no-balance banner shown.                                                                    |
-| 10  | back-from-reveal (no shot) | At `stage='reveal'`, click StepHeader Back (twice on DEV — passkey-intro is the intermediate, see §8.0(a)) → returns to Welcome. Asserts URL only.                      |
+| 1   | seed-reveal-hidden         | `stage='reveal'`, `revealed=false`. 12-word grid blurred + "Tap to reveal" overlay button.                                                                              |
+| 2   | seed-reveal-shown          | `stage='reveal'`, `revealed=true`. Mnemonic grid revealed (masked), "Important" warning box, "I've written it down" button.                                             |
+| 3   | seed-acknowledged          | `stage='confirm'`. Word grid still revealed, warning box + I've-written-it-down gone, "Continue" button alone.                                                          |
+| 4   | password-empty             | `stage='password'`. Both inputs empty, "Create wallet" button disabled.                                                                                                 |
+| 5   | password-filled            | Both inputs filled. Button enabled.                                                                                                                                     |
+| 6   | password-too-short         | Confirm a < 8 char password — error "Password must be at least 8 characters", `stage` reverts.                                                                          |
+| 7   | password-mismatch          | Mismatched confirms — error "Passwords do not match".                                                                                                                   |
+| 8   | wallet-after-create        | Final state — `WalletScreen` rendered, AppShell wrapper, BottomNav visible, portfolio-unavailable-banner shown.                                                         |
+| 9   | back-from-reveal (no shot) | At `stage='reveal'`, click StepHeader Back (twice on DEV — passkey-intro is the intermediate, see §8.0(a)) → returns to Welcome. Asserts URL only.                      |
 
 ### 8.3 `03-restore-seed.spec.ts` (10 tests / 9 shots, 1 no-shot)
 
@@ -440,13 +440,13 @@ Send requires input-coin selection from AccountState inventory, which is
 not wired in this build. The product fails closed: the wallet Send button
 is disabled, and `/send` renders an unavailable banner without posting to
 `/v1/tx`. Form/success scenarios return once the read/inventory path ships.
-Snapshot name `07-send-default` is retained; it captures the unavailable surface.
+Snapshot name `07-send-unavailable` is retained; it captures the unavailable surface.
 
-| #   | Step             | Notes                                                                                                                         |
-| --- | ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| 1   | wallet CTA       | `wallet-send-btn` has `aria-disabled="true"` — no navigation into a live form.                                                |
-| 2   | send-unavailable | Direct `goto('/send')` → `send-unavailable-banner` visible; no recipient input; submit disabled. Snapshot: `07-send-default`. |
-| 3   | no POST `/v1/tx` | Force-click disabled submit → no `POST` to `/v1/tx`.                                                                          |
+| #   | Step             | Notes                                                                                                                             |
+| --- | ---------------- | --------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | wallet CTA       | `wallet-send-btn` has `aria-disabled="true"` — no navigation into a live form.                                                    |
+| 2   | send-unavailable | Direct `goto('/send')` → `send-unavailable-banner` visible; no recipient input; submit disabled. Snapshot: `07-send-unavailable`. |
+| 3   | no POST `/v1/tx` | Force-click disabled submit → no `POST` to `/v1/tx`.                                                                              |
 
 ### 8.8 `08-receive.spec.ts` (not available without a name)
 
