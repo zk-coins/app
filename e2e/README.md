@@ -65,12 +65,12 @@ Legacy `visual.spec.ts` / `wallet.spec.ts` / `send-flow.spec.ts` no longer exist
 | Env var             | Default                       | Purpose                                                                                                                                                                                                                                                                                                                                                                                   |
 | ------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `E2E_BASE_URL`      | `https://dev.zkcoins.app`     | Frontend under test. Switch to `https://zkcoins.app` for PRD.                                                                                                                                                                                                                                                                                                                             |
-| `E2E_API_URL`       | `https://dev-api.zkcoins.app` | Backend the helpers talk to directly (creator-signed mint seeding, balance polling).                                                                                                                                                                                                                                                                                                      |
+| `E2E_API_URL`       | `https://dev-api.zkcoins.app` | Backend the helpers talk to directly (creator-signed `POST /v1/tx` kind=mint seeding).                                                                                                                                                                                                                                                                                                    |
 | `E2E_FAUCET_CALLS`  | `1`                           | Number of creator-signed mint cycles via POST /v1/tx kind=mint (admit → sign → completed) used to seed Alice with her own fixture asset. Set to 0 to skip seeding for a custom run. **Warning:** values > 1 mint additional assets; the info-proxy reports multi_asset:true. This build cannot decode portfolio balances, so send stays on the unavailable surface (not a 422 injection). |
 | `E2E_NEED_FIXTURES` | unset (treated as false)      | **Opt-in gate.** `globalSetup` is a no-op unless this is `'true'`. The default stays unset (treated as false) for ad-hoc runs so legacy specs (wallet/send-flow/settings/visual/webauthn) do not need fixtures unless opted in. The `e2e-tests` CI job sets it to `'true'`, same as the regen workflow.                                                                                   |
 | `E2E_KEEP_ACCOUNTS` | unset                         | If `true`, `globalTeardown` skips wiping fixtures (useful for debugging).                                                                                                                                                                                                                                                                                                                 |
 
-PRD switch: `E2E_BASE_URL=https://zkcoins.app E2E_API_URL=https://api.zkcoins.app playwright test`. The plan deliberately does **not** support PRD: the server has the faucet feature off and `globalSetup` would refuse to seed Alice. Balance shots in this build capture the unavailable surface (no funded `$X`, no empty-wallet faucet banner). A PRD smoke pass is a separate workstream (see §13).
+PRD switch: `E2E_BASE_URL=https://zkcoins.app E2E_API_URL=https://api.zkcoins.app playwright test`. The plan deliberately does **not** support PRD: `globalSetup` refuses to seed when `network === mainnet` (no seeding on mainnet). Balance shots in this build capture the unavailable surface (no funded `$X`, no empty-wallet faucet banner). A PRD smoke pass is a separate workstream (see §13).
 
 ### 4.1 `playwright.config.ts` wiring
 
@@ -155,11 +155,13 @@ File: `e2e/_global-setup.ts`. Runs once before any worker starts. Linked from `p
    herself by minting her own fixture asset. Retry × 3 with exp backoff.
    Bob is **not** funded — one zero-balance fixture remains useful for empty
    wallet specs.
-4. Do **not** poll GET /v1/balance until balance > 0. Portfolio/balance reads
-   (AccountState decode) are unavailable in this build — `_global-setup.ts`
-   records funding only via the completed mint job and sets
-   `seededBalance: null` so specs never treat a fabricated 0 as wallet truth.
-   UI specs settle on the unavailable banners, not a funded list. Never invent 0.
+4. Do **not** invent or poll a GET balance route under v1 — v1 has no
+   legacy portfolio REST. Funding is a completed `POST /v1/tx` kind=mint.
+   Portfolio/balance reads (AccountState decode) are unavailable in this
+   build — `_global-setup.ts` records funding only via the completed mint
+   job and sets `seededBalance: null` so specs never treat a fabricated 0
+   as wallet truth. UI specs settle on the unavailable banners
+   (`portfolio-unavailable-banner`), not a funded list. Never invent 0.
 5. Persist {alice: {mnemonic, address, seededBalance: null}, bob: {mnemonic, address}}
    to e2e/.fixtures/accounts.json (gitignored — see .gitignore in §12.1).
 6. Print Alice/Bob addresses to stdout with `seededBalance: null` for Alice so CI

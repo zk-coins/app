@@ -97,11 +97,14 @@ async function applyStabilizer(page: Page): Promise<void> {
  *   - waits for web fonts (`document.fonts.ready`)
  *   - applies the default mask set, then any spec-specific masks
  *
- * **Why not `networkidle`**: WalletScreen polls `/v1/balance` every 5 s
- * and we have other periodic fetches too. `waitForLoadState('networkidle')`
- * requires 500 ms of network silence and can deadlock under sustained
- * polling. `domcontentloaded` is enough for visual stability once the
- * caller has already asserted a marker locator is visible.
+ * **Why not `networkidle`**: There is no GET balance endpoint under v1 —
+ * v1 has no legacy portfolio REST route. `api.ownerBalances` /
+ * `api.walletBalance` throw locally (501). Home settles on
+ * `portfolio-unavailable-banner`. Funding is a completed `POST /v1/tx`
+ * kind=mint. Other periodic fetches still exist, so
+ * `waitForLoadState('networkidle')` requires 500 ms of network silence
+ * and can deadlock. `domcontentloaded` is enough for visual stability
+ * once the caller has already asserted a marker locator is visible.
  */
 export async function snap(page: Page, name: string, opts: SnapOptions = {}): Promise<void> {
   await page.waitForLoadState('domcontentloaded');

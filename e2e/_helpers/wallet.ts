@@ -216,16 +216,22 @@ export async function waitForNetworkInfo(page: Page, timeout = 30_000): Promise<
 
 /**
  * Block until WalletScreen's first balance/portfolio tick has resolved.
+ * There is no GET balance endpoint under v1 (v1 has no legacy portfolio
+ * REST route; `api.ownerBalances` / `api.walletBalance` throw locally
+ * with 501). Funding is a completed `POST /v1/tx` kind=mint; the UI
+ * settles unavailable. Home waits on `portfolio-unavailable-banner`.
  * Capability-adaptive, matching the dual-mode home screen:
  *
- *   - Single-asset surface (`multi_asset:false`): the USD/BTC hero carries
- *     `data-loading="true"` until the first `/v1/balance` tick lands,
- *     regardless of value (funded or zero). Absence of that marker is the
- *     settled signal — `asset-list` / `wallet-empty-banner` are NOT rendered
- *     for a funded single-asset wallet, so they can't gate this leg.
- *   - Multi-asset surface (`multi_asset:true`): the home screen renders the
- *     `asset-list` (funded) or `wallet-empty-banner` (empty) once the
- *     portfolio loads.
+ *   - Unavailable / error banners (`portfolio-unavailable-banner`,
+ *     `portfolio-error-banner`, `balance-unavailable-banner`) are the
+ *     honest settled signal in this build.
+ *   - Single-asset surface (`multi_asset:false`): if the USD/BTC hero is
+ *     present, absence of `data-loading="true"` is also settled.
+ *     `asset-list` / `wallet-empty-banner` are NOT rendered for a funded
+ *     single-asset wallet, so they can't gate this leg.
+ *   - Multi-asset surface (`multi_asset:true`): the home screen may render
+ *     `asset-list` (funded) or `wallet-empty-banner` (empty) once a
+ *     portfolio loads; in this build it settles on the unavailable banner.
  *
  * Polls for whichever surface is present so the same helper works on both
  * the FALSE and TRUE E2E legs.
