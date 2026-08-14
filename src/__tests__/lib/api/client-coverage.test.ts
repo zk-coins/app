@@ -396,6 +396,22 @@ describe('api.accountState / getHistory / getTransaction', () => {
     ).rejects.toThrow('pull down');
   });
 
+  it('getHistory returns empty page for typed account-not-found', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing');
+    });
+    await expect(
+      api.getHistory({ address: ADDR, mnemonic: MNEMONIC, nkCommit: NK, accountIndex: 0 }),
+    ).resolves.toEqual({ items: [], total: 0, limit: 50, offset: 0 });
+
+    await expect(
+      api.getHistory(
+        { address: ADDR, mnemonic: MNEMONIC, nkCommit: NK, accountIndex: 0 },
+        { limit: 10, offset: 5 },
+      ),
+    ).resolves.toEqual({ items: [], total: 0, limit: 10, offset: 5 });
+  });
+
   it('getTransaction finds a row or 404s', async () => {
     spyProto('openOwnershipPullSession', async () => ({
       session: 's1',

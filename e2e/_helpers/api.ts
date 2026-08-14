@@ -42,6 +42,18 @@ const POLL_FLOOR_MS = 2_000;
 const WAIT_TIMEOUT_MS = 240_000;
 const TERMINAL: ReadonlySet<V1JobStatusValue> = new Set(['completed', 'failed', 'cancelled']);
 
+/** 4xx that prove the node refused the request before admitting a job. */
+function isProvenPreAdmitRejection(err: unknown): boolean {
+  if (!(err instanceof V1ApiError)) return false;
+  return (
+    err.status >= 400 &&
+    err.status < 500 &&
+    err.status !== 408 &&
+    err.status !== 409 &&
+    err.status !== 429
+  );
+}
+
 function delay(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -345,6 +357,9 @@ export const api = {
       } catch (err) {
         // Post-submit/post-sign: never start a brand-new mint.
         if (handshakeSubmitted) throw err;
+        // Only proven pre-admit 4xx may retry; unsafe submit outcomes must not
+        // mint again under a new idempotency key.
+        if (!isProvenPreAdmitRejection(err)) throw err;
         lastErr = err;
         if (attempt >= maxAttempts) throw err;
         const wait = 1_000 * 2 ** (attempt - 1);

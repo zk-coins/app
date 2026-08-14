@@ -1092,6 +1092,8 @@ export const api = {
     },
     opts: { limit?: number; offset?: number; signal?: AbortSignal } = {},
   ): Promise<HistoryResponse> => {
+    const limit = opts.limit ?? 50;
+    const offset = opts.offset ?? 0;
     try {
       const client = v1Client();
       const sk0 = spendKeyAt(params.mnemonic, 0, params.accountIndex);
@@ -1103,8 +1105,6 @@ export const api = {
         },
         opts.signal,
       );
-      const limit = opts.limit ?? 50;
-      const offset = opts.offset ?? 0;
       const slice = pull.records.slice(offset, offset + limit);
       const items: PullHistoryItem[] = slice.map((r) => ({
         id: r.record_id,
@@ -1118,6 +1118,9 @@ export const api = {
         offset,
       };
     } catch (err) {
+      if (isAccountNotFoundError(err)) {
+        return { items: [], total: 0, limit, offset };
+      }
       mapV1Error(err);
     }
   },
