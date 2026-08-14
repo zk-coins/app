@@ -65,7 +65,7 @@ const EXEMPT_TESTIDS = new Set([
   // reliably catch; the phase transitions are covered by the client
   // lifecycle unit tests' `onPhase` assertions instead.
   'send-phase',
-  // Faucet error toast (issue #99) -- only fires when /v1/jobs/mint
+  // Faucet error toast (issue #99) -- only fires when POST /v1/tx kind=mint
   // returns an ApiError; covered by the unit-level mapping tests, not
   // reachable in the happy-path E2E flow.
   'wallet-mint-error',

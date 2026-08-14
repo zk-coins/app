@@ -20,7 +20,7 @@ describe('isReMintRejection', () => {
     // `postJson` throws `POST <path> <status>: <body>` with the node's
     // message embedded in the response body.
     const err = new Error(
-      'POST /v1/jobs/mint 422: {"error":"Re-mint into an existing asset account is not supported"}',
+      'POST /v1/tx 422: {"error":"Re-mint into an existing asset account is not supported"}',
     );
     expect(isReMintRejection(err)).toBe(true);
   });
@@ -38,9 +38,9 @@ describe('isReMintRejection', () => {
     expect(isReMintRejection(new Error('mint job 0f3c failed: proof generation error'))).toBe(
       false,
     );
-    expect(
-      isReMintRejection(new Error('POST /v1/jobs/mint 422: {"error":"invalid signature"}')),
-    ).toBe(false);
+    expect(isReMintRejection(new Error('POST /v1/tx 422: {"error":"invalid signature"}'))).toBe(
+      false,
+    );
     expect(isReMintRejection(new Error('fetch failed'))).toBe(false);
   });
 

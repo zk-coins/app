@@ -12,8 +12,7 @@
  * Locators are testid-based. The two password-validation error tests
  * (too-short, mismatch) still assert on the literal English message
  * because both errors share the `seed-error` container — distinguishing
- * them by text is the only way today. Onboarding copy is not in the message
- * catalog yet; assert data-error-kind, not literal text.
+ * them by text is the only way today.
  */
 
 import { expect, test, type Page } from '@playwright/test';
@@ -97,7 +96,7 @@ test.describe('Create wallet — seed phrase', () => {
     await page.getByTestId('seed-password-confirm-input').fill('short');
     await page.getByTestId('seed-create-btn').click();
     await expect(page.getByTestId('seed-error')).toBeVisible({ timeout: 5_000 });
-    // Onboarding copy is not in the message catalog yet; assert data-error-kind, not literal text
+    // Onboarding copy is not in the message catalog yet, so this asserts the literal English message.
     await expect(page.getByTestId('seed-error')).toHaveText(
       /Password must be at least 8 characters/,
     );
@@ -113,7 +112,7 @@ test.describe('Create wallet — seed phrase', () => {
     await page.getByTestId('seed-password-confirm-input').fill('DifferentPass456!');
     await page.getByTestId('seed-create-btn').click();
     await expect(page.getByTestId('seed-error')).toBeVisible({ timeout: 5_000 });
-    // Onboarding copy is not in the message catalog yet; assert data-error-kind, not literal text
+    // Onboarding copy is not in the message catalog yet, so this asserts the literal English message.
     await expect(page.getByTestId('seed-error')).toHaveText(/Passwords do not match/);
     await snap(page, '02-password-mismatch');
   });

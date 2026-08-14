@@ -166,7 +166,7 @@ jobs:
       # this step's lifetime (no cross-step process reaping concerns).
       #
       # Single chromium run covers the suite. globalSetup runs once and
-      # mints fresh Alice + Bob via the Jobs API.
+      # mints fresh Alice + Bob via POST /v1/tx kind=mint.
       - name: Serve standalone build + run E2E (chromium)
         run: |
           set -euo pipefail

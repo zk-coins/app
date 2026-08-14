@@ -161,13 +161,11 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
   // sets `multi_asset: true` and passes all other /v1/* through 1:1).
   // Either way the seed itself is the creator-signed create-coin flow —
   // the node's neutral permissionless model has no server-mediated faucet,
-  // so a wallet is funded by minting an asset it owns. The branches differ
-  // only in surface semantics:
-  //   - false → single-asset UI mode: mint ONE deterministic fixture asset
-  //     and confirm funding via the same single-asset balance read the UI
-  //     performs (proxy-translated, see `_helpers/api.ts::walletBalance`).
-  //   - true  → multi-asset UI mode: mint uniquely-named assets and confirm
-  //     funding via the per-owner portfolio.
+  // so a wallet is funded by minting an asset it owns. Confirm funding by
+  // mint completion only — do not poll walletBalance / portfolio.
+  // The branches differ only in which assets are minted:
+  //   - false → single-asset UI mode: mint ONE deterministic fixture asset.
+  //   - true  → multi-asset UI mode: mint uniquely-named assets.
   const multiAsset = info.capabilities?.multi_asset === true;
 
   const browser = await chromium.launch();
