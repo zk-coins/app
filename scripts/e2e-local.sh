@@ -35,7 +35,6 @@
 #                       (default http://host.docker.internal:4242)
 #   E2E_LOCAL_APP_PORT  standalone app port inside container (default 3090)
 #   E2E_INFO_PROXY_PORT info-proxy port inside container     (default 4243)
-#   E2E_NETWORK_EXPECTED network badge label                 (default signet)
 #   E2E_FAUCET_CALLS    mint cycles to seed Alice            (default 1)
 #
 # Usage:  npm run test:e2e:local     (or)   scripts/e2e-local.sh [-- extra playwright args]
@@ -162,7 +161,6 @@ if [[ "${1:-}" == "__in_container" ]]; then
   export E2E_BASE_URL="http://127.0.0.1:${APP_PORT}"
   export E2E_API_URL="http://127.0.0.1:${PROXY_PORT}"
   export E2E_LOCAL_APP_PORT="$APP_PORT"
-  export E2E_NETWORK_EXPECTED="${E2E_NETWORK_EXPECTED:-signet}"
   export E2E_FAUCET_CALLS="${E2E_FAUCET_CALLS:-1}"
   export E2E_NEED_FIXTURES="true"
 
@@ -228,7 +226,6 @@ docker run --rm -i \
   -e E2E_NODE_URL="${NODE_URL}" \
   -e E2E_LOCAL_APP_PORT="${E2E_LOCAL_APP_PORT:-3090}" \
   -e E2E_INFO_PROXY_PORT="${E2E_INFO_PROXY_PORT:-4243}" \
-  -e E2E_NETWORK_EXPECTED="${E2E_NETWORK_EXPECTED:-signet}" \
   -e E2E_FAUCET_CALLS="${E2E_FAUCET_CALLS:-1}" \
   -e E2E_MULTI_ASSET="${E2E_MULTI_ASSET:-}" \
   -e CI="${CI:-}" \

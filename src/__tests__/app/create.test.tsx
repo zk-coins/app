@@ -135,19 +135,28 @@ describe('CreateCoinPage — validation', () => {
 
   it('rejects an amount of 0', async () => {
     const user = userEvent.setup();
-    render(<CreateCoinPage />);
+    const { unmount } = render(<CreateCoinPage />);
 
     await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
     await user.type(screen.getByTestId('create-amount-input'), '0');
     await user.click(screen.getByTestId('create-submit-btn'));
 
     expect(await screen.findByTestId('create-error')).toBeInTheDocument();
-    expect(createSpy).toHaveBeenCalled();
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
+
+    unmount();
+    render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '0');
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
   });
 
   it('rejects decimals above the max', async () => {
     const user = userEvent.setup();
-    render(<CreateCoinPage />);
+    const { unmount } = render(<CreateCoinPage />);
 
     await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
     await user.clear(screen.getByTestId('create-decimals-input'));
@@ -155,8 +164,46 @@ describe('CreateCoinPage — validation', () => {
     await user.type(screen.getByTestId('create-amount-input'), '1000');
     await user.click(screen.getByTestId('create-submit-btn'));
 
-    expect(await screen.findByTestId('create-error')).toBeInTheDocument();
-    expect(createSpy).toHaveBeenCalled();
+    expect(await screen.findByTestId('create-error')).toHaveTextContent(
+      'Nachkommastellen müssen zwischen 0 und 18 liegen.',
+    );
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
+
+    unmount();
+    render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.clear(screen.getByTestId('create-decimals-input'));
+    await user.type(screen.getByTestId('create-decimals-input'), '99');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
+  });
+
+  it('rejects empty decimals', async () => {
+    const user = userEvent.setup();
+    const { unmount } = render(<CreateCoinPage />);
+
+    await user.clear(screen.getByTestId('create-decimals-input'));
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    await user.click(screen.getByTestId('create-submit-btn'));
+
+    expect(await screen.findByTestId('create-error')).toHaveTextContent(
+      'Nachkommastellen müssen zwischen 0 und 18 liegen.',
+    );
+    expect(createSpy).not.toHaveBeenCalled();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
+
+    unmount();
+    render(<CreateCoinPage />);
+    await user.clear(screen.getByTestId('create-decimals-input'));
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
+    expect(localStorage.getItem(`zkcoins.create.lock.${ALICE.address}`)).toBeNull();
   });
 
   it('normalizes non-digits and leading zeros in numeric inputs', async () => {
@@ -497,6 +544,33 @@ describe('CreateCoinPage — lock', () => {
       );
     });
     expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+  });
+
+  it('unlocks when another tab clears the create lock while this tab is not in-flight', async () => {
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'MyCoin');
+    await user.type(screen.getByTestId('create-amount-input'), '1000');
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: `zkcoins.create.lock.${ALICE.address}`,
+          newValue: '1',
+        }),
+      );
+    });
+    expect(screen.getByTestId('create-submit-btn')).toBeDisabled();
+
+    act(() => {
+      window.dispatchEvent(
+        new StorageEvent('storage', {
+          key: `zkcoins.create.lock.${ALICE.address}`,
+          newValue: null,
+        }),
+      );
+    });
+    expect(screen.getByTestId('create-submit-btn')).not.toBeDisabled();
   });
 
   it('does not start create when localStorage already has the create lock', async () => {

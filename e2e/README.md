@@ -62,14 +62,13 @@ What exists today in `e2e/`:
 
 `E2E_BASE_URL` and `E2E_API_URL` already drive the existing `playwright.config.ts`. The new helpers add:
 
-| Env var                | Default                       | Purpose                                                                                                                                                                                                                                                                                                           |
-| ---------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `E2E_BASE_URL`         | `https://dev.zkcoins.app`     | Frontend under test. Switch to `https://zkcoins.app` for PRD.                                                                                                                                                                                                                                                     |
-| `E2E_API_URL`          | `https://dev-api.zkcoins.app` | Backend the helpers talk to directly (creator-signed mint seeding, balance polling).                                                                                                                                                                                                                              |
-| `E2E_NETWORK_EXPECTED` | `signet`                      | Network the badge should show. Asserted in `09-network-and-shell.spec.ts`.                                                                                                                                                                                                                                        |
-| `E2E_FAUCET_CALLS`     | `1`                           | Number of creator-signed mint cycles (admit → commit → completed) used to seed Alice with her own fixture asset. Set to 0 to skip seeding for a custom run. **Warning:** values > 1 give Alice a multi-asset portfolio in the proxied single-asset environment, after which send injection declines loudly (422). |
-| `E2E_NEED_FIXTURES`    | unset (treated as false)      | **Opt-in gate.** `globalSetup` is a no-op unless this is `'true'`. The legacy specs (wallet/send-flow/settings/visual/webauthn) don't need fixtures and the existing `e2e-tests` CI job leaves it unset; the regen workflow and the future `e2e-visual` job both set it to `'true'`.                              |
-| `E2E_KEEP_ACCOUNTS`    | unset                         | If `true`, `globalTeardown` skips wiping fixtures (useful for debugging).                                                                                                                                                                                                                                         |
+| Env var             | Default                       | Purpose                                                                                                                                                                                                                                                                                                           |
+| ------------------- | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `E2E_BASE_URL`      | `https://dev.zkcoins.app`     | Frontend under test. Switch to `https://zkcoins.app` for PRD.                                                                                                                                                                                                                                                     |
+| `E2E_API_URL`       | `https://dev-api.zkcoins.app` | Backend the helpers talk to directly (creator-signed mint seeding, balance polling).                                                                                                                                                                                                                              |
+| `E2E_FAUCET_CALLS`  | `1`                           | Number of creator-signed mint cycles (admit → commit → completed) used to seed Alice with her own fixture asset. Set to 0 to skip seeding for a custom run. **Warning:** values > 1 give Alice a multi-asset portfolio in the proxied single-asset environment, after which send injection declines loudly (422). |
+| `E2E_NEED_FIXTURES` | unset (treated as false)      | **Opt-in gate.** `globalSetup` is a no-op unless this is `'true'`. The legacy specs (wallet/send-flow/settings/visual/webauthn) don't need fixtures and the existing `e2e-tests` CI job leaves it unset; the regen workflow and the future `e2e-visual` job both set it to `'true'`.                              |
+| `E2E_KEEP_ACCOUNTS` | unset                         | If `true`, `globalTeardown` skips wiping fixtures (useful for debugging).                                                                                                                                                                                                                                         |
 
 PRD switch: `E2E_BASE_URL=https://zkcoins.app E2E_API_URL=https://api.zkcoins.app playwright test`. The plan deliberately does **not** support PRD: the server has the faucet feature off and `globalSetup` would refuse to seed Alice. Balance shots in this build capture the unavailable surface (no funded `$X`, no empty-wallet faucet banner). A PRD smoke pass is a separate workstream (see §13).
 
@@ -95,16 +94,16 @@ The existing `fullyParallel: true`, `retries: 1`, and 30 s per-test timeout stay
 
 The suite runs against two interchangeable targets selected by **`E2E_TARGET`**. Both run the **same spec files** and assert against the **same `*-chromium-linux.png` baselines** — that is the whole point: a local run reproduces exactly what CI sees.
 
-| `E2E_TARGET`    | Frontend                           | Node                                                       | webServer | Used by                                   |
-| --------------- | ---------------------------------- | ---------------------------------------------------------- | --------- | ----------------------------------------- |
-| `local`         | locally-served standalone PR build | upstream via info-proxy (CI: dev-api; dev box: local node) | reuse     | CI (`ci.yaml`), `npm run test:e2e:local`  |
-| `dev` (default) | `https://dev.zkcoins.app`          | `https://dev-api.zkcoins.app`                              | none      | `npm run test:e2e` (deployed-stack smoke) |
+| `E2E_TARGET`    | Frontend                           | Node                                                                | webServer | Used by                                   |
+| --------------- | ---------------------------------- | ------------------------------------------------------------------- | --------- | ----------------------------------------- |
+| `local`         | locally-served standalone PR build | upstream via info-proxy (CI: `ci.zkcoins.app`; dev box: local node) | reuse     | CI (`ci.yaml`), `npm run test:e2e:local`  |
+| `dev` (default) | `https://dev.zkcoins.app`          | `https://dev-api.zkcoins.app`                                       | none      | `npm run test:e2e` (deployed-stack smoke) |
 
-**CI runs the `local` target against the PR's own build.** `ci.yaml` builds the standalone bundle with the same-origin proxy config baked in, starts the `/v1/info` normalisation proxy with `E2E_NODE_URL=https://dev-api.zkcoins.app` as upstream, serves the bundle on the runner, and runs both legs with `E2E_TARGET=local`. A red E2E therefore means the PR is wrong — not that the dev deployment (which reflects `develop`, never the PR branch) lags the code under test; during the Jobs-API migration that lag made every frontend-behaviour spec fail for reasons unrelated to the PR. The runner is `ubuntu-latest`, so visual diffs compare against the committed `*-chromium-linux.png` baselines on their native platform. The hosted DEV **node** stays the upstream — real ZK proof generation and broadcast, exactly as before.
+**CI runs the `local` target against the PR's own build.** `ci.yaml` builds the standalone bundle with the same-origin proxy config baked in, starts the `/v1/info` normalisation proxy with `E2E_NODE_URL=https://ci.zkcoins.app` as upstream, serves the bundle on the runner, and runs a single chromium suite with `E2E_TARGET=local`. A red E2E therefore means the PR is wrong — not that a deployed frontend (which may lag the PR branch) is out of date. The runner is `ubuntu-latest`, so visual diffs compare against the committed `*-chromium-linux.png` baselines on their native platform. The CI **node** at `ci.zkcoins.app` is the upstream — real ZK proof generation and broadcast.
 
-**`dev` stays the default when `E2E_TARGET` is unset** and reproduces the historical hosted-stack behaviour byte-for-byte: `baseURL = E2E_BASE_URL || https://dev.zkcoins.app`, no `webServer`, helpers point at `E2E_API_URL || https://dev-api.zkcoins.app`. Useful as a deployed-environment smoke check after a `develop` deploy.
+**`dev` stays the default when `E2E_TARGET` is unset** and reproduces the historical hosted-stack behaviour: `baseURL = E2E_BASE_URL || https://dev.zkcoins.app`, no `webServer`, helpers point at `E2E_API_URL || https://dev-api.zkcoins.app`. Useful as a deployed-environment smoke check. This is **not** what CI runs.
 
-**`local` on a developer machine is a one-command flow:** `npm run test:e2e:local` → `scripts/e2e-local.sh` (Docker, defaults to a local node at `host.docker.internal:4242`; override `E2E_NODE_URL=https://dev-api.zkcoins.app` to mirror CI exactly). It is idempotent and self-cleaning.
+**`local` on a developer machine is a one-command flow:** `npm run test:e2e:local` → `scripts/e2e-local.sh` (Docker, defaults to a local node at `host.docker.internal:4242`; override `E2E_NODE_URL=https://ci.zkcoins.app` to use the same upstream CI uses). It is idempotent and self-cleaning.
 
 #### Why a Linux container (visual baselines are platform-specific)
 
@@ -129,13 +128,12 @@ The browser build bakes `NEXT_PUBLIC_API_URL = http://127.0.0.1:3090` (the app's
 
 #### `scripts/e2e-local.sh` env overrides
 
-| Env var                | Default                            | Purpose                                       |
-| ---------------------- | ---------------------------------- | --------------------------------------------- |
-| `E2E_NODE_URL`         | `http://host.docker.internal:4242` | Upstream node as seen **from the container**. |
-| `E2E_LOCAL_APP_PORT`   | `3090`                             | Standalone app port inside the container.     |
-| `E2E_INFO_PROXY_PORT`  | `4243`                             | `/v1/info` proxy port inside the container.   |
-| `E2E_NETWORK_EXPECTED` | `signet`                           | Network badge label (same as dev mode).       |
-| `E2E_FAUCET_CALLS`     | `1`                                | Mint cycles to seed Alice in globalSetup.     |
+| Env var               | Default                            | Purpose                                       |
+| --------------------- | ---------------------------------- | --------------------------------------------- |
+| `E2E_NODE_URL`        | `http://host.docker.internal:4242` | Upstream node as seen **from the container**. |
+| `E2E_LOCAL_APP_PORT`  | `3090`                             | Standalone app port inside the container.     |
+| `E2E_INFO_PROXY_PORT` | `4243`                             | `/v1/info` proxy port inside the container.   |
+| `E2E_FAUCET_CALLS`    | `1`                                | Mint cycles to seed Alice in globalSetup.     |
 
 The script runs the same single chromium suite as CI. Send is unavailable in this build (no input-coin inventory), so there is no separate `send-success` leg. The HTML report and any failure artifacts are copied to `playwright-report-local/` on the host (gitignored).
 
@@ -574,21 +572,24 @@ Determinism (the page renders a live, self-advancing chart — three variance so
 
 ```text
 jobs:
-  e2e-visual:
+  e2e-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    timeout-minutes: 30
     needs: lint-and-build
     env:
-      E2E_BASE_URL: https://dev.zkcoins.app
-      E2E_API_URL:  https://dev-api.zkcoins.app
-      E2E_NETWORK_EXPECTED: signet
+      E2E_TARGET: local
+      E2E_BASE_URL: http://127.0.0.1:3090
+      E2E_API_URL: http://127.0.0.1:4243
+      E2E_NODE_URL: https://ci.zkcoins.app
       E2E_FAUCET_CALLS: '1'
+      E2E_NEED_FIXTURES: 'true'
     steps:
       - checkout
       - setup-node 22
       - npm ci
       - npx playwright install --with-deps chromium
-      - npx playwright test --project=chromium  # runs everything in e2e/0*
+      - build standalone bundle (same-origin proxy baked in)
+      - serve standalone + info-proxy, then npx playwright test --project=chromium
       - upload diff report on failure (actions/upload-artifact)
 ```
 

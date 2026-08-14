@@ -93,10 +93,9 @@ jobs:
     # test-only /v1/info normalisation proxy (scripts/e2e-info-proxy.mjs)
     # so the capability surface matches the committed baselines.
     #
-    # Why ci.zkcoins.app and not dev-api.zkcoins.app? The hosted DEV +
-    # PRD nodes were retired (both 502). ci.zkcoins.app is the dedicated
-    # Mutinynet node that replaces them as the E2E upstream — same
-    # contract: real ZK proof gen + real Mutinynet broadcast.
+    # Why ci.zkcoins.app and not dev-api.zkcoins.app? The CI node is
+    # ci.zkcoins.app — the dedicated Mutinynet node used as the E2E
+    # upstream (real ZK proof gen + real Mutinynet broadcast).
     #
     # Why not the previous shape (navigate to https://dev.zkcoins.app)?
     # That tested whatever frontend was DEPLOYED — i.e. `develop` —
@@ -118,9 +117,9 @@ jobs:
     #
     # Cap the job so a hung browser process or stuck globalSetup
     # cannot consume the default 6 h budget. Realistic wall-clock is
-    # ~5-7 min (leg 1: 3 min parallel, leg 2: 2-4 min serial) plus
-    # ~3 min for install/browser-fetch and ~1 min for the standalone
-    # build — 30 min is the conservative ceiling.
+    # ~5-10 min for the single chromium suite plus ~3 min for
+    # install/browser-fetch and ~1 min for the standalone build —
+    # 30 min is the conservative ceiling.
     timeout-minutes: 30
     steps:
       - name: Checkout
@@ -166,17 +165,9 @@ jobs:
       # Serve + test in ONE step so the background proxy/server share
       # this step's lifetime (no cross-step process reaping concerns).
       #
-      # Two-leg shape, same as before:
-      #   Leg 1 — the parallel-safe bulk of the suite.
-      #   Leg 2 — `send-success` alone with --workers=1: it drives ONE
-      #   real send (admit → prove → commit → broadcast) through the
-      #   DEV node and needs exclusive proof-gen bandwidth; see the
-      #   prior incident notes in e2e/README.md § 4 and § 5.
-      #
-      # globalSetup runs once per playwright invocation and mints
-      # fresh Alice + Bob via the Jobs API, so each leg gets a clean
-      # fixture set.
-      - name: Serve standalone build + run E2E (both legs)
+      # Single chromium run covers the suite. globalSetup runs once and
+      # mints fresh Alice + Bob via the Jobs API.
+      - name: Serve standalone build + run E2E (chromium)
         run: |
           set -euo pipefail
 
@@ -223,7 +214,6 @@ jobs:
           E2E_INFO_PROXY_PORT: '4243'
           E2E_NODE_URL: https://ci.zkcoins.app
           E2E_INFO_USERNAME_DOMAIN: dev.zkcoins.app
-          E2E_NETWORK_EXPECTED: signet
           E2E_FAUCET_CALLS: '1'
           E2E_NEED_FIXTURES: 'true'
 

@@ -113,9 +113,15 @@ export default function CreateCoinPage() {
       setCreating(true);
     }
     const handleStorage = (event: StorageEvent) => {
-      if (event.key === lockKey && event.newValue === '1') {
+      if (event.key !== lockKey) return;
+      if (event.newValue === '1') {
         setCreating(true);
+        return;
       }
+      // Another tab cleared the lock. Do not unlock this tab mid-mint.
+      if (mintInFlight.current) return;
+      setCreating(false);
+      mintInFlight.current = false;
     };
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
@@ -135,11 +141,19 @@ export default function CreateCoinPage() {
       setError(t('errInvalidAmount'));
       return;
     }
+    if (!/^(0|[1-9][0-9]*)$/.test(trimmedAmount) || trimmedAmount === '0') {
+      setError(t('errInvalidAmount'));
+      return;
+    }
+    const dec = Number.parseInt(decimals, 10);
+    if (!Number.isInteger(dec) || dec < 0 || dec > 18) {
+      setError(t('errInvalidDecimals'));
+      return;
+    }
     if (!account.mnemonic || !account.nkCommit) {
       setError(t('errMissingSigningMaterial'));
       return;
     }
-    const dec = Number.parseInt(decimals, 10);
 
     mintInFlight.current = true;
     setCreating(true);

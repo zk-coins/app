@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { AppShell } from '@/components/AppShell';
 import { useNetworkStore } from '@/stores/network';
@@ -13,54 +13,32 @@ import { FEATURES } from '@/lib/features';
 function Toggle({
   label,
   description,
-  defaultOn = false,
-  disabled = false,
   badge,
 }: {
   label: string;
   description?: string;
-  defaultOn?: boolean;
-  disabled?: boolean;
   badge?: string;
 }) {
-  const [on, setOn] = useState(defaultOn);
-  // Every module-local settings toggle currently ships disabled ("Planned").
-  /* v8 ignore next -- Every Toggle call site in this module passes disabled, so no rendered button can invoke the enable path. */
-  const handleToggle = () => !disabled && setOn((v) => !v);
-  /* v8 ignore next -- Every Toggle call site in this module passes disabled, so enabled label styling cannot be rendered. */
-  const labelTone = disabled ? 'text-ink2' : 'text-ink';
-  /* v8 ignore next -- Every Toggle call site in this module passes disabled, so neither enabled track style can be rendered. */
-  const trackTone = disabled
-    ? 'cursor-not-allowed bg-line opacity-50'
-    : on
-      ? 'bg-bitcoin'
-      : 'bg-line2';
-  /* v8 ignore next -- Disabled Toggle buttons cannot change the private on state from its false default at any module-local call site. */
-  const thumbPosition = on ? 'left-[18px]' : 'left-0.5';
+  // Planned-only: every call site ships a disabled toggle with badge + description.
   return (
     <div className="flex items-start justify-between gap-6 py-4">
       <div className="min-w-0">
         <div className="flex items-center gap-2">
-          <p className={`text-[13px] font-medium ${labelTone}`}>{label}</p>
-          {/* v8 ignore next -- Every Toggle call site supplies the Planned badge. */}
+          <p className="text-[13px] font-medium text-ink2">{label}</p>
           {badge && (
             <span className="rounded-sm bg-line2 px-1.5 py-0.5 text-[9px] font-semibold tracking-wider text-ink3 uppercase">
               {badge}
             </span>
           )}
         </div>
-        {/* v8 ignore next -- Every Toggle call site supplies explanatory copy. */}
         {description && <p className="mt-0.5 text-[12px] text-ink3">{description}</p>}
       </div>
       <button
-        onClick={handleToggle}
-        disabled={disabled}
-        className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${trackTone}`}
-        aria-pressed={on}
+        disabled
+        className="relative h-5 w-9 shrink-0 cursor-not-allowed rounded-full bg-line opacity-50 transition-colors"
+        aria-pressed={false}
       >
-        <span
-          className={`absolute top-0.5 h-4 w-4 rounded-full bg-ink transition-all ${thumbPosition}`}
-        />
+        <span className="absolute top-0.5 left-0.5 h-4 w-4 rounded-full bg-ink transition-all" />
       </button>
     </div>
   );
@@ -136,7 +114,6 @@ export default function SettingsPage() {
                 label="Auto-rotate receive address"
                 description="Generate a fresh address after each receive"
                 badge="Planned"
-                disabled
               />
             )}
             {FEATURES.TOR_ROUTING && (
@@ -144,7 +121,6 @@ export default function SettingsPage() {
                 label="Tor routing"
                 description="Connect to backend over Tor"
                 badge="Planned"
-                disabled
               />
             )}
           </Section>
