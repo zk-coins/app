@@ -2550,33 +2550,36 @@ describe('waitForJob branches via completed handshake + poll', () => {
     spyProto('signAwaiting', () => DUMMY_SIG);
     spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
     let seenSignal: AbortSignal | undefined;
+    let postSignPolls = 0;
     spyGetJobAfterAwaiting(async (_id, signal) => {
       seenSignal = signal;
+      postSignPolls += 1;
+      if (postSignPolls === 1) {
+        queueMicrotask(() => handshakeController.abort());
+      }
       return {
         job: completedJob({ status: 'proving', phase: 'proving' }),
-        retryAfterMs: 900_000,
+        retryAfterMs: 1_500,
       };
     });
 
-    const pending = api.createCoin({
-      account_address: ADDR,
-      name: 'Timeout',
-      decimals: 0,
-      amount: '1',
-      mnemonic: MNEMONIC,
-      nkCommit: NK,
-      accountIndex: 0,
-    });
-    const assertion = expect(pending).rejects.toMatchObject({
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'Timeout',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({
       name: 'JobFailedError',
       status: 'unknown',
       message: expect.stringMatching(
         /signature submit outcome unknown.*do not retry as a new transition/i,
       ),
     });
-    await Promise.resolve();
-    handshakeController.abort();
-    await assertion;
     expect(seenSignal).toBeInstanceOf(AbortSignal);
   });
 
