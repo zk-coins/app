@@ -163,6 +163,18 @@ describe('wallet store — tab session', () => {
     expect(useWalletStore.getState().isLocked).toBe(false);
   });
 
+  it('restoreUnlockedSession refuses after an incompatible stored wallet', () => {
+    useWalletStore.getState().setAccount(consistentAccount);
+    expect(loadUnlockedSession()).toEqual(consistentAccount);
+    useWalletStore.setState({
+      needsSeedReimport: true,
+      account: null,
+      isLocked: false,
+    });
+    expect(useWalletStore.getState().restoreUnlockedSession()).toBe(false);
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
   it('does not persist a custody-inconsistent account', () => {
     useWalletStore.getState().setAccount(testAccount);
     expect(loadUnlockedSession()).toBeNull();

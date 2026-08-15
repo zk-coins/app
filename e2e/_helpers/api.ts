@@ -191,6 +191,7 @@ async function waitForJob(
   jobId: string,
   signal: AbortSignal,
   deadline: number,
+  stopAt: ReadonlySet<V1Job['status']> = TERMINAL,
 ): Promise<V1Job> {
   for (;;) {
     const { job, retryAfterMs } = await client.getJob(jobId, signal);
@@ -201,14 +202,12 @@ async function waitForJob(
       }
       throw new Error(`job ${jobId} ${job.status}: ${detail}`);
     }
-    if (TERMINAL.has(job.status)) return job;
+    if (stopAt.has(job.status) || TERMINAL.has(job.status)) return job;
     if (Date.now() >= deadline || signal.aborted) {
       throw new Error(`job ${jobId} stuck at ${job.status}`);
     }
-    if (retryAfterMs === null) {
-      throw new Error(`job ${jobId} non-terminal ${job.status} without Retry-After`);
-    }
-    await delay(Math.max(POLL_FLOOR_MS, retryAfterMs), signal);
+    const sleepMs = retryAfterMs === null ? POLL_FLOOR_MS : Math.max(POLL_FLOOR_MS, retryAfterMs);
+    await delay(sleepMs, signal);
     if (signal.aborted) {
       throw new Error(`job ${jobId} stuck at ${job.status}`);
     }
@@ -338,7 +337,11 @@ export const api = {
           const unknownSubject =
             err instanceof V1ApiError &&
             ((err.status === 404 && err.machineCode === 'not_found') ||
-              (err.status === 500 && err.machineCode === 'internal_error'));
+              (err.status === 500 &&
+                err.machineCode === 'internal_error' &&
+                /Account state unavailable|no indexed AccountState|missing entrust|an internal error occurred/i.test(
+                  err.message,
+                )));
           if (!unknownSubject) {
             throw err;
           }
@@ -351,18 +354,11 @@ export const api = {
         const nameHash = createHash('sha256').update(name, 'utf8').digest();
         const assetId = encodeHexLower(
           digestToBytes(
-            assetIdV1(
-              GENESIS_TAG,
-              hexToBytesExact(keys.pk0, 32, 'pk0'),
-              nameHash,
-              decimals,
-              1,
-            ),
+            assetIdV1(GENESIS_TAG, hexToBytesExact(keys.pk0, 32, 'pk0'), nameHash, decimals, 1),
           ),
         );
-        const relayUrl = (
-          process.env.E2E_RELAY_URL ?? 'ws://127.0.0.1:18080/'
-        ).replace(/\/+$/, '') + '/';
+        const relayUrl =
+          (process.env.E2E_RELAY_URL ?? 'ws://127.0.0.1:18080/').replace(/\/+$/, '') + '/';
         const selfInvoice = await issueInvoice({
           amount,
           assetId,
@@ -402,10 +398,13 @@ export const api = {
         handshakeSubmitted = true;
         const jobId = accepted.job_id;
 
-        const awaiting = await client.waitForAwaitingSignature(jobId, {
-          sleep: (ms) => delay(Math.max(POLL_FLOOR_MS, ms), signal),
+        const awaiting = await waitForJob(
+          client,
+          jobId,
           signal,
-        });
+          deadline,
+          new Set(['awaiting_signature']),
+        );
         if (awaiting.status !== 'awaiting_signature' || !awaiting.awaiting_signature) {
           throw new Error(`createCoin: job ${jobId} ended in ${awaiting.status} before signature`);
         }
@@ -432,7 +431,11 @@ export const api = {
           const unknownSubject =
             err instanceof V1ApiError &&
             ((err.status === 404 && err.machineCode === 'not_found') ||
-              (err.status === 500 && err.machineCode === 'internal_error'));
+              (err.status === 500 &&
+                err.machineCode === 'internal_error' &&
+                /Account state unavailable|no indexed AccountState|missing entrust|an internal error occurred/i.test(
+                  err.message,
+                )));
           if (!unknownSubject) {
             throw err;
           }

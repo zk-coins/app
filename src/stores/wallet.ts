@@ -170,6 +170,7 @@ function persistUnlockedSession(account: Account | null): void {
 
 /** Outer-envelope reimport transition — blob stays in IDB; no decrypt. */
 function incompatibleStoredWalletState() {
+  persistUnlockedSession(null);
   return {
     needsSeedReimport: true as const,
     account: null,
@@ -418,6 +419,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   },
 
   restoreUnlockedSession: () => {
+    if (get().needsSeedReimport) return false;
     const existing = get().account;
     if (existing && !get().isLocked) return true;
     const session = loadUnlockedSession();
@@ -490,6 +492,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           // explicitly resets — deleting here would destroy the only copy
           // before a conscious recovery decision.
           // needsSeedReimport is the gate; error stays null (not sticky I/O).
+          persistUnlockedSession(null);
           set({
             needsSeedReimport: true,
             hasStoredWallet: false,

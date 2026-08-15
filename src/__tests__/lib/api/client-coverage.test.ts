@@ -25,7 +25,7 @@ import {
 } from '@/lib/api/client';
 import { SERVER_ERROR_TO_USER_MESSAGE, userMessageFor } from '@/lib/api/errorMessages';
 import { useNetworkStore } from '@/stores/network';
-import { spendKeyAt } from '@/lib/crypto/account-keys';
+import { accountKeysFromMnemonic, spendKeyAt } from '@/lib/crypto/account-keys';
 
 const MNEMONIC =
   'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about';
@@ -772,6 +772,71 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     ).rejects.toThrow(/send_counter is 5 \(non-genesis\)/);
     expect(signAwaiting).not.toHaveBeenCalled();
     expect(signJob).not.toHaveBeenCalled();
+  });
+
+  it('self-invoices when account_address matches derived custody address', async () => {
+    const derived = accountKeysFromMnemonic(MNEMONIC, 0);
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto(
+      'info',
+      async () =>
+        ({
+          features: ['explorer'],
+          relay_url: 'ws://127.0.0.1:18080/',
+        }) as unknown as V1Info,
+    );
+    let submittedKind: string | undefined;
+    let submittedDeliveryType: string | undefined;
+    spyProto('submitTransition', async (body) => {
+      submittedKind = body.kind;
+      const delivery = body.output_templates[0]?.delivery;
+      submittedDeliveryType = delivery && 'type' in delivery ? delivery.type : undefined;
+      return { job_id: JOB_ID, status: 'accepted' };
+    });
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob());
+    spyGetJobAfterAwaiting(async () => ({ job: completedJob(), retryAfterMs: null }));
+
+    const job = await api.createCoin({
+      account_address: derived.address,
+      name: 'SelfInvoice',
+      decimals: 0,
+      amount: '10',
+      mnemonic: MNEMONIC,
+      nkCommit: derived.nkCommit,
+      accountIndex: 0,
+    });
+    expect(job.status).toBe('completed');
+    expect(submittedKind).toBe('mint');
+    expect(submittedDeliveryType).toBe('invoice');
+  });
+
+  it('fails closed when self-invoice relay_url is missing', async () => {
+    const derived = accountKeysFromMnemonic(MNEMONIC, 0);
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('info', async () => ({ features: ['explorer'] }) as unknown as V1Info);
+    const submit = spyProto('submitTransition', async () => {
+      throw new Error('submitTransition must not run without relay_url');
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: derived.address,
+        name: 'NoRelay',
+        decimals: 0,
+        amount: '10',
+        mnemonic: MNEMONIC,
+        nkCommit: derived.nkCommit,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({
+      message: expect.stringMatching(/relay_url/),
+    });
+    expect(submit).not.toHaveBeenCalled();
   });
 
   it('uses live send_counter when account state is present', async () => {

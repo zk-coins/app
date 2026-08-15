@@ -300,12 +300,17 @@ function isMissingAccountStateMessage(message: string): boolean {
  */
 function isClosedSurfaceMissingAccount(err: unknown): boolean {
   if (err instanceof V1ApiError) {
-    return err.status === 500 && err.machineCode === 'internal_error';
+    return (
+      err.status === 500 &&
+      err.machineCode === 'internal_error' &&
+      (isMissingAccountStateMessage(err.message) || /an internal error occurred/i.test(err.message))
+    );
   }
   if (err instanceof ApiError) {
     return (
       err.status === 500 &&
-      (err.code === 'internal_error' || isMissingAccountStateMessage(err.message))
+      (isMissingAccountStateMessage(err.message) ||
+        (err.code === 'internal_error' && /an internal error occurred/i.test(err.message)))
     );
   }
   return false;
