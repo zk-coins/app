@@ -6,6 +6,7 @@ import {
   deriveNk,
   invoiceKeysFromMnemonic,
   isValidMnemonic,
+  operationalBundleHexFromMnemonic,
   seedFromAccountMnemonic,
   spendKeyAt,
 } from '@/lib/crypto/account-keys';
@@ -68,6 +69,12 @@ describe('account-keys (SDK pure-TS)', () => {
     const nk = deriveNk(seed, 0);
     expect(nk).toBeInstanceOf(Uint8Array);
     expect(nk.length).toBe(32);
+  });
+
+  it('operationalBundleHexFromMnemonic is 161 versioned bytes', () => {
+    const hex = operationalBundleHexFromMnemonic(FIXTURE);
+    expect(hex).toMatch(/^01[0-9a-f]{320}$/);
+    expect(operationalBundleHexFromMnemonic(FIXTURE)).toBe(hex);
   });
 
   it('invoiceKeysFromMnemonic returns 32-byte invoice material', () => {

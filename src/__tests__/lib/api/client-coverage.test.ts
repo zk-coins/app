@@ -200,11 +200,32 @@ beforeEach(() => {
     infoError: null,
     infoLoaded: true,
   });
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes('/v1/bootstrap/challenge')) {
+        return new Response(
+          JSON.stringify({
+            nonce: 'aa'.repeat(32),
+            expiry: String(Math.floor(Date.now() / 1000) + 300),
+            domain: 'zkCoins/v1/EntrustChallenge',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.includes('/v1/bootstrap/entrust')) {
+        return new Response(JSON.stringify({ error: 'already_present' }), { status: 409 });
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    }),
+  );
 });
 
 afterEach(() => {
   while (spies.length) spies.pop()!.mockRestore();
   vi.restoreAllMocks();
+  vi.unstubAllGlobals();
   vi.useRealTimers();
 });
 
@@ -2967,6 +2988,109 @@ describe('waitForJob branches via completed handshake + poll', () => {
     expect(jobErr.status).toBe('failed');
     expect(jobErr.serverError).toBe('prove failed');
     expect(jobErr.jobId).toBe('j');
+  });
+
+  it('fails closed when the entrust challenge is not ok', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('nope', { status: 503 })),
+    );
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'EntrustChallengeFail',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'ApiError', status: 503 });
+  });
+
+  it('fails closed on an unexpected entrust challenge domain', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              nonce: 'aa'.repeat(32),
+              expiry: '1',
+              domain: 'zkCoins/v1/PullChallenge',
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'EntrustDomain',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'ApiError' });
+  });
+
+  it('fails closed when the entrust challenge omits nonce or expiry', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          new Response(
+            JSON.stringify({
+              domain: 'zkCoins/v1/EntrustChallenge',
+            }),
+            { status: 200 },
+          ),
+      ),
+    );
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'EntrustNonce',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'ApiError' });
+  });
+
+  it('fails closed when the entrust POST is a non-409/500 error', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/challenge')) {
+          return new Response(
+            JSON.stringify({
+              nonce: 'aa'.repeat(32),
+              expiry: String(Math.floor(Date.now() / 1000) + 300),
+              domain: 'zkCoins/v1/EntrustChallenge',
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response('denied', { status: 403 });
+      }),
+    );
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'EntrustForbidden',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'ApiError', status: 403 });
   });
 });
 

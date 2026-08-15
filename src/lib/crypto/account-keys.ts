@@ -118,6 +118,25 @@ function deriveBranch(seed: Uint8Array, account: number, pathSuffix: string): Ui
   return child.privateKey.slice();
 }
 
+/** §7.7 operational bundle (version 0x01 ‖ ivk ‖ ovk ‖ op ‖ nk ‖ op_secret). */
+export function operationalBundleHexFromMnemonic(mnemonic: string, accountIndex = 0): string {
+  const seed = seedFromMnemonicV1(mnemonic);
+  const acc = requireNonNegInt(accountIndex, 'accountIndex');
+  const ivk = deriveBranch(seed, acc, "1'/0'");
+  const ovk = deriveBranch(seed, acc, "1'/1'");
+  const op = deriveBranch(seed, acc, "2'");
+  const nk = deriveNk(seed, acc);
+  const opSecret = deriveBranch(seed, acc, "4'");
+  const bundle = new Uint8Array(161);
+  bundle[0] = 0x01;
+  bundle.set(ivk, 1);
+  bundle.set(ovk, 33);
+  bundle.set(op, 65);
+  bundle.set(nk, 97);
+  bundle.set(opSecret, 129);
+  return encodeHexLower(bundle);
+}
+
 /** Invoice material for a self-mint delivery credential. */
 export function invoiceKeysFromMnemonic(
   mnemonic: string,

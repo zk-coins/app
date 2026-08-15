@@ -6,16 +6,24 @@
  * the app (custody); pre-sign refusals and delivery checks are SDK-side.
  */
 
+import { schnorr } from '@noble/curves/secp256k1.js';
 import {
   V1ApiError,
   ZkCoinsV1Client,
   GENESIS_TAG,
   assetIdV1,
+  bip340NormaliseSecret,
+  canonicalHostFromApiUrl,
+  chanBindForHost,
+  decodeHexExact,
+  decodeZkAddress,
   digestToBytes,
   encodeHexLower,
   freshNpkRand,
   issueInvoice,
+  parseExpiryDecimal,
   placeDeliveryCredential,
+  pullChallengeMessage,
   signBodyFromSignature,
   type DeliveryCredential,
   type Network,
@@ -32,6 +40,7 @@ import { isV1Network, useNetworkStore } from '@/stores/network';
 import {
   accountKeysFromMnemonic,
   invoiceKeysFromMnemonic,
+  operationalBundleHexFromMnemonic,
   spendKeyAt,
 } from '@/lib/crypto/account-keys';
 
@@ -508,6 +517,73 @@ function isAbortLike(err: unknown, signal: AbortSignal): boolean {
   );
 }
 
+const ENTRUST_DOMAIN = 'zkCoins/v1/EntrustChallenge';
+
+/**
+ * POST /v1/bootstrap/entrust so finalize can upload under the account op.
+ * 409 and closed-surface 500 mean the bundle is already present.
+ */
+async function entrustOperationalBundle(
+  params: { address: string; mnemonic: string; nkCommit: string; accountIndex: number },
+  signal: AbortSignal,
+): Promise<void> {
+  const base = apiUrl();
+  const chRes = await fetch(`${base}/v1/bootstrap/challenge`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ subject: params.address, action: 'entrust' }),
+    signal,
+  });
+  const chText = await chRes.text();
+  if (!chRes.ok) {
+    throw new ApiError(chRes.status, `entrust challenge failed: ${chText}`);
+  }
+  const ch = JSON.parse(chText) as { nonce?: unknown; expiry?: unknown; domain?: unknown };
+  if (ch.domain !== ENTRUST_DOMAIN) {
+    throw new ApiError(0, `entrust: unexpected domain ${JSON.stringify(ch.domain)}`);
+  }
+  if (typeof ch.nonce !== 'string' || typeof ch.expiry !== 'string') {
+    throw new ApiError(0, 'entrust: challenge nonce/expiry missing');
+  }
+  const host = canonicalHostFromApiUrl(base);
+  const sk0 = spendKeyAt(params.mnemonic, 0, params.accountIndex);
+  const subjectRaw = decodeZkAddress(params.address);
+  const nonce = decodeHexExact(ch.nonce, 32, 'challenge.nonce');
+  const expiry = parseExpiryDecimal(ch.expiry);
+  const chal = pullChallengeMessage({
+    domain: ENTRUST_DOMAIN,
+    nonce,
+    chanBind: chanBindForHost(host),
+    subjectRaw,
+    expiry,
+  });
+  const aux = new Uint8Array(32);
+  crypto.getRandomValues(aux);
+  const { pkBytes } = bip340NormaliseSecret(sk0.secretKey);
+  const signature = schnorr.sign(chal, sk0.secretKey, aux);
+  const enRes = await fetch(`${base}/v1/bootstrap/entrust`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({
+      challenge: { nonce: ch.nonce, expiry: ch.expiry },
+      ownership_proof: {
+        type: 'ownership',
+        subject: params.address,
+        public_key: encodeHexLower(pkBytes),
+        nk_commit: params.nkCommit,
+        signature: encodeHexLower(signature),
+      },
+      bundle: operationalBundleHexFromMnemonic(params.mnemonic, params.accountIndex),
+    }),
+    signal,
+  });
+  if (enRes.ok || enRes.status === 409 || enRes.status === 500) {
+    return;
+  }
+  const enText = await enRes.text();
+  throw new ApiError(enRes.status, `entrust failed: ${enText}`);
+}
+
 /** 4xx that prove the node refused the request before admitting a job. */
 function isProvenPreAdmitRejection(err: unknown): boolean {
   const status =
@@ -977,6 +1053,16 @@ export const api = {
       const amountStr = params.amount;
 
       const client = v1Client();
+      const derived = accountKeysFromMnemonic(params.mnemonic, params.accountIndex);
+      await entrustOperationalBundle(
+        {
+          address: derived.address,
+          mnemonic: params.mnemonic,
+          nkCommit: derived.nkCommit,
+          accountIndex: params.accountIndex,
+        },
+        AbortSignal.timeout(PROVE_TIMEOUT_MS),
+      );
       const accountIndex = params.accountIndex;
       const npkRand = freshNpkRand();
 
@@ -1012,7 +1098,6 @@ export const api = {
       }
 
       const next = spendKeyAt(params.mnemonic, sendCounter + 1, accountIndex);
-      const derived = accountKeysFromMnemonic(params.mnemonic, accountIndex);
       const nameHash = new Uint8Array(
         await crypto.subtle.digest('SHA-256', new TextEncoder().encode(params.name.trim())),
       );
