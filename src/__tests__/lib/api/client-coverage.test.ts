@@ -2541,49 +2541,43 @@ describe('waitForJob branches via completed handshake + poll', () => {
   });
 
   it('times out when the job stays non-terminal past WAIT_TIMEOUT_MS', async () => {
-    vi.useFakeTimers();
-    try {
-      spyProto('openOwnershipPullSession', async () => {
-        throw new V1ApiError(404, 'not_found', '');
-      });
-      spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
-      // Resolve immediately — no sleep on AbortSignal, so handshake timeout does not steal.
-      spyProto('waitForAwaitingSignature', async () => awaitingJob());
-      spyProto('signAwaiting', () => DUMMY_SIG);
-      spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
-      // retryAfterMs above MAX_POLL_SLEEP_MS — waitForJob must cap sleep and time out.
-      let seenSignal: AbortSignal | undefined;
-      spyGetJobAfterAwaiting(async (_id, signal) => {
-        seenSignal = signal;
-        return {
-          job: completedJob({ status: 'proving', phase: 'proving' }),
-          retryAfterMs: 900_000,
-        };
-      });
+    const handshakeController = new AbortController();
+    vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => handshakeController.signal);
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', '');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
+    let seenSignal: AbortSignal | undefined;
+    spyGetJobAfterAwaiting(async (_id, signal) => {
+      seenSignal = signal;
+      return {
+        job: completedJob({ status: 'proving', phase: 'proving' }),
+        retryAfterMs: 900_000,
+      };
+    });
 
-      const pending = api.createCoin({
-        account_address: ADDR,
-        name: 'Timeout',
-        decimals: 0,
-        amount: '1',
-        mnemonic: MNEMONIC,
-        nkCommit: NK,
-        accountIndex: 0,
-      });
-
-      const assertion = expect(pending).rejects.toMatchObject({
-        name: 'JobFailedError',
-        status: 'unknown',
-        message: expect.stringMatching(
-          /signature submit outcome unknown.*do not retry as a new transition/i,
-        ),
-      });
-      await vi.advanceTimersByTimeAsync(900_000);
-      await assertion;
-      expect(seenSignal).toBeInstanceOf(AbortSignal);
-    } finally {
-      vi.useRealTimers();
-    }
+    const pending = api.createCoin({
+      account_address: ADDR,
+      name: 'Timeout',
+      decimals: 0,
+      amount: '1',
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+      accountIndex: 0,
+    });
+    const assertion = expect(pending).rejects.toMatchObject({
+      name: 'JobFailedError',
+      status: 'unknown',
+      message: expect.stringMatching(
+        /signature submit outcome unknown.*do not retry as a new transition/i,
+      ),
+    });
+    await Promise.resolve();
+    handshakeController.abort();
+    await assertion;
+    expect(seenSignal).toBeInstanceOf(AbortSignal);
   });
 
   it('times out when remainingForSleep is zero after a non-terminal getJob', async () => {
