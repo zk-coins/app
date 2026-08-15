@@ -151,6 +151,9 @@ jobs:
           NEXT_PUBLIC_API_URL: http://127.0.0.1:8080
           NEXT_PUBLIC_EXPLORER_URL: https://zkcoins.space
           LOCAL_NODE_PROXY_TARGET: http://127.0.0.1:8080
+          # Baselines and spec copy are English. Unset → default `de`
+          # and every wallet chrome shot diffs (see i18n/config.ts).
+          NEXT_PUBLIC_E2E_LOCALE: en
 
       # `output: standalone` emits a minimal server tree but does not
       # copy `public/` or `.next/static` into it (the Dockerfile does
