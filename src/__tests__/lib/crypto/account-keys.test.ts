@@ -4,6 +4,7 @@ import {
   accountKeysFromMnemonic,
   createMnemonic,
   deriveNk,
+  invoiceKeysFromMnemonic,
   isValidMnemonic,
   seedFromAccountMnemonic,
   spendKeyAt,
@@ -67,6 +68,26 @@ describe('account-keys (SDK pure-TS)', () => {
     const nk = deriveNk(seed, 0);
     expect(nk).toBeInstanceOf(Uint8Array);
     expect(nk.length).toBe(32);
+  });
+
+  it('invoiceKeysFromMnemonic returns 32-byte invoice material', () => {
+    const keys = invoiceKeysFromMnemonic(FIXTURE);
+    expect(keys.sk0Secret).toBeInstanceOf(Uint8Array);
+    expect(keys.sk0Secret.length).toBe(32);
+    expect(keys.nkCommit.length).toBe(32);
+    expect(keys.ivpk.length).toBe(32);
+    expect(keys.opSecret.length).toBe(32);
+  });
+
+  it('invoiceKeysFromMnemonic fails closed when the HD child has no private key', () => {
+    const spy = vi.spyOn(HDKey, 'fromMasterSeed').mockReturnValue({
+      derive: () => ({ privateKey: null }),
+    } as never);
+    try {
+      expect(() => invoiceKeysFromMnemonic(FIXTURE)).toThrow(/no private key/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('deriveNk fails closed when the HD child has no private key', () => {

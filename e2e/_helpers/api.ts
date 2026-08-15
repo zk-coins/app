@@ -339,7 +339,7 @@ export const api = {
             ((err.status === 404 && err.machineCode === 'not_found') ||
               (err.status === 500 &&
                 err.machineCode === 'internal_error' &&
-                /Account state unavailable|no indexed AccountState|missing entrust|an internal error occurred/i.test(
+                /Account state unavailable|no indexed AccountState|an internal error occurred/i.test(
                   err.message,
                 )));
           if (!unknownSubject) {
@@ -433,7 +433,7 @@ export const api = {
             ((err.status === 404 && err.machineCode === 'not_found') ||
               (err.status === 500 &&
                 err.machineCode === 'internal_error' &&
-                /Account state unavailable|no indexed AccountState|missing entrust|an internal error occurred/i.test(
+                /Account state unavailable|no indexed AccountState|an internal error occurred/i.test(
                   err.message,
                 )));
           if (!unknownSubject) {

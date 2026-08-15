@@ -137,6 +137,7 @@ function serializeWalletPayload(account: Account): string {
 export const WALLET_SESSION_KEY = 'zkcoins.wallet.session.v2';
 
 export function loadUnlockedSession(): Account | null {
+  /* v8 ignore next -- SSR guard, unreachable in the browser test env */
   if (typeof window === 'undefined') return null;
   try {
     const raw = sessionStorage.getItem(WALLET_SESSION_KEY);
@@ -155,6 +156,7 @@ export function loadUnlockedSession(): Account | null {
 }
 
 function persistUnlockedSession(account: Account | null): void {
+  /* v8 ignore next -- SSR guard, unreachable in the browser test env */
   if (typeof window === 'undefined') return;
   try {
     if (account === null) {

@@ -289,7 +289,7 @@ function mapV1Error(err: unknown): never {
 }
 
 function isMissingAccountStateMessage(message: string): boolean {
-  return /no indexed AccountState|missing entrust|Account state unavailable/i.test(message);
+  return /no indexed AccountState|Account state unavailable/i.test(message);
 }
 
 /**

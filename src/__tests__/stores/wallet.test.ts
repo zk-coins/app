@@ -163,6 +163,17 @@ describe('wallet store — tab session', () => {
     expect(useWalletStore.getState().isLocked).toBe(false);
   });
 
+  it('loadUnlockedSession drops a corrupt session payload', () => {
+    sessionStorage.setItem(WALLET_SESSION_KEY, 'not-json');
+    expect(loadUnlockedSession()).toBeNull();
+    expect(sessionStorage.getItem(WALLET_SESSION_KEY)).toBeNull();
+  });
+
+  it('loadUnlockedSession treats an empty session string as absent', () => {
+    sessionStorage.setItem(WALLET_SESSION_KEY, '');
+    expect(loadUnlockedSession()).toBeNull();
+  });
+
   it('restoreUnlockedSession refuses after an incompatible stored wallet', () => {
     useWalletStore.getState().setAccount(consistentAccount);
     expect(loadUnlockedSession()).toEqual(consistentAccount);

@@ -13,6 +13,7 @@ import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import CreateCoinPage from '@/app/create/page';
 import { useWalletStore } from '@/stores/wallet';
+import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
 import { useNetworkStore } from '@/stores/network';
 import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client';
 
@@ -57,6 +58,7 @@ beforeEach(() => {
   routerReplace.mockClear();
   routerPush.mockClear();
   localStorage.clear();
+  sessionStorage.clear();
   FEATURES_STATE.MULTI_ASSET = true;
   FEATURES_STATE.loaded = true;
   useNetworkStore.setState({ infoError: null });
@@ -97,6 +99,23 @@ const completed: JobStatus = {
   progress: 1,
   result: { output_coin_ids: ['01'.repeat(32)] },
 };
+
+describe('CreateCoinPage — session restore', () => {
+  it('restores a persisted unlocked session instead of redirecting home', () => {
+    const derived = accountKeysFromMnemonic(ALICE.mnemonic);
+    const consistent = {
+      address: derived.address,
+      mnemonic: ALICE.mnemonic,
+      nkCommit: derived.nkCommit,
+    };
+    useWalletStore.getState().setAccount(consistent);
+    useWalletStore.setState({ account: null, isLocked: true });
+    render(<CreateCoinPage />);
+    expect(useWalletStore.getState().account).toEqual(consistent);
+    expect(routerReplace).not.toHaveBeenCalled();
+    expect(screen.getByTestId('create-heading')).toBeInTheDocument();
+  });
+});
 
 describe('CreateCoinPage — validation', () => {
   it('rejects an empty name', async () => {
