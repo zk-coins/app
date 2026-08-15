@@ -126,6 +126,7 @@ test.describe('Create wallet — seed phrase', () => {
   // Plan totals updated in e2e/README.md § 8.13.
 
   test('wallet-after-create', async ({ page }) => {
+    test.setTimeout(60_000);
     await enterSeedFlow(page);
     await page.getByTestId('seed-reveal-btn').click();
     await page.getByTestId('seed-written-btn').click();

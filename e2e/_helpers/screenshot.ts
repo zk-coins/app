@@ -47,6 +47,10 @@ async function defaultMasks(page: Page): Promise<Locator[]> {
     // Transaction-row amount + timestamp (varies per send).
     page.locator('[data-testid="tx-row-amount"]'),
     page.locator('[data-testid="tx-row-time"]'),
+    // Whole history section: the first pull can settle as empty, error, or
+    // a mint row depending on leftover node state. Mask the wrapper so a
+    // "Created" locator vs the empty copy cannot flake wallet-home shots.
+    page.locator('[data-testid="tx-list"]'),
     // The 12 mnemonic words on the SeedFlow reveal screen.
     page.locator('[data-testid="seed-grid"]'),
     // QR code on /receive — encodes the per-run address.
@@ -70,6 +74,11 @@ const STABILIZE_CSS = `
   [data-testid="balance-amount-btc"] { display: inline-block; min-width: 220px; }
   [data-testid="tx-row-amount"] { display: inline-block; min-width: 96px; text-align: right; }
   [data-testid="proof-id"] { display: inline-block; min-width: 80px; }
+  /* History section height is run-dependent (loading gap / empty copy /
+     leftover mint row). Cap it so fullPage wallet-home shots stay at the
+     375×812 mobile viewport; 88px is the leftover gap on that chrome
+     (empty-state overflow was 98px on the 910px golden). */ 
+  [data-testid="tx-list"] { max-height: 88px; overflow: hidden; }
   /* Transaction-detail value cells: pin every masked value to a uniform
      width so the mask box is identical regardless of the per-run value
      (id, timestamp, circuit digest, amounts) — see the tx-detail spec. */
@@ -95,6 +104,10 @@ async function applyStabilizer(page: Page): Promise<void> {
  * Always:
  *   - waits for `domcontentloaded` (initial render landed)
  *   - waits for web fonts (`document.fonts.ready`)
+ *   - if `tx-list` is mounted, waits for `data-loaded="true"` (first
+ *     history pull settled — success or failure). Specs that already
+ *     spend most of the 30s budget on login must raise their own
+ *     `test.setTimeout`; this helper does not.
  *   - applies the default mask set, then any spec-specific masks
  *
  * **Why not `networkidle`**: There is no GET balance endpoint under v1 —
@@ -109,6 +122,10 @@ async function applyStabilizer(page: Page): Promise<void> {
 export async function snap(page: Page, name: string, opts: SnapOptions = {}): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
   await page.evaluate(() => document.fonts?.ready);
+  const txList = page.getByTestId('tx-list');
+  if ((await txList.count()) > 0) {
+    await expect(txList).toHaveAttribute('data-loaded', 'true', { timeout: 20_000 });
+  }
   await applyStabilizer(page);
   const masks = [...(await defaultMasks(page)), ...(opts.mask ?? [])];
   await expect(page).toHaveScreenshot(`${name}.png`, {

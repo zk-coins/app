@@ -97,6 +97,7 @@ test.describe('Unlock wallet — password', () => {
 
   test('unlock-success-wallet', async ({ page }) => {
     test.setTimeout(60_000);
+    test.setTimeout(60_000);
     await arriveAtUnlock(page);
     await page.getByTestId('unlock-password-input').fill(PASSWORD);
     await page.getByTestId('unlock-submit-btn').click();

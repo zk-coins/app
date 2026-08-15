@@ -108,6 +108,8 @@ describe('WalletScreen — transaction list from server history', () => {
     expect(await screen.findByText('Erstellt')).toBeInTheDocument();
     expect(screen.queryByText('Noch keine Transaktionen')).not.toBeInTheDocument();
     expect(screen.getByTestId('tx-row-amount')).toBeInTheDocument();
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-loaded', 'true');
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-state', 'items');
   });
 
   it('maps kind to label (mint, receive, send)', async () => {
@@ -177,6 +179,9 @@ describe('WalletScreen — transaction list from server history', () => {
     render(<WalletScreen />);
 
     expect(await screen.findByText('Noch keine Transaktionen')).toBeInTheDocument();
+    expect(screen.getByTestId('tx-list-empty')).toBeInTheDocument();
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-loaded', 'true');
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-state', 'empty');
   });
 
   it('shows a history error banner instead of empty copy when the read fails', async () => {
@@ -186,6 +191,8 @@ describe('WalletScreen — transaction list from server history', () => {
 
     expect(await screen.findByTestId('history-error-banner')).toBeInTheDocument();
     expect(screen.queryByText('Noch keine Transaktionen')).not.toBeInTheDocument();
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-loaded', 'true');
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-state', 'error');
   });
 
   it('shows the first portfolio error message when no stale assets exist', async () => {
@@ -216,6 +223,8 @@ describe('WalletScreen — transaction list from server history', () => {
     await waitFor(() => expect(screen.getByTestId('create-coin-btn')).toBeInTheDocument());
     expect(screen.queryByText('Noch keine Transaktionen')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tx-row-amount')).not.toBeInTheDocument();
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-loaded', 'false');
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-state', 'loading');
   });
 
   it('prompts to create a wallet when there is no account', async () => {

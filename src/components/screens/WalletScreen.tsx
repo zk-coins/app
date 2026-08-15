@@ -282,8 +282,24 @@ export function WalletScreen() {
       {/* PWA install prompt */}
       <PwaPrompt />
 
-      {/* Transactions — empty copy only after a successful empty read */}
-      <div>
+      {/* Transactions — empty copy only after a successful empty read.
+          `data-loaded` lets E2E wait out the first pull so snapshots do
+          not race the loading gap against the empty state or a mint row. */}
+      <div
+        data-testid="tx-list"
+        data-loaded={!historyAccount || historyLoaded ? 'true' : 'false'}
+        data-state={
+          !historyAccount
+            ? 'parked'
+            : !historyLoaded
+              ? 'loading'
+              : history.length > 0
+                ? 'items'
+                : historyBlocked
+                  ? 'error'
+                  : 'empty'
+        }
+      >
         {history.length > 0 ? (
           <>
             {historyStale && (
@@ -481,7 +497,7 @@ function EmptyTransactions({
   noWalletBody: string;
 }) {
   return (
-    <div className="flex flex-col items-center pt-8 pb-4 text-center">
+    <div data-testid="tx-list-empty" className="flex flex-col items-center pt-8 pb-4 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-full border border-line bg-surface text-ink4">
         <Receipt size={22} strokeWidth={1.75} />
       </div>
