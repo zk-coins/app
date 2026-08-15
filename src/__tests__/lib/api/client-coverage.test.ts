@@ -774,6 +774,98 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     expect(signJob).not.toHaveBeenCalled();
   });
 
+  it('forwards job.status as phase when getJob omits phase', async () => {
+    const phases: string[] = [];
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob());
+    spyGetJobAfterAwaiting(
+      async () => ({ job: completedJob(), retryAfterMs: null }),
+      awaitingJob({ phase: undefined }),
+    );
+
+    await api.createCoin(
+      {
+        account_address: ADDR,
+        name: 'NoPhasePoll',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      },
+      { onPhase: (j) => phases.push(String(j.phase ?? j.status)) },
+    );
+    expect(phases).toContain('accepted');
+    expect(phases).toContain('awaiting_signature');
+  });
+
+  it('treats a generic closed-surface 500 body as genesis on pre-pull', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(500, 'internal_error', 'an internal error occurred');
+    });
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob());
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyGetJobAfterAwaiting(async () => ({ job: completedJob(), retryAfterMs: null }));
+
+    const job = await api.createCoin({
+      account_address: ADDR,
+      name: 'Generic500',
+      decimals: 0,
+      amount: '1',
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+      accountIndex: 0,
+    });
+    expect(job.status).toBe('completed');
+  });
+
+  it('treats an app ApiError 500 Account state unavailable as genesis', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new ApiError(500, 'Account state unavailable', undefined, 'internal_error');
+    });
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob());
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyGetJobAfterAwaiting(async () => ({ job: completedJob(), retryAfterMs: null }));
+
+    const job = await api.createCoin({
+      account_address: ADDR,
+      name: 'ApiError500',
+      decimals: 0,
+      amount: '1',
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+      accountIndex: 0,
+    });
+    expect(job.status).toBe('completed');
+  });
+
+  it('treats an app ApiError 500 generic internal_error body as genesis', async () => {
+    spyProto('openOwnershipPullSession', async () => {
+      throw new ApiError(500, 'an internal error occurred', undefined, 'internal_error');
+    });
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob());
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyGetJobAfterAwaiting(async () => ({ job: completedJob(), retryAfterMs: null }));
+
+    const job = await api.createCoin({
+      account_address: ADDR,
+      name: 'ApiErrorGeneric',
+      decimals: 0,
+      amount: '1',
+      mnemonic: MNEMONIC,
+      nkCommit: NK,
+      accountIndex: 0,
+    });
+    expect(job.status).toBe('completed');
+  });
+
   it('self-invoices when account_address matches derived custody address', async () => {
     const derived = accountKeysFromMnemonic(MNEMONIC, 0);
     spyProto('openOwnershipPullSession', async () => {
@@ -811,6 +903,43 @@ describe('api.createCoin — account-state 404 vs live counter + handshake', () 
     expect(job.status).toBe('completed');
     expect(submittedKind).toBe('mint');
     expect(submittedDeliveryType).toBe('invoice');
+  });
+
+  it('normalises a self-invoice relay_url that has no trailing slash', async () => {
+    const derived = accountKeysFromMnemonic(MNEMONIC, 0);
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto(
+      'info',
+      async () =>
+        ({
+          features: ['explorer'],
+          relay_url: 'ws://127.0.0.1:18080',
+        }) as unknown as V1Info,
+    );
+    let relay: string | undefined;
+    spyProto('submitTransition', async (body) => {
+      const delivery = body.output_templates[0]?.delivery;
+      if (delivery && delivery.type === 'invoice') {
+        relay = delivery.invoice.relays[0];
+      }
+      return { job_id: JOB_ID, status: 'accepted' };
+    });
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    spyProto('signJob', async () => completedJob());
+    spyGetJobAfterAwaiting(async () => ({ job: completedJob(), retryAfterMs: null }));
+
+    await api.createCoin({
+      account_address: derived.address,
+      name: 'NoSlash',
+      decimals: 0,
+      amount: '10',
+      mnemonic: MNEMONIC,
+      nkCommit: derived.nkCommit,
+      accountIndex: 0,
+    });
+    expect(relay).toBe('ws://127.0.0.1:18080/');
   });
 
   it('fails closed when self-invoice relay_url is missing', async () => {
@@ -2799,7 +2928,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
     spyProto('waitForAwaitingSignature', async () => awaitingJob());
     spyProto('signAwaiting', () => DUMMY_SIG);
     spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
-    spyProto('getJob', async () => {
+    spyGetJobAfterAwaiting(async () => {
       throw jobErr;
     });
 

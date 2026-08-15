@@ -309,6 +309,25 @@ describe('CreateCoinPage — happy path', () => {
     expect(createSpy).toHaveBeenCalledWith(expect.any(Object), expect.any(Object));
   });
 
+  it('hides create-phase when onPhase supplies neither phase nor status', async () => {
+    let finish!: (job: JobStatus) => void;
+    createSpy.mockImplementation((async (
+      _req: unknown,
+      opts: { onPhase?: (s: JobStatus) => void },
+    ) => {
+      opts.onPhase?.({ job_id: 'mint-1', kind: 'mint' } as JobStatus);
+      return new Promise<JobStatus>((resolve) => (finish = resolve));
+    }) as unknown as typeof api.createCoin);
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'NoStatus');
+    await user.type(screen.getByTestId('create-amount-input'), '1');
+    await user.click(screen.getByTestId('create-submit-btn'));
+    expect(screen.queryByTestId('create-phase')).toBeNull();
+    finish(completed);
+    expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
+  });
+
   it('falls back to job.status when onPhase omits phase', async () => {
     let finish!: (job: JobStatus) => void;
     createSpy.mockImplementation((async (

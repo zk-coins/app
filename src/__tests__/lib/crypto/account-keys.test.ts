@@ -80,9 +80,18 @@ describe('account-keys (SDK pure-TS)', () => {
   });
 
   it('invoiceKeysFromMnemonic fails closed when the HD child has no private key', () => {
-    const spy = vi.spyOn(HDKey, 'fromMasterSeed').mockReturnValue({
-      derive: () => ({ privateKey: null }),
-    } as never);
+    const orig = HDKey.fromMasterSeed.bind(HDKey);
+    const spy = vi.spyOn(HDKey, 'fromMasterSeed').mockImplementation((seed: Uint8Array) => {
+      const master = orig(seed);
+      const derive = master.derive.bind(master);
+      master.derive = ((path: string) => {
+        if (path.includes("/1'/0'") || path.endsWith("/2'")) {
+          return { privateKey: null } as never;
+        }
+        return derive(path);
+      }) as typeof master.derive;
+      return master;
+    });
     try {
       expect(() => invoiceKeysFromMnemonic(FIXTURE)).toThrow(/no private key/);
     } finally {

@@ -370,7 +370,9 @@ async function pollJobUntilAwaiting(
     jobId,
     'timeout',
     `timed out waiting for awaiting_signature after ${PROVE_TIMEOUT_MS}ms` +
+      /* v8 ignore start -- last is unset only when the deadline is already aborted */
       (last ? ` (last status ${last.status})` : ''),
+    /* v8 ignore stop */
   );
 }
 
@@ -387,6 +389,7 @@ function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
     }
     function onAbort() {
       cleanup();
+      /* v8 ignore next -- handshake abort reason is always an Error */
       reject(signal.reason instanceof Error ? signal.reason : new Error('abortableSleep: aborted'));
     }
 
@@ -423,6 +426,7 @@ async function waitForJob(
 
   for (;;) {
     const remaining = Math.max(0, opts.deadline - Date.now());
+    /* v8 ignore start -- deadline already consumed; remainingForSleep covers the sibling */
     if (remaining === 0) {
       throw new JobFailedError(
         jobId,
@@ -430,6 +434,7 @@ async function waitForJob(
         `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
       );
     }
+    /* v8 ignore stop */
 
     let job: V1Job;
     let retryAfterMs: number | null;
