@@ -116,11 +116,10 @@ jobs:
     # family) — see e2e/README.md § 4.2.
     #
     # Cap the job so a hung browser process or stuck globalSetup
-    # cannot consume the default 6 h budget. Realistic wall-clock is
-    # ~5-10 min for the single chromium suite plus ~3 min for
-    # install/browser-fetch and ~1 min for the standalone build —
-    # 30 min is the conservative ceiling.
-    timeout-minutes: 30
+    # cannot consume the default 6 h budget. One real create-success
+    # mint is 7–15 min plus the rest of the suite and one retry —
+    # 60 min is the conservative ceiling.
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4

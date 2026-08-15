@@ -152,13 +152,17 @@ test.describe('Create coin', () => {
     // snapshot. Using a per-test wallet keeps those goldens deterministic
     // under `fullyParallel`.
     await clearWalletState(page);
-    const createMnemonic = process.env.E2E_CREATE_MNEMONIC?.trim().split(/\s+/);
-    if (createMnemonic && createMnemonic.length === 12) {
-      await restoreSeedWallet(page, createMnemonic);
-      await entrustMnemonic(createMnemonic.join(' '));
+    const preset = process.env.E2E_CREATE_MNEMONIC?.trim().split(/\s+/);
+    let mnemonic: string[];
+    if (preset && preset.length === 12) {
+      await restoreSeedWallet(page, preset);
+      mnemonic = preset;
     } else {
-      await createSeedWallet(page);
+      mnemonic = (await createSeedWallet(page)).mnemonic;
     }
+    // Finalize uploads under the account op key. Without an operational
+    // bundle the node skips the outbox forever and the mint never completes.
+    await entrustMnemonic(mnemonic.join(' '));
     await expect(page.getByTestId('create-coin-btn')).toBeVisible({ timeout: 30_000 });
     await page.getByTestId('create-coin-btn').click();
     await expect(page.getByTestId('create-heading')).toBeVisible({ timeout: 10_000 });
