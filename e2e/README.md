@@ -238,11 +238,9 @@ The `snap` helper always:
 - Sets viewport (default 1440 × 900 desktop, 375 × 812 mobile).
 - Waits for `domcontentloaded` (not `networkidle` — v1 has no GET balance).
 - Waits for fonts (`document.fonts.ready`).
-- If `tx-list` is mounted, waits for `data-loaded="true"` (first history pull).
+- Collapses `tx-list` so leftover empty/error/mint history cannot change fullPage height.
 - Applies the default mask set (see §7).
 - Calls `expect(target).toHaveScreenshot(name + '.png', { mask: [...defaultMasks, ...customMasks] })`.
-
-Specs that already spend most of the 30s project timeout on login/portfolio must raise `test.setTimeout` themselves; `snap` does not.
 
 ### `_helpers/fixtures.ts`
 
@@ -264,7 +262,7 @@ export function bobLogin(page: Page, password: string): Promise<void>;
 | `[data-testid="asset-row-balance"]`  | The per-asset portfolio balance value                                                  | `src/components/screens/WalletScreen.tsx` — the portfolio row's balance `<span>` only         |
 | `[data-testid="tx-row-amount"]`      | Transaction row amount                                                                 | `src/components/screens/WalletScreen.tsx::TransactionsList`                                   |
 | `[data-testid="tx-row-time"]`        | Transaction row timestamp                                                              | same file                                                                                     |
-| `[data-testid="tx-list"]`            | Whole history section (empty / error / mint row)                                       | `src/components/screens/WalletScreen.tsx` — wrapper; `data-loaded` gates the first pull       |
+| `[data-testid="tx-list"]`            | Collapsed in `STABILIZE_CSS` (not masked) — leftover empty/error/mint                  | `src/components/screens/WalletScreen.tsx` — wrapper; specs assert `data-loaded` themselves    |
 | `[data-testid="seed-grid"]`          | The 12 mnemonic words                                                                  | `src/components/onboarding/Onboarding.tsx::SeedFlow` — wrap the `grid-cols-3 gap-2 …` `<div>` |
 | `[data-testid="qr-code"]`            | The receive QR (depends on address)                                                    | `src/app/receive/page.tsx` — wrap the `QRCodeSVG` parent `<div>`                              |
 | `[data-testid="proof-id"]`           | The "proof #N" line on the send success screen                                         | `src/app/send/page.tsx`                                                                       |

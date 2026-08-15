@@ -53,7 +53,7 @@ test.describe('View balance — not available in this build', () => {
     await expect(page.getByTestId('account-display-name')).toHaveCount(0);
     await expect(page.getByTestId('address-copy-btn')).toHaveCount(0);
     // History must settle empty (not the loading gap / error banner).
-    // snap() also caps tx-list at 88px so this fullPage shot stays 812.
+    // snap() then collapses tx-list so the shot stays on the 812 chrome.
     await expect(page.getByTestId('tx-list')).toHaveAttribute('data-loaded', 'true', {
       timeout: 20_000,
     });
