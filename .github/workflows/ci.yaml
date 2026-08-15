@@ -224,15 +224,14 @@ jobs:
           E2E_INFO_PROXY_PORT: '8080'
           E2E_NODE_URL: https://ci.zkcoins.app
           E2E_INFO_USERNAME_DOMAIN: dev.zkcoins.app
-          E2E_FAUCET_CALLS: '1'
+          # Do not remint Alice every run: a second mint needs the
+          # predecessor nullifier in the NfLog and fails if the previous
+          # CI mint is still awaiting scan-fold. Login specs restore the
+          # fixture wallets; create-success generates a fresh seed.
+          E2E_FAUCET_CALLS: '0'
           E2E_NEED_FIXTURES: 'true'
-          # Fixture wallets whose blossom `op` keys are already on the
-          # CI node's upload allow-list. Fresh random wallets 403 at
-          # finalise (kind-24242). globalSetup / create-success restore
-          # these instead of generating a new seed.
           E2E_ALICE_MNEMONIC: ${{ secrets.E2E_ALICE_MNEMONIC }}
           E2E_BOB_MNEMONIC: ${{ secrets.E2E_BOB_MNEMONIC }}
-          E2E_CREATE_MNEMONIC: ${{ secrets.E2E_CREATE_MNEMONIC }}
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
