@@ -338,7 +338,6 @@ export function isAccountNotFoundError(err: unknown): boolean {
 const TERMINAL: ReadonlySet<V1JobStatusValue> = new Set(['completed', 'failed', 'cancelled']);
 
 const POLL_FLOOR_MS = 1_500;
-const WAIT_TIMEOUT_MS = 180_000;
 /** Prove + finalize after signature; local remint takes several minutes. */
 const PROVE_TIMEOUT_MS = 900_000;
 const MAX_POLL_SLEEP_MS = 600_000;
@@ -431,7 +430,7 @@ async function waitForJob(
       throw new JobFailedError(
         jobId,
         'timeout',
-        `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+        `timed out in ${lastStatus} after ${PROVE_TIMEOUT_MS}ms`,
       );
     }
     /* v8 ignore stop */
@@ -448,7 +447,7 @@ async function waitForJob(
         throw new JobFailedError(
           jobId,
           'timeout',
-          `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+          `timed out in ${lastStatus} after ${PROVE_TIMEOUT_MS}ms`,
         );
       }
       throw err;
@@ -476,7 +475,7 @@ async function waitForJob(
       throw new JobFailedError(
         jobId,
         'timeout',
-        `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+        `timed out in ${lastStatus} after ${PROVE_TIMEOUT_MS}ms`,
       );
     }
     const sleepMs = Math.min(
@@ -492,7 +491,7 @@ async function waitForJob(
         throw new JobFailedError(
           jobId,
           'timeout',
-          `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+          `timed out in ${lastStatus} after ${PROVE_TIMEOUT_MS}ms`,
         );
       }
       /* v8 ignore next -- abortableSleep rejects only via signal abort */
@@ -534,7 +533,7 @@ function mapHandshakeAbort(
     throw new JobFailedError(
       jobId,
       'timeout',
-      `timed out waiting for ${phase} after ${WAIT_TIMEOUT_MS}ms`,
+      `timed out waiting for ${phase} after ${PROVE_TIMEOUT_MS}ms`,
     );
   }
   if (jobId === '' && isProvenPreAdmitRejection(err)) {
@@ -735,7 +734,7 @@ async function runTransitionHandshake(
     throw new JobFailedError(
       jobId,
       'timeout',
-      `timed out waiting for sign after ${WAIT_TIMEOUT_MS}ms`,
+      `timed out waiting for sign after ${PROVE_TIMEOUT_MS}ms`,
     );
   }
 

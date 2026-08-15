@@ -1635,7 +1635,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     ).rejects.toMatchObject({
       name: 'JobFailedError',
       status: 'timeout',
-      serverError: 'timed out waiting for submit after 180000ms',
+      serverError: 'timed out waiting for submit after 900000ms',
     });
   });
 
@@ -1661,7 +1661,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     ).rejects.toMatchObject({
       name: 'JobFailedError',
       status: 'timeout',
-      serverError: 'timed out waiting for submit after 180000ms',
+      serverError: 'timed out waiting for submit after 900000ms',
     });
   });
 
@@ -1687,7 +1687,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     ).rejects.toMatchObject({
       name: 'JobFailedError',
       status: 'timeout',
-      serverError: 'timed out waiting for submit after 180000ms',
+      serverError: 'timed out waiting for submit after 900000ms',
     });
   });
 
@@ -1826,7 +1826,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       name: 'JobFailedError',
       jobId: JOB_ID,
       status: 'timeout',
-      serverError: 'timed out waiting for rehydrate after 180000ms',
+      serverError: 'timed out waiting for rehydrate after 900000ms',
     });
     expect(signAwaiting).not.toHaveBeenCalled();
     expect(signJob).not.toHaveBeenCalled();
@@ -1867,7 +1867,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       name: 'JobFailedError',
       jobId: JOB_ID,
       status: 'timeout',
-      serverError: 'timed out waiting for rehydrate after 180000ms',
+      serverError: 'timed out waiting for rehydrate after 900000ms',
     });
     expect(signAwaiting).not.toHaveBeenCalled();
     expect(signJob).not.toHaveBeenCalled();
@@ -1912,7 +1912,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       name: 'JobFailedError',
       jobId: JOB_ID,
       status: 'timeout',
-      serverError: 'timed out waiting for rehydrate after 180000ms',
+      serverError: 'timed out waiting for rehydrate after 900000ms',
     });
     expect(signAwaiting).not.toHaveBeenCalled();
     expect(signJob).not.toHaveBeenCalled();
@@ -2299,8 +2299,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
       name: 'JobFailedError',
       jobId: JOB_ID,
       status: 'timeout',
-      serverError: 'timed out waiting for sign after 180000ms',
-      message: 'timed out waiting for sign after 180000ms',
+      serverError: 'timed out waiting for sign after 900000ms',
+      message: 'timed out waiting for sign after 900000ms',
     });
     expect(signAwaiting).not.toHaveBeenCalled();
     expect(signJob).not.toHaveBeenCalled();
@@ -2669,7 +2669,7 @@ describe('waitForJob branches via completed handshake + poll', () => {
     expect(phases).toContain('proving');
   });
 
-  it('times out when the job stays non-terminal past WAIT_TIMEOUT_MS', async () => {
+  it('times out when the job stays non-terminal past PROVE_TIMEOUT_MS', async () => {
     const handshakeController = new AbortController();
     vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => handshakeController.signal);
     spyProto('openOwnershipPullSession', async () => {
