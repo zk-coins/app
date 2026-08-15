@@ -2715,6 +2715,10 @@ describe('waitForJob branches via completed handshake + poll', () => {
   it('times out when remainingForSleep is zero after a non-terminal getJob', async () => {
     vi.useFakeTimers();
     try {
+      // Handshake and post-sign reconcile each call AbortSignal.timeout.
+      // A never-aborting signal keeps this case on the remainingForSleep
+      // path instead of racing the original 900s handshake timer.
+      vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => new AbortController().signal);
       spyProto('openOwnershipPullSession', async () => {
         throw new V1ApiError(404, 'not_found', '');
       });
@@ -2749,6 +2753,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
         nkCommit: NK,
         accountIndex: 0,
       });
+      // Post-sign: waitForJob timeout is wrapped to unknown so callers
+      // do not mint again (reconcileSignedJob).
       const assertion = expect(pending).rejects.toMatchObject({
         name: 'JobFailedError',
         status: 'unknown',
@@ -2768,7 +2774,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
   it('times out when deadlineSignal aborts during poll sleep', async () => {
     vi.useFakeTimers();
     try {
-      // Abort hits the reconcile wait signal used after a successful signature POST.
+      // Shared signal for handshake + post-sign reconcile. Abort only
+      // after the post-sign getJob hang so this cannot race pre-sign.
       const handshakeController = new AbortController();
       vi.spyOn(AbortSignal, 'timeout').mockImplementation(() => handshakeController.signal);
       spyProto('openOwnershipPullSession', async () => {
@@ -2778,10 +2785,23 @@ describe('waitForJob branches via completed handshake + poll', () => {
       spyProto('waitForAwaitingSignature', async () => awaitingJob());
       spyProto('signAwaiting', () => DUMMY_SIG);
       spyProto('signJob', async () => completedJob({ status: 'proving', phase: 'proving' }));
-      spyGetJobAfterAwaiting(async () => ({
-        job: completedJob({ status: 'proving', phase: 'proving' }),
-        retryAfterMs: 10,
-      }));
+
+      let resolveSaw!: () => void;
+      const getJobSawCall = new Promise<void>((r) => {
+        resolveSaw = r;
+      });
+      let preSign = true;
+      spyProto('getJob', async () => {
+        if (preSign) {
+          preSign = false;
+          return { job: awaitingJob(), retryAfterMs: 10 };
+        }
+        resolveSaw();
+        return {
+          job: completedJob({ status: 'proving', phase: 'proving' }),
+          retryAfterMs: 10,
+        };
+      });
 
       const pending = api.createCoin({
         account_address: ADDR,
@@ -2796,7 +2816,8 @@ describe('waitForJob branches via completed handshake + poll', () => {
         name: 'JobFailedError',
         status: 'unknown',
       });
-      // enter sleep (POLL_FLOOR_MS is 1500); advance less than floor
+      await getJobSawCall;
+      // enter POLL_FLOOR sleep, then abort the shared deadline signal
       await vi.advanceTimersByTimeAsync(100);
       handshakeController.abort();
       await assertion;
