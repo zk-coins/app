@@ -290,13 +290,13 @@ describe('CreateCoinPage — happy path', () => {
     expect(createSpy).toHaveBeenCalledWith(expect.any(Object), expect.any(Object));
   });
 
-  it('accepts a job update without a phase and keeps the phase indicator hidden', async () => {
+  it('falls back to job.status when onPhase omits phase', async () => {
     let finish!: (job: JobStatus) => void;
     createSpy.mockImplementation((async (
       _req: unknown,
       opts: { onPhase?: (s: JobStatus) => void },
     ) => {
-      opts.onPhase?.({ ...completed, phase: undefined });
+      opts.onPhase?.({ ...completed, status: 'proving', phase: undefined });
       return new Promise<JobStatus>((resolve) => (finish = resolve));
     }) as unknown as typeof api.createCoin);
     const user = userEvent.setup();
@@ -304,7 +304,7 @@ describe('CreateCoinPage — happy path', () => {
     await user.type(screen.getByTestId('create-name-input'), 'NoPhase');
     await user.type(screen.getByTestId('create-amount-input'), '1');
     await user.click(screen.getByTestId('create-submit-btn'));
-    expect(screen.queryByTestId('create-phase')).toBeNull();
+    expect(await screen.findByTestId('create-phase')).toHaveTextContent('proving');
     finish(completed);
     expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
   });

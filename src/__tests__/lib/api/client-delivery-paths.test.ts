@@ -116,7 +116,14 @@ function mockHandshake(sendCounter = 0) {
   spyProto('waitForAwaitingSignature', async () => awaitingJob(sendCounter));
   spyProto('signAwaiting', () => DUMMY_SIG);
   spyProto('signJob', async () => completedJob());
-  spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
+  let awaitingDelivered = false;
+  spyProto('getJob', async () => {
+    if (!awaitingDelivered) {
+      awaitingDelivered = true;
+      return { job: awaitingJob(sendCounter), retryAfterMs: 10 };
+    }
+    return { job: completedJob(), retryAfterMs: null };
+  });
 }
 
 beforeEach(() => {
@@ -188,10 +195,16 @@ describe('api.createCoin with delivery', () => {
       current_pubkey: 'aa'.repeat(32),
     }));
     spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
-    spyProto('waitForAwaitingSignature', async () => awaitingJob(0));
     spyProto('signAwaiting', () => DUMMY_SIG);
     spyProto('signJob', async () => completedJob());
-    spyProto('getJob', async () => ({ job: completedJob(), retryAfterMs: null }));
+    let awaitingDelivered = false;
+    spyProto('getJob', async () => {
+      if (!awaitingDelivered) {
+        awaitingDelivered = true;
+        return { job: awaitingJob(0), retryAfterMs: 10 };
+      }
+      return { job: completedJob(), retryAfterMs: null };
+    });
 
     const job = await api.createCoin({
       account_address: ADDR,

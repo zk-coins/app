@@ -26,6 +26,7 @@ const ALICE = {
 };
 
 beforeEach(() => {
+  sessionStorage.clear();
   routerReplace.mockClear();
   useCapabilities.setState({
     capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: false },

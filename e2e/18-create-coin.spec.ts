@@ -25,7 +25,8 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { aliceLogin } from './_helpers/fixtures';
-import { clearWalletState, createSeedWallet } from './_helpers/wallet';
+import { clearWalletState, createSeedWallet, restoreSeedWallet } from './_helpers/wallet';
+import { entrustMnemonic } from './_helpers/api';
 import { snap, setViewport } from './_helpers/screenshot';
 import { multiAssetEnabled } from './_helpers/capabilities';
 
@@ -98,11 +99,13 @@ test.describe('Create coin', () => {
     await aliceGoToCreate(page);
     await fillForm(page);
     await page.getByTestId('create-submit-btn').click();
+    // Pre-pull (ownership session) runs before POST /v1/tx. Wait for the
+    // hung mint admit, not the first tick after click.
+    await expect.poll(() => txPosts, { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
     // The submit button swaps to its "creating" label and disables. Assert the
     // disabled state (locale-independent) rather than the localized label — the
     // form fields are filled, so `disabled` here can only mean `creating`.
     await expect(page.getByTestId('create-submit-btn')).toBeDisabled();
-    expect(txPosts).toBeGreaterThanOrEqual(1);
     await snap(page, '18-create-in-progress', { fullPage: true });
   });
 
@@ -141,7 +144,7 @@ test.describe('Create coin', () => {
   test('Visual Regression — create-success', async ({ page }) => {
     // A real mint through the live node: proof gen + commit + poll can take
     // well over the 30 s default on Mutinynet.
-    test.setTimeout(180_000);
+    test.setTimeout(1_200_000);
     await setViewport(page, 'mobile');
     // Mint into a FRESH throwaway wallet, not Alice/Bob: a real create-coin
     // mutates the wallet's server-truth portfolio, and Alice (funded) + Bob
@@ -149,7 +152,13 @@ test.describe('Create coin', () => {
     // snapshot. Using a per-test wallet keeps those goldens deterministic
     // under `fullyParallel`.
     await clearWalletState(page);
-    await createSeedWallet(page);
+    const createMnemonic = process.env.E2E_CREATE_MNEMONIC?.trim().split(/\s+/);
+    if (createMnemonic && createMnemonic.length === 12) {
+      await restoreSeedWallet(page, createMnemonic);
+      await entrustMnemonic(createMnemonic.join(' '));
+    } else {
+      await createSeedWallet(page);
+    }
     await expect(page.getByTestId('create-coin-btn')).toBeVisible({ timeout: 30_000 });
     await page.getByTestId('create-coin-btn').click();
     await expect(page.getByTestId('create-heading')).toBeVisible({ timeout: 10_000 });
@@ -164,8 +173,12 @@ test.describe('Create coin', () => {
     // (`onPhase` → `create-phase`) that tracks the job through proving →
     // awaiting_signature → broadcasting. Assert it renders during the flow;
     // it is cleared once the success surface lands.
-    await expect(page.getByTestId('create-phase')).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByTestId('create-success-heading')).toBeVisible({ timeout: 170_000 });
+    // Phase label is optional (poll may skip straight to a later job
+    // status). The success heading is the admit+sign+complete signal.
+    await expect(
+      page.getByTestId('create-phase').or(page.getByTestId('create-success-heading')),
+    ).toBeVisible({ timeout: 900_000 });
+    await expect(page.getByTestId('create-success-heading')).toBeVisible({ timeout: 1_200_000 });
     await expect(page.getByTestId('create-done-btn')).toBeVisible();
     await snap(page, '18-create-success', { fullPage: true });
   });

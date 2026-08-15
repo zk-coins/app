@@ -171,6 +171,24 @@ describe('createProxyServer', () => {
     expect(seen.method).toBe('POST');
     expect(seen.url).toBe('/v1/tx');
     expect(JSON.parse(seen.body)).toEqual({ kind: 'mint' });
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+  });
+
+  it('answers CORS preflight without hitting upstream', async () => {
+    let upstreamHits = 0;
+    const upstream = http.createServer((_req, res) => {
+      upstreamHits += 1;
+      res.end('no');
+    });
+    const nodeUrl = await listen(upstream);
+    const proxyUrl = await listen(
+      createProxyServer({ nodeUrl, usernameDomain: 'dev.zkcoins.app' }),
+    );
+    const res = await fetch(`${proxyUrl}/v1/tx`, { method: 'OPTIONS' });
+    expect(res.status).toBe(204);
+    expect(res.headers.get('access-control-allow-origin')).toBe('*');
+    expect(res.headers.get('access-control-allow-methods')).toContain('POST');
+    expect(upstreamHits).toBe(0);
   });
 
   it('returns 502 with a generic body when the upstream is unreachable', async () => {

@@ -85,7 +85,9 @@ test.describe('Accessibility (axe-core, wcag2aa)', () => {
 
   test('send page', async ({ page }) => {
     await aliceLogin(page);
-    await page.getByTestId('wallet-send-btn').click();
+    // Send CTA is disabled (no coin inventory); open the honest unavailable
+    // page by URL, same as 07-send.
+    await page.goto('/send');
     await expect(page.getByTestId('send-heading')).toBeVisible({ timeout: 10_000 });
     await runAxe(page, '/send');
   });

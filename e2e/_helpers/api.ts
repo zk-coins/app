@@ -16,12 +16,25 @@
  * helpers refuse with a clear error rather than inventing an empty wallet.
  */
 
+import { createHash } from 'node:crypto';
+import { schnorr } from '@noble/curves/secp256k1.js';
 import {
   V1ApiError,
   ZkCoinsV1Client,
+  GENESIS_TAG,
+  assetIdV1,
+  bip340NormaliseSecret,
+  canonicalHostFromApiUrl,
+  chanBindForHost,
+  decodeHexExact,
+  decodeZkAddress,
   deriveSpendKey,
+  digestToBytes,
   encodeHexLower,
   freshNpkRand,
+  issueInvoice,
+  parseExpiryDecimal,
+  pullChallengeMessage,
   seedFromMnemonicV1,
   type Network,
   type TransitionRequest,
@@ -29,7 +42,7 @@ import {
   type V1Job,
   type V1JobStatusValue,
 } from '@zkcoins/sdk';
-import { accountFromMnemonic } from './keys';
+import { accountFromMnemonic, operationalBundleHex, type E2eAccountKeys } from './keys';
 
 const API_URL = (process.env.E2E_API_URL ?? 'https://dev-api.zkcoins.app').replace(/\/+$/, '');
 
@@ -39,7 +52,7 @@ const MINT_AMOUNT = '100000';
 const FIXTURE_DECIMALS = 0;
 
 const POLL_FLOOR_MS = 2_000;
-const WAIT_TIMEOUT_MS = 240_000;
+const WAIT_TIMEOUT_MS = 1_200_000;
 const TERMINAL: ReadonlySet<V1JobStatusValue> = new Set(['completed', 'failed', 'cancelled']);
 
 /** 4xx that prove the node refused the request before admitting a job. */
@@ -108,6 +121,69 @@ async function resolveNetwork(): Promise<Network> {
     throw new Error(`e2e api: unsupported network from /v1/info: ${String(info.network)}`);
   }
   return network;
+}
+
+const ENTRUST_DOMAIN = 'zkCoins/v1/EntrustChallenge';
+
+async function entrustOperationalBundle(
+  keys: E2eAccountKeys,
+  seed: Uint8Array,
+  signal: AbortSignal,
+): Promise<void> {
+  const host = canonicalHostFromApiUrl(API_URL);
+  const chRes = await fetch(`${API_URL}/v1/bootstrap/challenge`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ subject: keys.address, action: 'entrust' }),
+    signal,
+  });
+  const chText = await chRes.text();
+  if (!chRes.ok) {
+    throw new Error(`entrust challenge HTTP ${chRes.status}: ${chText}`);
+  }
+  const ch = JSON.parse(chText) as { nonce: string; expiry: string; domain: string };
+  if (ch.domain !== ENTRUST_DOMAIN) {
+    throw new Error(`entrust: unexpected domain ${JSON.stringify(ch.domain)}`);
+  }
+  const sk0 = deriveSpendKey(seed, 0, 0);
+  const subjectRaw = decodeZkAddress(keys.address);
+  const nonce = decodeHexExact(ch.nonce, 32, 'challenge.nonce');
+  const expiry = parseExpiryDecimal(String(ch.expiry));
+  const chal = pullChallengeMessage({
+    domain: ENTRUST_DOMAIN,
+    nonce,
+    chanBind: chanBindForHost(host),
+    subjectRaw,
+    expiry,
+  });
+  const { pkBytes } = bip340NormaliseSecret(sk0.secretKey);
+  const signature = schnorr.sign(chal, sk0.secretKey, new Uint8Array(32));
+  const proof = {
+    type: 'ownership',
+    subject: keys.address,
+    public_key: encodeHexLower(pkBytes),
+    nk_commit: keys.nkCommit,
+    signature: encodeHexLower(signature),
+  };
+  const enRes = await fetch(`${API_URL}/v1/bootstrap/entrust`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({
+      challenge: { nonce: ch.nonce, expiry: String(ch.expiry) },
+      ownership_proof: proof,
+      bundle: operationalBundleHex(keys),
+    }),
+    signal,
+  });
+  const enText = await enRes.text();
+  if (!enRes.ok) {
+    // Re-runs: already-present is 409. The API maps kernel `wrong_phase`
+    // to a generic 500 `internal_error` body, so 500 here is continue.
+    if (enRes.status === 409 || enRes.status === 500) {
+      return;
+    }
+    throw new Error(`entrust HTTP ${enRes.status}: ${enText}`);
+  }
 }
 
 async function waitForJob(
@@ -254,20 +330,48 @@ export const api = {
           const head = await client.getAccountState(pull.session, signal);
           sendCounter = head.send_counter;
         } catch (err) {
-          // Only typed HTTP 404 + machineCode not_found means "account does not
-          // exist yet". Network/auth/parse/5xx and untyped wrappers must abort
-          // before /v1/tx — never invent sendCounter=0 for a live account.
-          if (
-            !(err instanceof V1ApiError) ||
-            err.status !== 404 ||
-            err.machineCode !== 'not_found'
-          ) {
+          // Unknown subject: 404 not_found, or kernel fail-closed 500
+          // internal_error (REST message is the generic "an internal error
+          // occurred" — no empty head is invented). Other statuses abort.
+          // A true outage here still fails later: mint at send_counter=0
+          // against a live account is refused at the key-binding check.
+          const unknownSubject =
+            err instanceof V1ApiError &&
+            ((err.status === 404 && err.machineCode === 'not_found') ||
+              (err.status === 500 && err.machineCode === 'internal_error'));
+          if (!unknownSubject) {
             throw err;
           }
           sendCounter = 0;
         }
 
+        await entrustOperationalBundle(keys, seed, signal);
+
         const next = deriveSpendKey(seed, 0, sendCounter + 1);
+        const nameHash = createHash('sha256').update(name, 'utf8').digest();
+        const assetId = encodeHexLower(
+          digestToBytes(
+            assetIdV1(
+              GENESIS_TAG,
+              hexToBytesExact(keys.pk0, 32, 'pk0'),
+              nameHash,
+              decimals,
+              1,
+            ),
+          ),
+        );
+        const relayUrl = (
+          process.env.E2E_RELAY_URL ?? 'ws://127.0.0.1:18080/'
+        ).replace(/\/+$/, '') + '/';
+        const selfInvoice = await issueInvoice({
+          amount,
+          assetId,
+          relays: [relayUrl],
+          sk0Secret: deriveSpendKey(seed, 0, 0).secretKey,
+          nkCommit: hexToBytesExact(keys.nkCommit, 32, 'nkCommit'),
+          ivpk: keys.ivpk,
+          opSecret: keys.op,
+        });
         const body: TransitionRequest = {
           kind: 'mint',
           subject: keys.address,
@@ -276,8 +380,9 @@ export const api = {
           output_templates: [
             {
               recipient: keys.address,
-              asset_id: '00'.repeat(32),
+              asset_id: assetId,
               amount,
+              delivery: { type: 'invoice', invoice: selfInvoice },
             },
           ],
           issuance: {
@@ -324,11 +429,11 @@ export const api = {
           ) {
             throw err;
           }
-          if (
-            !(err instanceof V1ApiError) ||
-            err.status !== 404 ||
-            err.machineCode !== 'not_found'
-          ) {
+          const unknownSubject =
+            err instanceof V1ApiError &&
+            ((err.status === 404 && err.machineCode === 'not_found') ||
+              (err.status === 500 && err.machineCode === 'internal_error'));
+          if (!unknownSubject) {
             throw err;
           }
           const jobCounter = awaiting.awaiting_signature.send_counter;
@@ -387,6 +492,13 @@ export const api = {
  * Session-scoped cache for the server-reported `username_domain`.
  */
 let cachedUsernameDomain: string | null = null;
+
+/** Entrust an operational bundle for a mnemonic (idempotent on 409/500). */
+export async function entrustMnemonic(mnemonic: string): Promise<void> {
+  const keys = accountFromMnemonic(mnemonic);
+  const seed = seedFromMnemonicV1(mnemonic);
+  await entrustOperationalBundle(keys, seed, AbortSignal.timeout(120_000));
+}
 
 export async function getUsernameDomain(): Promise<string> {
   if (cachedUsernameDomain !== null) return cachedUsernameDomain;

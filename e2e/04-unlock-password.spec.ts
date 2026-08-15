@@ -50,9 +50,10 @@ const PASSWORD = 'TestPass123!';
  */
 async function arriveAtUnlock(page: Page): Promise<void> {
   await aliceLogin(page, PASSWORD);
-  // Force `Home` to re-evaluate: clear the in-memory account but leave
-  // IDB intact. A reload achieves this — checkForStoredWallet on mount
-  // sees the encrypted blob and sets hasStoredWallet=true, isLocked=true.
+  // Force `Home` to re-evaluate: drop the tab session so reload is locked,
+  // but leave IDB intact. checkForStoredWallet then sets hasStoredWallet
+  // and renders UnlockScreen.
+  await page.evaluate(() => sessionStorage.removeItem('zkcoins.wallet.session.v2'));
   await page.goto('/?reload=1');
   await expect(page.getByTestId('unlock-heading')).toBeVisible({ timeout: 15_000 });
 }

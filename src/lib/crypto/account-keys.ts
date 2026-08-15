@@ -8,6 +8,7 @@
 import { HDKey } from '@scure/bip32';
 import {
   addressFromParts,
+  bip340NormaliseSecret,
   deriveSpendKey,
   digestToBytes,
   encodeHexLower,
@@ -104,4 +105,39 @@ export function spendKeyAt(mnemonic: string, index: number, accountIndex = 0): S
 /** BIP-39 → 64-byte seed (v1 empty-passphrase). */
 export function seedFromAccountMnemonic(mnemonic: string): Uint8Array {
   return seedFromMnemonicV1(mnemonic);
+}
+
+function deriveBranch(seed: Uint8Array, account: number, pathSuffix: string): Uint8Array {
+  const acc = requireNonNegInt(account, 'account');
+  const path = `m/${ZKCOINS_PURPOSE}'/${acc}'/${pathSuffix}`;
+  const master = HDKey.fromMasterSeed(seed);
+  const child = master.derive(path);
+  if (!child.privateKey) {
+    throw new Error(`deriveBranch: no private key at ${path}`);
+  }
+  return child.privateKey.slice();
+}
+
+/** Invoice material for a self-mint delivery credential. */
+export function invoiceKeysFromMnemonic(
+  mnemonic: string,
+  accountIndex = 0,
+): {
+  sk0Secret: Uint8Array;
+  nkCommit: Uint8Array;
+  ivpk: Uint8Array;
+  opSecret: Uint8Array;
+} {
+  const seed = seedFromMnemonicV1(mnemonic);
+  const acc = requireNonNegInt(accountIndex, 'accountIndex');
+  const sk0 = deriveSpendKey(seed, acc, 0);
+  const nk = deriveNk(seed, acc);
+  const ivk = deriveBranch(seed, acc, "1'/0'");
+  const op = deriveBranch(seed, acc, "2'");
+  return {
+    sk0Secret: sk0.secretKey,
+    nkCommit: digestToBytes(nkCommit(nk)),
+    ivpk: bip340NormaliseSecret(ivk).pkBytes,
+    opSecret: op,
+  };
 }

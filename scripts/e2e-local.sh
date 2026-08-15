@@ -70,8 +70,11 @@ if [[ "${1:-}" == "__in_container" ]]; then
   # which serves English. The app is German-first by default (`i18n/config.ts`),
   # so bake the e2e-only `NEXT_PUBLIC_E2E_LOCALE=en` override to reproduce the
   # baseline locale here. Production builds never set this and stay German.
-  echo "▶ [container] next build (NEXT_PUBLIC_API_URL=http://127.0.0.1:${APP_PORT}, proxy→127.0.0.1:${PROXY_PORT}, locale=en)"
-  NEXT_PUBLIC_API_URL="http://127.0.0.1:${APP_PORT}" \
+  # Browser and e2e helpers must share one host string: kernel chan_bind is
+  # ZKCOINS_PUBLIC_HOST (typically 127.0.0.1:${PROXY_PORT}). Same-origin
+  # :${APP_PORT} made ownership-pull signatures fail (chan_bind mismatch).
+  echo "▶ [container] next build (NEXT_PUBLIC_API_URL=http://127.0.0.1:${PROXY_PORT}, proxy→127.0.0.1:${PROXY_PORT}, locale=en)"
+  NEXT_PUBLIC_API_URL="http://127.0.0.1:${PROXY_PORT}" \
   NEXT_PUBLIC_EXPLORER_URL="https://zkcoins.space" \
   NEXT_PUBLIC_E2E_LOCALE="en" \
   LOCAL_NODE_PROXY_TARGET="http://127.0.0.1:${PROXY_PORT}" \
@@ -218,17 +221,31 @@ echo "▶ [host] report + artifacts → ${OUT_DIR}"
 # the run so a non-zero exit (e.g. a few specs failing on an
 # `--update-snapshots` regen) does NOT abort before that sync step — the
 # whole point of a regen run is to surface the baselines it produced.
+# Prefer --env-file for fixture mnemonics so they never appear on `ps`.
+DOCKER_ENV_ARGS=(
+  -e E2E_NODE_URL="${NODE_URL}"
+  -e E2E_LOCAL_APP_PORT="${E2E_LOCAL_APP_PORT:-3090}"
+  -e E2E_INFO_PROXY_PORT="${E2E_INFO_PROXY_PORT:-4243}"
+  -e E2E_FAUCET_CALLS="${E2E_FAUCET_CALLS:-1}"
+  -e E2E_MULTI_ASSET="${E2E_MULTI_ASSET:-}"
+  -e CI="${CI:-}"
+)
+if [[ -n "${E2E_ENV_FILE:-}" ]]; then
+  DOCKER_ENV_ARGS+=(--env-file "${E2E_ENV_FILE}")
+else
+  DOCKER_ENV_ARGS+=(
+    -e E2E_ALICE_MNEMONIC="${E2E_ALICE_MNEMONIC:-}"
+    -e E2E_BOB_MNEMONIC="${E2E_BOB_MNEMONIC:-}"
+    -e E2E_CREATE_MNEMONIC="${E2E_CREATE_MNEMONIC:-}"
+  )
+fi
+
 set +e
 docker run --rm -i \
   --add-host=host.docker.internal:host-gateway \
   -v "${REPO_ROOT}:/src:ro" \
   -v "${OUT_DIR}:/out" \
-  -e E2E_NODE_URL="${NODE_URL}" \
-  -e E2E_LOCAL_APP_PORT="${E2E_LOCAL_APP_PORT:-3090}" \
-  -e E2E_INFO_PROXY_PORT="${E2E_INFO_PROXY_PORT:-4243}" \
-  -e E2E_FAUCET_CALLS="${E2E_FAUCET_CALLS:-1}" \
-  -e E2E_MULTI_ASSET="${E2E_MULTI_ASSET:-}" \
-  -e CI="${CI:-}" \
+  "${DOCKER_ENV_ARGS[@]}" \
   "${IMAGE}" \
   bash /src/scripts/e2e-local.sh __in_container "$@"
 DOCKER_EXIT=$?

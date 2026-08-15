@@ -24,16 +24,15 @@ export default function ReceivePage() {
   const { account } = useWalletStore();
 
   useEffect(() => {
-    if (
-      !account &&
-      /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
-      typeof window !== 'undefined'
-    ) {
-      const id = setTimeout(() => {
-        if (!useWalletStore.getState().account) router.replace('/');
-      }, 100);
-      return () => clearTimeout(id);
-    }
+    if (account) return;
+    /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+    if (typeof window === 'undefined') return;
+    useWalletStore.getState().restoreUnlockedSession();
+    if (useWalletStore.getState().account) return;
+    const id = setTimeout(() => {
+      if (!useWalletStore.getState().account) router.replace('/');
+    }, 100);
+    return () => clearTimeout(id);
   }, [account, router]);
 
   if (!account) {

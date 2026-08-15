@@ -179,12 +179,13 @@ describe('isAccountNotFoundError', () => {
 });
 
 describe('api.createCoin account-state fail-loud', () => {
-  it('does not POST /v1/tx when account-state read fails non-404', async () => {
-    // openOwnershipPullSession → first fetch returns 500
+  it('does not POST /v1/tx when account-state read fails auth', async () => {
+    // openOwnershipPullSession → first fetch returns 401
     mockFetch.mockResolvedValueOnce({
       ok: false,
-      status: 500,
-      text: () => Promise.resolve(JSON.stringify({ error: 'internal_error', message: 'down' })),
+      status: 401,
+      text: () =>
+        Promise.resolve(JSON.stringify({ error: 'unauthorized', message: 'chan_bind mismatch' })),
       headers: new Headers(),
     });
 
