@@ -44,7 +44,16 @@ async function openFirstTxDetail(page: Page): Promise<void> {
   await expect(page.getByTestId('tx-detail-body')).toBeVisible({ timeout: 30_000 });
 }
 
+const aliceHasHistory =
+  (process.env.E2E_ALICE_MNEMONIC?.trim().split(/\s+/).filter(Boolean).length === 12) ||
+  Number.parseInt(process.env.E2E_FAUCET_CALLS ?? '1', 10) > 0;
+
 test.describe('Transaction detail', () => {
+  test.skip(
+    !aliceHasHistory,
+    'needs a funded Alice (E2E_ALICE_MNEMONIC or E2E_FAUCET_CALLS>0); fork CI has neither',
+  );
+
   test('tx-detail-desktop', async ({ page }) => {
     await setViewport(page, 'desktop');
     await openFirstTxDetail(page);

@@ -3086,6 +3086,42 @@ describe('waitForJob branches via completed handshake + poll', () => {
     ).rejects.toMatchObject({ name: 'ApiError' });
   });
 
+  it('treats a non-JSON entrust 500 with an internal_error body as already present', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/challenge')) {
+          return new Response(
+            JSON.stringify({
+              nonce: 'aa'.repeat(32),
+              expiry: String(Math.floor(Date.now() / 1000) + 300),
+              domain: 'zkCoins/v1/EntrustChallenge',
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response('internal_error: wrong_phase', { status: 500 });
+      }),
+    );
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'Entrust500Plaintext',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'JobFailedError' });
+  });
+
   it('fails closed when the entrust POST is a bare 500 without closed-surface body', async () => {
     vi.stubGlobal(
       'fetch',
