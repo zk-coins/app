@@ -70,6 +70,18 @@ const STABILIZE_CSS = `
   [data-testid="balance-amount-btc"] { display: inline-block; min-width: 220px; }
   [data-testid="tx-row-amount"] { display: inline-block; min-width: 96px; text-align: right; }
   [data-testid="proof-id"] { display: inline-block; min-width: 80px; }
+  /* History is leftover-node-dependent (empty / error / mint row) and
+     changes fullPage height. Collapse it for the shot so wallet-home
+     goldens stay on the 375×812 chrome; specs still assert the live
+     state (06 waits for tx-list-empty) before calling snap(). */
+  [data-testid="tx-list"] {
+    height: 0 !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    visibility: hidden !important;
+  }
   /* Transaction-detail value cells: pin every masked value to a uniform
      width so the mask box is identical regardless of the per-run value
      (id, timestamp, circuit digest, amounts) — see the tx-detail spec. */
@@ -95,6 +107,8 @@ async function applyStabilizer(page: Page): Promise<void> {
  * Always:
  *   - waits for `domcontentloaded` (initial render landed)
  *   - waits for web fonts (`document.fonts.ready`)
+ *   - collapses `tx-list` (see STABILIZE_CSS) so leftover history
+ *     cannot change fullPage height
  *   - applies the default mask set, then any spec-specific masks
  *
  * **Why not `networkidle`**: There is no GET balance endpoint under v1 —

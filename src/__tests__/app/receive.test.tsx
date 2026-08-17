@@ -10,6 +10,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, render, screen } from '@/__tests__/_helpers/intl';
 import ReceivePage from '@/app/receive/page';
 import { useWalletStore } from '@/stores/wallet';
+import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
 import { useNetworkStore } from '@/stores/network';
 import { extractRecipient } from '@/lib/qr';
 import { api } from '@/lib/api/client';
@@ -47,6 +48,7 @@ beforeEach(() => {
     error: null,
   });
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -81,6 +83,21 @@ describe('ReceivePage — send acceptance contract', () => {
   it('the back link routes to /', () => {
     render(<ReceivePage />);
     expect(screen.getByTestId('receive-back-link')).toHaveAttribute('href', '/');
+  });
+
+  it('restores a persisted unlocked session instead of redirecting home', () => {
+    const derived = accountKeysFromMnemonic(ALICE.mnemonic);
+    const consistent = {
+      address: derived.address,
+      mnemonic: ALICE.mnemonic,
+      nkCommit: derived.nkCommit,
+    };
+    useWalletStore.getState().setAccount(consistent);
+    useWalletStore.setState({ account: null, isLocked: true });
+    render(<ReceivePage />);
+    expect(useWalletStore.getState().account).toEqual(consistent);
+    expect(routerReplace).not.toHaveBeenCalled();
+    expect(screen.getByTestId('receive-heading')).toBeInTheDocument();
   });
 
   it('shows redirecting placeholder and replaces home when no account', async () => {

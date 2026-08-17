@@ -139,7 +139,7 @@ test.describe('Restore wallet — seed phrase', () => {
   test('wallet-after-restore', async ({ page }) => {
     // Give the test 60 s — the restore flow itself takes 20-25 s on
     // the DEV server (pure-TS `@zkcoins/sdk` derivation + IDB encrypt +
-    // first portfolio tick) and the snap helper's networkidle wait races
+    // first portfolio tick) and the snap helper's history wait races
     // against the 5 s portfolio poll, so the default 30 s budget is tight
     // even on a quiet day.
     test.setTimeout(60_000);

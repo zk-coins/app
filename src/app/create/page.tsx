@@ -87,16 +87,15 @@ export default function CreateCoinPage() {
 
   // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {
-    if (
-      !account &&
-      /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
-      typeof window !== 'undefined'
-    ) {
-      const id = setTimeout(() => {
-        if (!useWalletStore.getState().account) router.replace('/');
-      }, 100);
-      return () => clearTimeout(id);
-    }
+    if (account) return;
+    /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+    if (typeof window === 'undefined') return;
+    useWalletStore.getState().restoreUnlockedSession();
+    if (useWalletStore.getState().account) return;
+    const id = setTimeout(() => {
+      if (!useWalletStore.getState().account) router.replace('/');
+    }, 100);
+    return () => clearTimeout(id);
   }, [account, router]);
 
   const [name, setName] = useState('');
@@ -184,7 +183,7 @@ export default function CreateCoinPage() {
           nkCommit: account.nkCommit,
           accountIndex: 0,
         },
-        { onPhase: (job: JobStatus) => setPhase(job.phase ?? null) },
+        { onPhase: (job: JobStatus) => setPhase(job.phase ?? job.status ?? null) },
       );
       clearCreateLock(account.address);
       setSuccess({ name: trimmedName, amount: trimmedAmount, decimals: dec });

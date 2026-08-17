@@ -13,6 +13,7 @@ import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import CreateCoinPage from '@/app/create/page';
 import { useWalletStore } from '@/stores/wallet';
+import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
 import { useNetworkStore } from '@/stores/network';
 import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client';
 
@@ -57,6 +58,7 @@ beforeEach(() => {
   routerReplace.mockClear();
   routerPush.mockClear();
   localStorage.clear();
+  sessionStorage.clear();
   FEATURES_STATE.MULTI_ASSET = true;
   FEATURES_STATE.loaded = true;
   useNetworkStore.setState({ infoError: null });
@@ -97,6 +99,23 @@ const completed: JobStatus = {
   progress: 1,
   result: { output_coin_ids: ['01'.repeat(32)] },
 };
+
+describe('CreateCoinPage — session restore', () => {
+  it('restores a persisted unlocked session instead of redirecting home', () => {
+    const derived = accountKeysFromMnemonic(ALICE.mnemonic);
+    const consistent = {
+      address: derived.address,
+      mnemonic: ALICE.mnemonic,
+      nkCommit: derived.nkCommit,
+    };
+    useWalletStore.getState().setAccount(consistent);
+    useWalletStore.setState({ account: null, isLocked: true });
+    render(<CreateCoinPage />);
+    expect(useWalletStore.getState().account).toEqual(consistent);
+    expect(routerReplace).not.toHaveBeenCalled();
+    expect(screen.getByTestId('create-heading')).toBeInTheDocument();
+  });
+});
 
 describe('CreateCoinPage — validation', () => {
   it('rejects an empty name', async () => {
@@ -290,13 +309,32 @@ describe('CreateCoinPage — happy path', () => {
     expect(createSpy).toHaveBeenCalledWith(expect.any(Object), expect.any(Object));
   });
 
-  it('accepts a job update without a phase and keeps the phase indicator hidden', async () => {
+  it('hides create-phase when onPhase supplies neither phase nor status', async () => {
     let finish!: (job: JobStatus) => void;
     createSpy.mockImplementation((async (
       _req: unknown,
       opts: { onPhase?: (s: JobStatus) => void },
     ) => {
-      opts.onPhase?.({ ...completed, phase: undefined });
+      opts.onPhase?.({ job_id: 'mint-1', kind: 'mint' } as JobStatus);
+      return new Promise<JobStatus>((resolve) => (finish = resolve));
+    }) as unknown as typeof api.createCoin);
+    const user = userEvent.setup();
+    render(<CreateCoinPage />);
+    await user.type(screen.getByTestId('create-name-input'), 'NoStatus');
+    await user.type(screen.getByTestId('create-amount-input'), '1');
+    await user.click(screen.getByTestId('create-submit-btn'));
+    expect(screen.queryByTestId('create-phase')).toBeNull();
+    finish(completed);
+    expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
+  });
+
+  it('falls back to job.status when onPhase omits phase', async () => {
+    let finish!: (job: JobStatus) => void;
+    createSpy.mockImplementation((async (
+      _req: unknown,
+      opts: { onPhase?: (s: JobStatus) => void },
+    ) => {
+      opts.onPhase?.({ ...completed, status: 'proving', phase: undefined });
       return new Promise<JobStatus>((resolve) => (finish = resolve));
     }) as unknown as typeof api.createCoin);
     const user = userEvent.setup();
@@ -304,7 +342,7 @@ describe('CreateCoinPage — happy path', () => {
     await user.type(screen.getByTestId('create-name-input'), 'NoPhase');
     await user.type(screen.getByTestId('create-amount-input'), '1');
     await user.click(screen.getByTestId('create-submit-btn'));
-    expect(screen.queryByTestId('create-phase')).toBeNull();
+    expect(await screen.findByTestId('create-phase')).toHaveTextContent('proving');
     finish(completed);
     expect(await screen.findByTestId('create-success-heading')).toBeInTheDocument();
   });

@@ -133,8 +133,46 @@ function serializeWalletPayload(account: Account): string {
   return JSON.stringify(payload);
 }
 
+/** Tab-lifetime unlocked session so a same-tab hard navigation keeps custody. */
+export const WALLET_SESSION_KEY = 'zkcoins.wallet.session.v2';
+
+export function loadUnlockedSession(): Account | null {
+  /* v8 ignore next -- SSR guard, unreachable in the browser test env */
+  if (typeof window === 'undefined') return null;
+  try {
+    const raw = sessionStorage.getItem(WALLET_SESSION_KEY);
+    if (raw === null || raw.length === 0) return null;
+    const account = parseWalletPayload(raw);
+    assertCustodyTriple(account);
+    return account;
+  } catch {
+    try {
+      sessionStorage.removeItem(WALLET_SESSION_KEY);
+    } catch {
+      // ignore
+    }
+    return null;
+  }
+}
+
+function persistUnlockedSession(account: Account | null): void {
+  /* v8 ignore next -- SSR guard, unreachable in the browser test env */
+  if (typeof window === 'undefined') return;
+  try {
+    if (account === null) {
+      sessionStorage.removeItem(WALLET_SESSION_KEY);
+      return;
+    }
+    assertCustodyTriple(account);
+    sessionStorage.setItem(WALLET_SESSION_KEY, serializeWalletPayload(account));
+  } catch {
+    // sessionStorage unavailable — in-memory account still works for SPA nav
+  }
+}
+
 /** Outer-envelope reimport transition — blob stays in IDB; no decrypt. */
 function incompatibleStoredWalletState() {
+  persistUnlockedSession(null);
   return {
     needsSeedReimport: true as const,
     account: null,
@@ -182,6 +220,12 @@ interface WalletState {
   unlockWithPassword: (password: string) => Promise<void>;
   unlockWithPrf: (prfOutput: Uint8Array) => Promise<void>;
   lock: () => void;
+  /**
+   * Rehydrate an unlocked tab session from sessionStorage (sync).
+   * Used on hard navigation so `/send` does not bounce to Unlock.
+   * Returns true when an account was restored.
+   */
+  restoreUnlockedSession: () => boolean;
   checkForStoredWallet: () => Promise<void>;
   deleteWallet: () => Promise<void>;
   clearNeedsSeedReimport: () => void;
@@ -197,12 +241,17 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   error: null,
   needsSeedReimport: false,
 
-  setAccount: (account) => set({ account }),
+  setAccount: (account) => {
+    persistUnlockedSession(account);
+    set({ account });
+  },
 
   setUsername: (username) => {
     const { account } = get();
     if (account) {
-      set({ account: { ...account, username } });
+      const next = { ...account, username };
+      persistUnlockedSession(next);
+      set({ account: next });
     }
   },
 
@@ -232,6 +281,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
     // Successful v2 write: activate account only now, drop legacy blob.
     clearLegacyStorage();
+    persistUnlockedSession(account);
     set({
       account,
       isLocked: false,
@@ -264,6 +314,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     });
 
     clearLegacyStorage();
+    persistUnlockedSession(account);
     set({
       account,
       isLocked: false,
@@ -303,6 +354,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       const account = parseWalletPayload(decrypted);
       assertCustodyTriple(account);
+      persistUnlockedSession(account);
       set({
         account,
         isLocked: false,
@@ -312,6 +364,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     } catch (err) {
       // parseWalletPayload + assertCustodyTriple throw IncompatibleWalletError;
       // surface as forced re-import rather than a half-unlocked store.
+      persistUnlockedSession(null);
       set({
         account: null,
         isLocked: true,
@@ -337,6 +390,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     try {
       const account = parseWalletPayload(decrypted);
       assertCustodyTriple(account);
+      persistUnlockedSession(account);
       set({
         account,
         isLocked: false,
@@ -345,6 +399,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
       });
     } catch (err) {
       // parse + custody throw IncompatibleWalletError; keep store locked.
+      persistUnlockedSession(null);
       set({
         account: null,
         isLocked: true,
@@ -357,6 +412,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
 
   lock: () => {
     const { account } = get();
+    persistUnlockedSession(null);
     set({
       account: null,
       isLocked: true,
@@ -364,7 +420,24 @@ export const useWalletStore = create<WalletState>((set, get) => ({
     });
   },
 
+  restoreUnlockedSession: () => {
+    if (get().needsSeedReimport) return false;
+    const existing = get().account;
+    if (existing && !get().isLocked) return true;
+    const session = loadUnlockedSession();
+    if (!session) return false;
+    set({
+      account: session,
+      isLocked: false,
+      hasStoredWallet: true,
+      storedAddress: session.address,
+      error: null,
+    });
+    return true;
+  },
+
   checkForStoredWallet: async () => {
+    get().restoreUnlockedSession();
     const current = get();
     if (current.account && !current.isLocked) {
       try {
@@ -421,6 +494,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
           // explicitly resets — deleting here would destroy the only copy
           // before a conscious recovery decision.
           // needsSeedReimport is the gate; error stays null (not sticky I/O).
+          persistUnlockedSession(null);
           set({
             needsSeedReimport: true,
             hasStoredWallet: false,
@@ -445,6 +519,7 @@ export const useWalletStore = create<WalletState>((set, get) => ({
   deleteWallet: async () => {
     await deleteEncryptedWallet();
     clearLegacyStorage();
+    persistUnlockedSession(null);
     // Visible flags last: UI that keys off hasStoredWallet / needsSeedReimport
     // must not unmount before durable cleanup finishes.
     set({

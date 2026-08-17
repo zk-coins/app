@@ -4,7 +4,9 @@ import {
   accountKeysFromMnemonic,
   createMnemonic,
   deriveNk,
+  invoiceKeysFromMnemonic,
   isValidMnemonic,
+  operationalBundleHexFromMnemonic,
   seedFromAccountMnemonic,
   spendKeyAt,
 } from '@/lib/crypto/account-keys';
@@ -67,6 +69,41 @@ describe('account-keys (SDK pure-TS)', () => {
     const nk = deriveNk(seed, 0);
     expect(nk).toBeInstanceOf(Uint8Array);
     expect(nk.length).toBe(32);
+  });
+
+  it('operationalBundleHexFromMnemonic is 161 versioned bytes', () => {
+    const hex = operationalBundleHexFromMnemonic(FIXTURE);
+    expect(hex).toMatch(/^01[0-9a-f]{320}$/);
+    expect(operationalBundleHexFromMnemonic(FIXTURE)).toBe(hex);
+  });
+
+  it('invoiceKeysFromMnemonic returns 32-byte invoice material', () => {
+    const keys = invoiceKeysFromMnemonic(FIXTURE);
+    expect(keys.sk0Secret).toBeInstanceOf(Uint8Array);
+    expect(keys.sk0Secret.length).toBe(32);
+    expect(keys.nkCommit.length).toBe(32);
+    expect(keys.ivpk.length).toBe(32);
+    expect(keys.opSecret.length).toBe(32);
+  });
+
+  it('invoiceKeysFromMnemonic fails closed when the HD child has no private key', () => {
+    const orig = HDKey.fromMasterSeed.bind(HDKey);
+    const spy = vi.spyOn(HDKey, 'fromMasterSeed').mockImplementation((seed: Uint8Array) => {
+      const master = orig(seed);
+      const derive = master.derive.bind(master);
+      master.derive = ((path: string) => {
+        if (path.includes("/1'/0'") || path.endsWith("/2'")) {
+          return { privateKey: null } as never;
+        }
+        return derive(path);
+      }) as typeof master.derive;
+      return master;
+    });
+    try {
+      expect(() => invoiceKeysFromMnemonic(FIXTURE)).toThrow(/no private key/);
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('deriveNk fails closed when the HD child has no private key', () => {

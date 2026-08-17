@@ -236,8 +236,9 @@ export async function snap(
 The `snap` helper always:
 
 - Sets viewport (default 1440 × 900 desktop, 375 × 812 mobile).
-- Waits for `networkidle`.
+- Waits for `domcontentloaded` (not `networkidle` — v1 has no GET balance).
 - Waits for fonts (`document.fonts.ready`).
+- Collapses `tx-list` so leftover empty/error/mint history cannot change fullPage height.
 - Applies the default mask set (see §7).
 - Calls `expect(target).toHaveScreenshot(name + '.png', { mask: [...defaultMasks, ...customMasks] })`.
 
@@ -261,6 +262,7 @@ export function bobLogin(page: Page, password: string): Promise<void>;
 | `[data-testid="asset-row-balance"]`  | The per-asset portfolio balance value                                                  | `src/components/screens/WalletScreen.tsx` — the portfolio row's balance `<span>` only         |
 | `[data-testid="tx-row-amount"]`      | Transaction row amount                                                                 | `src/components/screens/WalletScreen.tsx::TransactionsList`                                   |
 | `[data-testid="tx-row-time"]`        | Transaction row timestamp                                                              | same file                                                                                     |
+| `[data-testid="tx-list"]`            | Collapsed in `STABILIZE_CSS` (not masked) — leftover empty/error/mint                  | `src/components/screens/WalletScreen.tsx` — wrapper; specs assert `data-loaded` themselves    |
 | `[data-testid="seed-grid"]`          | The 12 mnemonic words                                                                  | `src/components/onboarding/Onboarding.tsx::SeedFlow` — wrap the `grid-cols-3 gap-2 …` `<div>` |
 | `[data-testid="qr-code"]`            | The receive QR (depends on address)                                                    | `src/app/receive/page.tsx` — wrap the `QRCodeSVG` parent `<div>`                              |
 | `[data-testid="proof-id"]`           | The "proof #N" line on the send success screen                                         | `src/app/send/page.tsx`                                                                       |
@@ -278,6 +280,8 @@ Per-PR ownership:
 | `asset-row-balance` | §8.6 (portfolio balance shot)      | multi-asset surface (`multi_asset:true`)                    |
 | `tx-row-amount`     | §8.7 (post-send list shot)         | PR-8                                                        |
 | `tx-row-time`       | §8.7                               | PR-8                                                        |
+| `tx-list`           | wallet-home snaps (06/08/09/10)    | first-pull race: empty vs mint vs loading                   |
+| `tx-list-empty`     | same                               | empty-history copy inside `tx-list`                         |
 | `proof-id`          | future live-send success screen    | PR-8 (present for when send ships)                          |
 | `qr-code`           | future named-receive QR            | PR-9 (masked when present; count 0 on unavailable surface)  |
 

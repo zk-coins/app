@@ -4,6 +4,8 @@ import {
   parseWalletPayload,
   IncompatibleWalletError,
   WALLET_PAYLOAD_VERSION,
+  WALLET_SESSION_KEY,
+  loadUnlockedSession,
 } from '@/stores/wallet';
 import type { Account } from '@/stores/wallet';
 import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
@@ -82,6 +84,7 @@ beforeEach(() => {
     needsSeedReimport: false,
   });
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 describe('wallet store — basic state', () => {
@@ -139,6 +142,55 @@ describe('wallet store — basic state', () => {
     expect(account?.mnemonic).toBe(testAccount.mnemonic);
     expect(account?.nkCommit).toBe(testAccount.nkCommit);
     expect(account?.username).toBe('alice');
+  });
+});
+
+describe('wallet store — tab session', () => {
+  it('persists a custody-consistent account and restores it after lock', () => {
+    useWalletStore.getState().setAccount(consistentAccount);
+    expect(loadUnlockedSession()).toEqual(consistentAccount);
+
+    useWalletStore.getState().lock();
+    expect(useWalletStore.getState().account).toBeNull();
+    expect(sessionStorage.getItem(WALLET_SESSION_KEY)).toBeNull();
+  });
+
+  it('restoreUnlockedSession rehydrates a persisted consistent account', () => {
+    useWalletStore.getState().setAccount(consistentAccount);
+    useWalletStore.setState({ account: null, isLocked: true });
+    expect(useWalletStore.getState().restoreUnlockedSession()).toBe(true);
+    expect(useWalletStore.getState().account).toEqual(consistentAccount);
+    expect(useWalletStore.getState().isLocked).toBe(false);
+  });
+
+  it('loadUnlockedSession drops a corrupt session payload', () => {
+    sessionStorage.setItem(WALLET_SESSION_KEY, 'not-json');
+    expect(loadUnlockedSession()).toBeNull();
+    expect(sessionStorage.getItem(WALLET_SESSION_KEY)).toBeNull();
+  });
+
+  it('loadUnlockedSession treats an empty session string as absent', () => {
+    sessionStorage.setItem(WALLET_SESSION_KEY, '');
+    expect(loadUnlockedSession()).toBeNull();
+  });
+
+  it('restoreUnlockedSession refuses after an incompatible stored wallet', () => {
+    useWalletStore.getState().setAccount(consistentAccount);
+    expect(loadUnlockedSession()).toEqual(consistentAccount);
+    useWalletStore.setState({
+      needsSeedReimport: true,
+      account: null,
+      isLocked: false,
+    });
+    expect(useWalletStore.getState().restoreUnlockedSession()).toBe(false);
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
+  it('does not persist a custody-inconsistent account', () => {
+    useWalletStore.getState().setAccount(testAccount);
+    expect(loadUnlockedSession()).toBeNull();
+    useWalletStore.setState({ account: null, isLocked: true });
+    expect(useWalletStore.getState().restoreUnlockedSession()).toBe(false);
   });
 });
 

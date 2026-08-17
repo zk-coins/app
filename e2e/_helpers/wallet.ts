@@ -39,6 +39,9 @@ export async function clearWalletState(page: Page): Promise<void> {
     Object.keys(localStorage)
       .filter((k) => k.startsWith('zkcoins'))
       .forEach((k) => localStorage.removeItem(k));
+    Object.keys(sessionStorage)
+      .filter((k) => k.startsWith('zkcoins'))
+      .forEach((k) => sessionStorage.removeItem(k));
     const dbs = await indexedDB.databases();
     await Promise.all(
       dbs.map(

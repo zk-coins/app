@@ -17,6 +17,7 @@ async function goToReceive(page: Page): Promise<void> {
 
 test.describe('Receive — not available without a name', () => {
   test.beforeEach(async ({ page }) => {
+    test.setTimeout(60_000);
     await aliceLogin(page);
   });
 

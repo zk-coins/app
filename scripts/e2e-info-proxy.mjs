@@ -109,6 +109,16 @@ export function startupMessage(port) {
   return `[e2e-info-proxy] listening on :${port} (normalising GET /v1/info to the DEV capability surface)`;
 }
 
+/** Browser talks to this proxy cross-origin when NEXT_PUBLIC_API_URL is the proxy port. */
+export function applyCors(res) {
+  res.setHeader('access-control-allow-origin', '*');
+  res.setHeader('access-control-allow-methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+  res.setHeader(
+    'access-control-allow-headers',
+    'content-type, authorization, idempotency-key, x-requested-with',
+  );
+}
+
 /**
  * Build the proxy server for a given upstream + reported username domain.
  */
@@ -116,6 +126,12 @@ export function createProxyServer({ nodeUrl, usernameDomain, multiAsset = false 
   const base = nodeUrl.replace(/\/+$/, '');
 
   return http.createServer(async (req, res) => {
+    applyCors(res);
+    if (req.method === 'OPTIONS') {
+      res.statusCode = 204;
+      res.end();
+      return;
+    }
     if (typeof req.url !== 'string' || req.url.length === 0) {
       res.statusCode = 400;
       res.setHeader('content-type', 'application/json');
@@ -139,13 +155,14 @@ export function createProxyServer({ nodeUrl, usernameDomain, multiAsset = false 
         const json = await upstream.json();
         const normalized = JSON.stringify(normalizeInfo(json, usernameDomain, multiAsset));
         res.setHeader('content-type', 'application/json');
-        res.setHeader('access-control-allow-origin', '*');
+        applyCors(res);
         res.statusCode = upstream.status;
         res.end(normalized);
         return;
       }
 
       copyHeaders(upstream.headers, res);
+      applyCors(res);
       res.statusCode = upstream.status;
       const buf = Buffer.from(await upstream.arrayBuffer());
       res.end(buf);
@@ -154,6 +171,7 @@ export function createProxyServer({ nodeUrl, usernameDomain, multiAsset = false 
       console.error('[e2e-info-proxy] upstream failure:', err);
       res.statusCode = 502;
       res.setHeader('content-type', 'application/json');
+      applyCors(res);
       res.end(JSON.stringify(upstreamFailureBody()));
     }
   });

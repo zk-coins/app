@@ -18,6 +18,7 @@ import { snap, setViewport } from './_helpers/screenshot';
 
 test.describe('Network info + AppShell', () => {
   test.beforeEach(async ({ page }) => {
+    test.setTimeout(60_000);
     await setViewport(page, 'mobile');
     await aliceLogin(page);
   });

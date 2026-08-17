@@ -11,6 +11,10 @@ import { aliceLogin, bobLogin } from './_helpers/fixtures';
 import { snap, setViewport } from './_helpers/screenshot';
 
 test.describe('View balance — not available in this build', () => {
+  test.beforeEach(() => {
+    test.setTimeout(60_000);
+  });
+
   test('balance-unavailable-desktop', async ({ page }) => {
     await setViewport(page, 'desktop');
     await aliceLogin(page);
@@ -48,6 +52,13 @@ test.describe('View balance — not available in this build', () => {
     await expect(page.getByTestId('name-claim-unavailable')).toBeVisible();
     await expect(page.getByTestId('account-display-name')).toHaveCount(0);
     await expect(page.getByTestId('address-copy-btn')).toHaveCount(0);
+    // History must settle empty (not the loading gap / error banner).
+    // snap() then collapses tx-list so the shot stays on the 812 chrome.
+    await expect(page.getByTestId('tx-list')).toHaveAttribute('data-loaded', 'true', {
+      timeout: 20_000,
+    });
+    await expect(page.getByTestId('tx-list')).toHaveAttribute('data-state', 'empty');
+    await expect(page.getByTestId('tx-list-empty')).toBeVisible();
     await snap(page, '06-balance-zero-empty-banner', { fullPage: true });
   });
 });

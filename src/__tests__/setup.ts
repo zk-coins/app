@@ -1,7 +1,7 @@
 import 'fake-indexeddb/auto';
 import '@testing-library/jest-dom/vitest';
 import { IDBFactory } from 'fake-indexeddb';
-import { beforeEach, afterEach } from 'vitest';
+import { beforeEach, afterEach, vi } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
 // Some happy-dom builds do not expose a Storage instance on the window by
@@ -36,11 +36,34 @@ if (typeof globalThis.sessionStorage === 'undefined') {
   }
 }
 
+const realFetch = globalThis.fetch.bind(globalThis);
+
 // Fresh IndexedDB for every test
 beforeEach(() => {
   globalThis.indexedDB = new IDBFactory();
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes('/v1/bootstrap/challenge')) {
+        return new Response(
+          JSON.stringify({
+            nonce: 'aa'.repeat(32),
+            expiry: String(Math.floor(Date.now() / 1000) + 300),
+            domain: 'zkCoins/v1/EntrustChallenge',
+          }),
+          { status: 200, headers: { 'content-type': 'application/json' } },
+        );
+      }
+      if (url.includes('/v1/bootstrap/entrust')) {
+        return new Response('{}', { status: 409 });
+      }
+      return realFetch(input, init);
+    }),
+  );
 });
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllGlobals();
 });

@@ -116,11 +116,10 @@ jobs:
     # family) — see e2e/README.md § 4.2.
     #
     # Cap the job so a hung browser process or stuck globalSetup
-    # cannot consume the default 6 h budget. Realistic wall-clock is
-    # ~5-10 min for the single chromium suite plus ~3 min for
-    # install/browser-fetch and ~1 min for the standalone build —
-    # 30 min is the conservative ceiling.
-    timeout-minutes: 30
+    # cannot consume the default 6 h budget. One real create-success
+    # mint is 7–15 min plus the rest of the suite and one retry —
+    # 60 min is the conservative ceiling.
+    timeout-minutes: 60
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -137,20 +136,23 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
-      # Build the PR's standalone bundle with the same-origin proxy
-      # config baked in (Next applies `rewrites()` only via the
-      # standalone `node server.js`, and NEXT_PUBLIC_* values are
-      # inlined at build time):
-      #   NEXT_PUBLIC_API_URL      → the app's own origin, so browser
-      #                              SDK calls stay same-origin (no
-      #                              Idempotency-Key CORS preflight)
-      #   LOCAL_NODE_PROXY_TARGET  → the /v1/info normalisation proxy
-      - name: Build standalone bundle (same-origin proxy baked in)
+      # Build the PR's standalone bundle. NEXT_PUBLIC_* is inlined at
+      # build time. v1 chan_bind is H("zkCoins/v1/PullHost" ‖ host)
+      # from the SDK apiUrl, and the CI upstream API is configured
+      # with PUBLIC_HOST=127.0.0.1:8080, so the baked browser URL and
+      # the runner info-proxy must share that same authority — not
+      # the Next origin :3090 and not the historical :4243 split.
+      # LOCAL_NODE_PROXY_TARGET stays pointed at the info-proxy so a
+      # same-origin /v1 rewrite still works if a call hits Next.
+      - name: Build standalone bundle (chan_bind host baked in)
         run: npm run build
         env:
-          NEXT_PUBLIC_API_URL: http://127.0.0.1:3090
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:8080
           NEXT_PUBLIC_EXPLORER_URL: https://zkcoins.space
-          LOCAL_NODE_PROXY_TARGET: http://127.0.0.1:4243
+          LOCAL_NODE_PROXY_TARGET: http://127.0.0.1:8080
+          # Baselines and spec copy are English. Unset → default `de`
+          # and every wallet chrome shot diffs (see i18n/config.ts).
+          NEXT_PUBLIC_E2E_LOCALE: en
 
       # `output: standalone` emits a minimal server tree but does not
       # copy `public/` or `.next/static` into it (the Dockerfile does
@@ -177,15 +179,22 @@ jobs:
           APP_PID=$!
           trap 'kill "$PROXY_PID" "$APP_PID" 2>/dev/null || true' EXIT
 
-          echo "waiting for info-proxy :4243 and app :3090"
+          echo "waiting for info-proxy :8080 and app :3090"
           for i in $(seq 1 60); do
-            if curl -sf http://127.0.0.1:4243/v1/info >/dev/null 2>&1 &&
-              curl -sf http://127.0.0.1:3090/ >/dev/null 2>&1; then
+            if curl -sf --max-time 3 http://127.0.0.1:8080/v1/info >/dev/null 2>&1 &&
+              curl -sf --max-time 3 http://127.0.0.1:3090/ >/dev/null 2>&1; then
               break
             fi
             if [ "$i" = "60" ]; then
               echo "::error::info-proxy or standalone app did not come up within 60s"
-              curl -s http://127.0.0.1:4243/v1/info || true
+              echo -n "proxy /v1/info http="
+              curl -sS -o /tmp/proxy-info.body -w "%{http_code}" --max-time 5 http://127.0.0.1:8080/v1/info || true
+              echo
+              head -c 400 /tmp/proxy-info.body 2>/dev/null || true
+              echo
+              echo -n "app / http="
+              curl -sS -o /dev/null -w "%{http_code}" --max-time 5 http://127.0.0.1:3090/ || true
+              echo
               exit 1
             fi
             sleep 1
@@ -194,7 +203,7 @@ jobs:
           # Sanity: the proxy must report the DEV capability surface
           # (wallet feature OFF). A mismatch would silently shift baselines,
           # so fail loud here instead of in a wall of visual diffs.
-          PROXY_INFO="$(curl -s http://127.0.0.1:4243/v1/info)"
+          PROXY_INFO="$(curl -s --max-time 5 http://127.0.0.1:8080/v1/info)"
           echo "proxied /v1/info → ${PROXY_INFO}"
           case "$PROXY_INFO" in
             *'"wallet"'*)
@@ -209,13 +218,19 @@ jobs:
         env:
           E2E_TARGET: local
           E2E_BASE_URL: http://127.0.0.1:3090
-          E2E_API_URL: http://127.0.0.1:4243
+          E2E_API_URL: http://127.0.0.1:8080
           E2E_LOCAL_APP_PORT: '3090'
-          E2E_INFO_PROXY_PORT: '4243'
+          E2E_INFO_PROXY_PORT: '8080'
           E2E_NODE_URL: https://ci.zkcoins.app
           E2E_INFO_USERNAME_DOMAIN: dev.zkcoins.app
-          E2E_FAUCET_CALLS: '1'
+          # Do not remint Alice every run: a second mint needs the
+          # predecessor nullifier in the NfLog and fails if the previous
+          # CI mint is still awaiting scan-fold. Login specs restore the
+          # fixture wallets; create-success generates a fresh seed.
+          E2E_FAUCET_CALLS: '0'
           E2E_NEED_FIXTURES: 'true'
+          E2E_ALICE_MNEMONIC: ${{ secrets.E2E_ALICE_MNEMONIC }}
+          E2E_BOB_MNEMONIC: ${{ secrets.E2E_BOB_MNEMONIC }}
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

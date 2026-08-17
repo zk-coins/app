@@ -21,7 +21,12 @@ import * as path from 'node:path';
 import type { BrowserContext, FullConfig, Page } from '@playwright/test';
 import { chromium } from '@playwright/test';
 import { api } from './_helpers/api';
-import { createSeedWallet, DEFAULT_PASSWORD, clearWalletState } from './_helpers/wallet';
+import {
+  createSeedWallet,
+  restoreSeedWallet,
+  DEFAULT_PASSWORD,
+  clearWalletState,
+} from './_helpers/wallet';
 import type { Accounts } from './_helpers/fixtures';
 
 const FIXTURES_DIR = path.join(__dirname, '.fixtures');
@@ -170,6 +175,10 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     applyColdStartTimeouts(aliceCtx);
     const alice = await withPageRetry(aliceCtx, 'create Alice wallet', async (page) => {
       await clearWalletState(page);
+      const preset = process.env.E2E_ALICE_MNEMONIC?.trim().split(/\s+/);
+      if (preset && preset.length === 12) {
+        return { ...(await restoreSeedWallet(page, preset, DEFAULT_PASSWORD)), mnemonic: preset };
+      }
       return await createSeedWallet(page, DEFAULT_PASSWORD);
     });
     await aliceCtx.close();
@@ -202,6 +211,10 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     applyColdStartTimeouts(bobCtx);
     const bob = await withPageRetry(bobCtx, 'create Bob wallet', async (page) => {
       await clearWalletState(page);
+      const preset = process.env.E2E_BOB_MNEMONIC?.trim().split(/\s+/);
+      if (preset && preset.length === 12) {
+        return { ...(await restoreSeedWallet(page, preset, DEFAULT_PASSWORD)), mnemonic: preset };
+      }
       return await createSeedWallet(page, DEFAULT_PASSWORD);
     });
     await bobCtx.close();

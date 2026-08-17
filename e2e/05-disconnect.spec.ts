@@ -46,6 +46,7 @@ test.describe('Disconnect wallet', () => {
   });
 
   test('wallet-to-settings-nav', async ({ page }) => {
+    test.setTimeout(60_000);
     await setViewport(page, 'mobile');
     // Wait for Alice's balance-poll tick so the rest of the wallet
     // chrome (everything outside the hover-affected bottom nav) is

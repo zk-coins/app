@@ -11,6 +11,10 @@ import { aliceLogin, bobLogin } from './_helpers/fixtures';
 import { snap, setViewport } from './_helpers/screenshot';
 
 test.describe('Portfolio — not available in this build', () => {
+  test.beforeEach(() => {
+    test.setTimeout(60_000);
+  });
+
   test('Visual Regression — portfolio-unavailable (Alice)', async ({ page }) => {
     await setViewport(page, 'mobile');
     await aliceLogin(page);

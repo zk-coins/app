@@ -8,6 +8,7 @@ import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import SettingsPage from '@/app/settings/page';
 import { useWalletStore } from '@/stores/wallet';
+import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
 import { useAuthStore } from '@/stores/auth';
 import { useNetworkStore } from '@/stores/network';
 import { deleteCredential } from '@/lib/crypto/storage';
@@ -77,6 +78,7 @@ beforeEach(() => {
     reset: originalReset,
   });
   vi.mocked(deleteCredential).mockClear();
+  sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -145,6 +147,20 @@ describe('SettingsPage', () => {
     await user.click(screen.getByTestId('settings-disconnect-btn'));
     expect(deleteWallet).not.toHaveBeenCalled();
     expect(deleteCredential).not.toHaveBeenCalled();
+  });
+
+  it('restores a persisted unlocked session instead of redirecting home', () => {
+    const derived = accountKeysFromMnemonic(ALICE.mnemonic);
+    const consistent = {
+      address: derived.address,
+      mnemonic: ALICE.mnemonic,
+      nkCommit: derived.nkCommit,
+    };
+    useWalletStore.getState().setAccount(consistent);
+    useWalletStore.setState({ account: null, isLocked: true });
+    render(<SettingsPage />);
+    expect(useWalletStore.getState().account).toEqual(consistent);
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 
   it('redirects home when there is no account after the grace timeout', async () => {

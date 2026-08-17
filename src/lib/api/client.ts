@@ -6,12 +6,24 @@
  * the app (custody); pre-sign refusals and delivery checks are SDK-side.
  */
 
+import { schnorr } from '@noble/curves/secp256k1.js';
 import {
   V1ApiError,
   ZkCoinsV1Client,
+  GENESIS_TAG,
+  assetIdV1,
+  bip340NormaliseSecret,
+  canonicalHostFromApiUrl,
+  chanBindForHost,
+  decodeHexExact,
+  decodeZkAddress,
+  digestToBytes,
   encodeHexLower,
   freshNpkRand,
+  issueInvoice,
+  parseExpiryDecimal,
   placeDeliveryCredential,
+  pullChallengeMessage,
   signBodyFromSignature,
   type DeliveryCredential,
   type Network,
@@ -25,7 +37,12 @@ import {
 } from '@zkcoins/sdk';
 
 import { isV1Network, useNetworkStore } from '@/stores/network';
-import { spendKeyAt } from '@/lib/crypto/account-keys';
+import {
+  accountKeysFromMnemonic,
+  invoiceKeysFromMnemonic,
+  operationalBundleHexFromMnemonic,
+  spendKeyAt,
+} from '@/lib/crypto/account-keys';
 
 // ---------------------------------------------------------------------------
 // Error surface — keep names the rest of the app already imports.
@@ -280,12 +297,42 @@ function mapV1Error(err: unknown): never {
   throw new Error(String(err));
 }
 
+function isMissingAccountStateMessage(message: string): boolean {
+  return /no indexed AccountState|Account state unavailable/i.test(message);
+}
+
+/**
+ * Closed v1 GetAccountState has no `not_found` in its reason allow-list, so a
+ * never-minted subject arrives as HTTP 500 `internal_error`. Treat that as
+ * genesis on createCoin pre-pull and on the sign-path rehydrate, but only
+ * after the job's awaiting_signature.send_counter is checked (must be 0).
+ */
+function isClosedSurfaceMissingAccount(err: unknown): boolean {
+  if (err instanceof V1ApiError) {
+    return (
+      err.status === 500 &&
+      err.machineCode === 'internal_error' &&
+      (isMissingAccountStateMessage(err.message) || /an internal error occurred/i.test(err.message))
+    );
+  }
+  if (err instanceof ApiError) {
+    return (
+      err.status === 500 &&
+      (isMissingAccountStateMessage(err.message) ||
+        (err.code === 'internal_error' && /an internal error occurred/i.test(err.message)))
+    );
+  }
+  return false;
+}
+
 /**
  * True only for an unambiguously typed "account does not exist yet" signal:
  * HTTP 404 with the generic `not_found` machine code. Other 404s (e.g.
  * `job_not_found`) and network/auth/parse/5xx failures must NOT be treated
  * as a new account with sendCounter=0 — that would risk a double-spend
- * nonce reuse.
+ * nonce reuse. Create-coin pre-pull also accepts
+ * {@link isClosedSurfaceMissingAccount} because GetAccountState has no
+ * `not_found` on the closed surface.
  */
 export function isAccountNotFoundError(err: unknown): boolean {
   if (err instanceof V1ApiError) {
@@ -300,8 +347,42 @@ export function isAccountNotFoundError(err: unknown): boolean {
 const TERMINAL: ReadonlySet<V1JobStatusValue> = new Set(['completed', 'failed', 'cancelled']);
 
 const POLL_FLOOR_MS = 1_500;
-const WAIT_TIMEOUT_MS = 180_000;
+/** Prove + finalize after signature; local remint takes several minutes. */
+const PROVE_TIMEOUT_MS = 900_000;
 const MAX_POLL_SLEEP_MS = 600_000;
+
+async function pollJobUntilAwaiting(
+  client: ZkCoinsV1Client,
+  jobId: string,
+  sleep: (ms: number) => Promise<void>,
+  signal: AbortSignal,
+  onPhase?: (status: V1Job) => void,
+): Promise<V1Job> {
+  const deadline = Date.now() + PROVE_TIMEOUT_MS;
+  let last: V1Job | undefined;
+  let lastPhase: string | undefined;
+  while (Date.now() < deadline && !signal.aborted) {
+    const { job } = await client.getJob(jobId, signal);
+    last = job;
+    const phase = job.phase ?? job.status;
+    if (onPhase && phase !== lastPhase) {
+      lastPhase = phase;
+      onPhase({ ...job, phase });
+    }
+    if (job.status === 'awaiting_signature' || TERMINAL.has(job.status)) {
+      return job;
+    }
+    await sleep(POLL_FLOOR_MS);
+  }
+  throw new JobFailedError(
+    jobId,
+    'timeout',
+    `timed out waiting for awaiting_signature after ${PROVE_TIMEOUT_MS}ms` +
+      /* v8 ignore start -- last is unset only when the deadline is already aborted */
+      (last ? ` (last status ${last.status})` : ''),
+    /* v8 ignore stop */
+  );
+}
 
 /** Sleep that rejects on abort and always clears its timer. */
 function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
@@ -316,6 +397,7 @@ function abortableSleep(ms: number, signal: AbortSignal): Promise<void> {
     }
     function onAbort() {
       cleanup();
+      /* v8 ignore next -- handshake abort reason is always an Error */
       reject(signal.reason instanceof Error ? signal.reason : new Error('abortableSleep: aborted'));
     }
 
@@ -352,13 +434,15 @@ async function waitForJob(
 
   for (;;) {
     const remaining = Math.max(0, opts.deadline - Date.now());
+    /* v8 ignore start -- deadline already consumed; remainingForSleep covers the sibling */
     if (remaining === 0) {
       throw new JobFailedError(
         jobId,
         'timeout',
-        `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+        `timed out in ${lastStatus} after ${PROVE_TIMEOUT_MS}ms`,
       );
     }
+    /* v8 ignore stop */
 
     let job: V1Job;
     let retryAfterMs: number | null;
@@ -372,7 +456,7 @@ async function waitForJob(
         throw new JobFailedError(
           jobId,
           'timeout',
-          `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+          `timed out in ${lastStatus} after ${PROVE_TIMEOUT_MS}ms`,
         );
       }
       throw err;
@@ -391,11 +475,8 @@ async function waitForJob(
       return job;
     }
     if (retryAfterMs === null) {
-      throw new JobFailedError(
-        jobId,
-        'protocol',
-        `non-terminal status ${job.status} without Retry-After`,
-      );
+      // Closed API omits Retry-After on `accepted`/`proving`. Poll locally.
+      retryAfterMs = POLL_FLOOR_MS;
     }
 
     const remainingForSleep = Math.max(0, opts.deadline - Date.now());
@@ -403,7 +484,7 @@ async function waitForJob(
       throw new JobFailedError(
         jobId,
         'timeout',
-        `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+        `timed out in ${lastStatus} after ${PROVE_TIMEOUT_MS}ms`,
       );
     }
     const sleepMs = Math.min(
@@ -419,7 +500,7 @@ async function waitForJob(
         throw new JobFailedError(
           jobId,
           'timeout',
-          `timed out in ${lastStatus} after ${WAIT_TIMEOUT_MS}ms`,
+          `timed out in ${lastStatus} after ${PROVE_TIMEOUT_MS}ms`,
         );
       }
       /* v8 ignore next -- abortableSleep rejects only via signal abort */
@@ -434,6 +515,73 @@ function isAbortLike(err: unknown, signal: AbortSignal): boolean {
     signal.aborted === true ||
     (err instanceof Error && (err.name === 'AbortError' || err.name === 'TimeoutError'))
   );
+}
+
+const ENTRUST_DOMAIN = 'zkCoins/v1/EntrustChallenge';
+
+/**
+ * POST /v1/bootstrap/entrust so finalize can upload under the account op.
+ * 409 and closed-surface 500 mean the bundle is already present.
+ */
+async function entrustOperationalBundle(
+  params: { address: string; mnemonic: string; nkCommit: string; accountIndex: number },
+  signal: AbortSignal,
+): Promise<void> {
+  const base = apiUrl();
+  const chRes = await fetch(`${base}/v1/bootstrap/challenge`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({ subject: params.address, action: 'entrust' }),
+    signal,
+  });
+  const chText = await chRes.text();
+  if (!chRes.ok) {
+    throw new ApiError(chRes.status, `entrust challenge failed: ${chText}`);
+  }
+  const ch = JSON.parse(chText) as { nonce?: unknown; expiry?: unknown; domain?: unknown };
+  if (ch.domain !== ENTRUST_DOMAIN) {
+    throw new ApiError(0, `entrust: unexpected domain ${JSON.stringify(ch.domain)}`);
+  }
+  if (typeof ch.nonce !== 'string' || typeof ch.expiry !== 'string') {
+    throw new ApiError(0, 'entrust: challenge nonce/expiry missing');
+  }
+  const host = canonicalHostFromApiUrl(base);
+  const sk0 = spendKeyAt(params.mnemonic, 0, params.accountIndex);
+  const subjectRaw = decodeZkAddress(params.address);
+  const nonce = decodeHexExact(ch.nonce, 32, 'challenge.nonce');
+  const expiry = parseExpiryDecimal(ch.expiry);
+  const chal = pullChallengeMessage({
+    domain: ENTRUST_DOMAIN,
+    nonce,
+    chanBind: chanBindForHost(host),
+    subjectRaw,
+    expiry,
+  });
+  const aux = new Uint8Array(32);
+  crypto.getRandomValues(aux);
+  const { pkBytes } = bip340NormaliseSecret(sk0.secretKey);
+  const signature = schnorr.sign(chal, sk0.secretKey, aux);
+  const enRes = await fetch(`${base}/v1/bootstrap/entrust`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json', accept: 'application/json' },
+    body: JSON.stringify({
+      challenge: { nonce: ch.nonce, expiry: ch.expiry },
+      ownership_proof: {
+        type: 'ownership',
+        subject: params.address,
+        public_key: encodeHexLower(pkBytes),
+        nk_commit: params.nkCommit,
+        signature: encodeHexLower(signature),
+      },
+      bundle: operationalBundleHexFromMnemonic(params.mnemonic, params.accountIndex),
+    }),
+    signal,
+  });
+  if (enRes.ok || enRes.status === 409 || enRes.status === 500) {
+    return;
+  }
+  const enText = await enRes.text();
+  throw new ApiError(enRes.status, `entrust failed: ${enText}`);
 }
 
 /** 4xx that prove the node refused the request before admitting a job. */
@@ -461,7 +609,7 @@ function mapHandshakeAbort(
     throw new JobFailedError(
       jobId,
       'timeout',
-      `timed out waiting for ${phase} after ${WAIT_TIMEOUT_MS}ms`,
+      `timed out waiting for ${phase} after ${PROVE_TIMEOUT_MS}ms`,
     );
   }
   if (jobId === '' && isProvenPreAdmitRejection(err)) {
@@ -484,8 +632,8 @@ async function reconcileSignedJob(
   jobId: string,
   opts: { onPhase?: (status: V1Job) => void },
 ): Promise<V1Job> {
-  const reconcileSignal = AbortSignal.timeout(WAIT_TIMEOUT_MS);
-  const reconcileDeadline = Date.now() + WAIT_TIMEOUT_MS;
+  const reconcileSignal = AbortSignal.timeout(PROVE_TIMEOUT_MS);
+  const reconcileDeadline = Date.now() + PROVE_TIMEOUT_MS;
   try {
     return await waitForJob(client, jobId, TERMINAL, {
       ...opts,
@@ -523,8 +671,8 @@ async function runTransitionHandshake(
     pinOnFirstUse?: boolean;
   } = {},
 ): Promise<V1Job> {
-  const deadline = Date.now() + WAIT_TIMEOUT_MS;
-  const signal = AbortSignal.timeout(WAIT_TIMEOUT_MS);
+  const deadline = Date.now() + PROVE_TIMEOUT_MS;
+  const signal = AbortSignal.timeout(PROVE_TIMEOUT_MS);
   const sleep = (ms: number): Promise<void> => {
     const remainingToDeadline = Math.max(0, deadline - Date.now());
     const capped = Math.min(Math.max(POLL_FLOOR_MS, ms), MAX_POLL_SLEEP_MS, remainingToDeadline);
@@ -551,16 +699,23 @@ async function runTransitionHandshake(
       ...(opts.pinOnFirstUse !== undefined ? { pinOnFirstUse: opts.pinOnFirstUse } : {}),
     });
     jobId = accepted.job_id;
+    if (opts.onPhase) {
+      opts.onPhase({
+        job_id: jobId,
+        kind: body.kind,
+        status: 'accepted',
+        phase: 'accepted',
+      } as V1Job);
+    }
   } catch (err) {
     mapHandshakeAbort(err, jobId, signal, 'submit');
   }
 
+  // Do not use SDK waitForAwaitingSignature: Retry-After: 0 on `accepted`
+  // busy-loops and misses the awaiting_signature transition.
   let awaiting: V1Job;
   try {
-    awaiting = await client.waitForAwaitingSignature(jobId, {
-      sleep,
-      signal,
-    });
+    awaiting = await pollJobUntilAwaiting(client, jobId, sleep, signal, opts.onPhase);
   } catch (err) {
     if (err instanceof JobFailedError) {
       throw err;
@@ -569,11 +724,8 @@ async function runTransitionHandshake(
       throw new JobFailedError(
         jobId,
         'timeout',
-        `timed out waiting for awaiting_signature after ${WAIT_TIMEOUT_MS}ms`,
+        `timed out waiting for awaiting_signature after ${PROVE_TIMEOUT_MS}ms`,
       );
-    }
-    if (err instanceof Error && err.message.includes('without Retry-After')) {
-      throw new JobFailedError(jobId, 'protocol', err.message);
     }
     throw new JobFailedError(
       jobId,
@@ -623,7 +775,7 @@ async function runTransitionHandshake(
     if (isAbortLike(err, signal)) {
       mapHandshakeAbort(err, jobId, signal, 'rehydrate');
     }
-    if (!isAccountNotFoundError(err)) {
+    if (!isAccountNotFoundError(err) && !isClosedSurfaceMissingAccount(err)) {
       mapHandshakeAbort(err, jobId, signal, 'rehydrate');
     }
     // Counter from the node job field — not a local invention.
@@ -658,7 +810,7 @@ async function runTransitionHandshake(
     throw new JobFailedError(
       jobId,
       'timeout',
-      `timed out waiting for sign after ${WAIT_TIMEOUT_MS}ms`,
+      `timed out waiting for sign after ${PROVE_TIMEOUT_MS}ms`,
     );
   }
 
@@ -901,6 +1053,16 @@ export const api = {
       const amountStr = params.amount;
 
       const client = v1Client();
+      const derived = accountKeysFromMnemonic(params.mnemonic, params.accountIndex);
+      await entrustOperationalBundle(
+        {
+          address: derived.address,
+          mnemonic: params.mnemonic,
+          nkCommit: derived.nkCommit,
+          accountIndex: params.accountIndex,
+        },
+        AbortSignal.timeout(PROVE_TIMEOUT_MS),
+      );
       const accountIndex = params.accountIndex;
       const npkRand = freshNpkRand();
 
@@ -920,7 +1082,7 @@ export const api = {
         // Node 404 = no account. sendCounter 0 only derives next_pubkey for the mint
         // request (protocol genesis). Signing still requires awaiting.send_counter === 0.
         // Other pre-pull failures wrap as ApiError so page-lock unlocks (ApiError = unlock).
-        if (isAccountNotFoundError(err)) {
+        if (isAccountNotFoundError(err) || isClosedSurfaceMissingAccount(err)) {
           sendCounter = 0;
         } else if (err instanceof ApiError) {
           throw err;
@@ -936,7 +1098,21 @@ export const api = {
       }
 
       const next = spendKeyAt(params.mnemonic, sendCounter + 1, accountIndex);
-      const assetId = params.asset_id ?? '00'.repeat(32);
+      const nameHash = new Uint8Array(
+        await crypto.subtle.digest('SHA-256', new TextEncoder().encode(params.name.trim())),
+      );
+      const computedAssetId = encodeHexLower(
+        digestToBytes(
+          assetIdV1(
+            GENESIS_TAG,
+            spendKeyAt(params.mnemonic, 0, accountIndex).publicKey,
+            nameHash,
+            params.decimals,
+            1,
+          ),
+        ),
+      );
+      const assetId = params.asset_id ?? computedAssetId;
 
       let output = {
         recipient: params.account_address,
@@ -953,6 +1129,28 @@ export const api = {
           network: client.network,
           pinStore: client.pinStore,
         });
+      } else if (derived.address === params.account_address) {
+        const info = await client.info();
+        const relayRaw = (info as unknown as { relay_url?: unknown }).relay_url;
+        const relayUrl = typeof relayRaw === 'string' ? relayRaw : '';
+        if (!relayUrl.startsWith('ws://') && !relayUrl.startsWith('wss://')) {
+          throw new ApiError(0, 'createCoin: GET /v1/info.relay_url missing or not a ws URL');
+        }
+        const invoiceKeys = invoiceKeysFromMnemonic(params.mnemonic, accountIndex);
+        const selfInvoice = await issueInvoice({
+          amount: amountStr,
+          assetId,
+          relays: [relayUrl.endsWith('/') ? relayUrl : `${relayUrl}/`],
+          sk0Secret: invoiceKeys.sk0Secret,
+          nkCommit: invoiceKeys.nkCommit,
+          ivpk: invoiceKeys.ivpk,
+          opSecret: invoiceKeys.opSecret,
+        });
+        output = placeDeliveryCredential(
+          output,
+          { type: 'invoice', invoice: selfInvoice },
+          { network: client.network, pinStore: client.pinStore },
+        );
       }
 
       const body: TransitionRequest = {

@@ -69,16 +69,15 @@ export default function SettingsPage() {
   const nodeHost = apiUrl.replace(/^https?:\/\//, '');
 
   useEffect(() => {
-    if (
-      !account &&
-      /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
-      typeof window !== 'undefined'
-    ) {
-      const t = setTimeout(() => {
-        if (!useWalletStore.getState().account) router.replace('/');
-      }, 100);
-      return () => clearTimeout(t);
-    }
+    if (account) return;
+    /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+    if (typeof window === 'undefined') return;
+    useWalletStore.getState().restoreUnlockedSession();
+    if (useWalletStore.getState().account) return;
+    const t = setTimeout(() => {
+      if (!useWalletStore.getState().account) router.replace('/');
+    }, 100);
+    return () => clearTimeout(t);
   }, [account, router]);
 
   const onDisconnect = async () => {

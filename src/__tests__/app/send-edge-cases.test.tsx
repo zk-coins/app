@@ -7,6 +7,7 @@ import { act, screen } from '@testing-library/react';
 import { render } from '@/__tests__/_helpers/intl';
 import SendPage from '@/app/send/page';
 import { useWalletStore } from '@/stores/wallet';
+import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
 import { useCapabilities } from '@/stores/capabilities';
 
 const routerReplace = vi.fn();
@@ -23,6 +24,7 @@ const ALICE = {
 };
 
 beforeEach(() => {
+  sessionStorage.clear();
   routerReplace.mockClear();
   useCapabilities.setState({
     capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: true },
@@ -40,6 +42,20 @@ beforeEach(() => {
 });
 
 describe('SendPage edge cases — unavailable', () => {
+  it('restores a persisted unlocked session instead of redirecting home', () => {
+    const derived = accountKeysFromMnemonic(ALICE.mnemonic);
+    const consistent = {
+      address: derived.address,
+      mnemonic: ALICE.mnemonic,
+      nkCommit: derived.nkCommit,
+    };
+    useWalletStore.getState().setAccount(consistent);
+    useWalletStore.setState({ account: null, isLocked: true });
+    render(<SendPage />);
+    expect(useWalletStore.getState().account).toEqual(consistent);
+    expect(routerReplace).not.toHaveBeenCalled();
+  });
+
   it('shows redirecting placeholder without account', () => {
     useWalletStore.setState({ account: null });
     render(<SendPage />);
