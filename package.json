@@ -24,7 +24,7 @@
   },
   "dependencies": {
     "@scure/bip32": "^2.2.0",
-    "@zkcoins/sdk": "github:zk-coins/sdk#dbea285e4d23cd393514065ec2f59cfd77595c68",
+    "@zkcoins/sdk": "github:zk-coins/sdk#d1f0bc8a26ea92940ced9bbc8eddaa91f3eb0099",
     "jsqr": "^1.4.0",
     "lucide-react": "^0.460.0",
     "next": "^15.5.18",
