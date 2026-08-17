@@ -7,9 +7,11 @@ import { defineConfig, devices } from '@playwright/test';
 //                        CI runs (`E2E_TARGET=local`, `E2E_NODE_URL=https://ci.zkcoins.app`).
 //                        Also `npm run test:e2e:local` / `scripts/e2e-local.sh`
 //                        (dev box default upstream: host.docker.internal:4242).
-//                        Builds with the same-origin proxy config, starts the
-//                        standalone server + the test-only `/v1/info`
-//                        capability-normalisation proxy, then invokes Playwright.
+//                        Builds with the proxy host baked into
+//                        NEXT_PUBLIC_API_URL (CORS; Next serves UI only),
+//                        starts the standalone server + the test-only
+//                        `/v1/info` capability-normalisation proxy, then
+//                        invokes Playwright.
 //                        See e2e/README.md § 4.2.
 //
 //   dev   (default when E2E_TARGET is unset): historical hosted-stack smoke
