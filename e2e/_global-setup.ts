@@ -175,14 +175,14 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
     applyColdStartTimeouts(aliceCtx);
     const alice = await withPageRetry(aliceCtx, 'create Alice wallet', async (page) => {
       await clearWalletState(page);
-      const preset = process.env.E2E_ALICE_MNEMONIC?.trim().split(/\s+/);
-      if (preset && preset.length === 12) {
+      const raw = process.env.E2E_ALICE_MNEMONIC?.trim();
+      const preset = raw ? raw.split(/\s+/) : [];
+      if (preset.length === 12) {
         return { ...(await restoreSeedWallet(page, preset, DEFAULT_PASSWORD)), mnemonic: preset };
       }
-      if (FAUCET_CALLS === 0) {
+      if (raw) {
         throw new Error(
-          'globalSetup: E2E_FAUCET_CALLS=0 requires E2E_ALICE_MNEMONIC (12 words). ' +
-            'A freshly created unminted wallet has no history and history specs fail late.',
+          `globalSetup: E2E_ALICE_MNEMONIC is set but has ${preset.length} words (need 12).`,
         );
       }
       return await createSeedWallet(page, DEFAULT_PASSWORD);

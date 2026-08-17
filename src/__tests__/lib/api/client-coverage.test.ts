@@ -2327,6 +2327,36 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     expect(signJob).not.toHaveBeenCalled();
   });
 
+  it('passes through ApiError from signAwaiting without reconciling', async () => {
+    const apiErr = new ApiError(0, 'pre-sign refused');
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('signAwaiting', () => {
+      throw apiErr;
+    });
+    const signJob = spyProto('signJob', async () => completedJob());
+    const getJob = spyGetJobAfterAwaiting(async () => ({
+      job: completedJob(),
+      retryAfterMs: null,
+    }));
+
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'SignerApiError',
+        decimals: 0,
+        amount: '10',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toBe(apiErr);
+    expect(signJob).not.toHaveBeenCalled();
+    expect(getJob).toHaveBeenCalled();
+  });
+
   it('maps KeyBindingRefusalError from signAwaiting to ApiError without reconciling', async () => {
     const refusal = new KeyBindingRefusalError({
       localPubkey: new Uint8Array(32),
