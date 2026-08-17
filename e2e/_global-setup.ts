@@ -179,6 +179,12 @@ export default async function globalSetup(config: FullConfig): Promise<void> {
       if (preset && preset.length === 12) {
         return { ...(await restoreSeedWallet(page, preset, DEFAULT_PASSWORD)), mnemonic: preset };
       }
+      if (FAUCET_CALLS === 0) {
+        throw new Error(
+          'globalSetup: E2E_FAUCET_CALLS=0 requires E2E_ALICE_MNEMONIC (12 words). ' +
+            'A freshly created unminted wallet has no history and history specs fail late.',
+        );
+      }
       return await createSeedWallet(page, DEFAULT_PASSWORD);
     });
     await aliceCtx.close();

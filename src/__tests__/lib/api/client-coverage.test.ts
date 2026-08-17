@@ -2327,7 +2327,7 @@ describe('runTransitionHandshake error branches via createCoin', () => {
     expect(signJob).not.toHaveBeenCalled();
   });
 
-  it('maps KeyBindingRefusalError from signAwaiting to unknown without reconciling', async () => {
+  it('maps KeyBindingRefusalError from signAwaiting to ApiError without reconciling', async () => {
     const refusal = new KeyBindingRefusalError({
       localPubkey: new Uint8Array(32),
       currentPubkey: new Uint8Array(32),
@@ -2361,17 +2361,15 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         accountIndex: 0,
       }),
     ).rejects.toMatchObject({
-      name: 'JobFailedError',
-      jobId: JOB_ID,
-      status: 'unknown',
-      serverError: refusal.message,
+      name: 'ApiError',
+      status: 0,
       message: refusal.message,
     });
     expect(signJob).not.toHaveBeenCalled();
     expect(getJob).toHaveBeenCalled();
   });
 
-  it('maps a plain Error from signAwaiting to unknown without reconciling', async () => {
+  it('maps a plain Error from signAwaiting to ApiError without reconciling', async () => {
     spyProto('openOwnershipPullSession', async () => {
       throw new V1ApiError(404, 'not_found', 'missing account');
     });
@@ -2396,17 +2394,15 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         accountIndex: 0,
       }),
     ).rejects.toMatchObject({
-      name: 'JobFailedError',
-      jobId: JOB_ID,
-      status: 'unknown',
-      serverError: 'local signer failed',
+      name: 'ApiError',
+      status: 0,
       message: 'local signer failed',
     });
     expect(signJob).not.toHaveBeenCalled();
     expect(getJob).toHaveBeenCalled();
   });
 
-  it('maps an opaque rejection from signAwaiting to unknown without reconciling', async () => {
+  it('maps an opaque rejection from signAwaiting to ApiError without reconciling', async () => {
     spyProto('openOwnershipPullSession', async () => {
       throw new V1ApiError(404, 'not_found', 'missing account');
     });
@@ -2431,10 +2427,8 @@ describe('runTransitionHandshake error branches via createCoin', () => {
         accountIndex: 0,
       }),
     ).rejects.toMatchObject({
-      name: 'JobFailedError',
-      jobId: JOB_ID,
-      status: 'unknown',
-      serverError: 'opaque signer failure',
+      name: 'ApiError',
+      status: 0,
       message: 'opaque signer failure',
     });
     expect(signJob).not.toHaveBeenCalled();
@@ -3060,6 +3054,81 @@ describe('waitForJob branches via completed handshake + poll', () => {
         accountIndex: 0,
       }),
     ).rejects.toMatchObject({ name: 'ApiError' });
+  });
+
+  it('fails closed when the entrust POST is a bare 500 without closed-surface body', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/challenge')) {
+          return new Response(
+            JSON.stringify({
+              nonce: 'aa'.repeat(32),
+              expiry: String(Math.floor(Date.now() / 1000) + 300),
+              domain: 'zkCoins/v1/EntrustChallenge',
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response('database down', { status: 500 });
+      }),
+    );
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'EntrustBare500',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'ApiError', status: 500 });
+  });
+
+  it('treats an entrust 500 with internal_error body as already present', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/challenge')) {
+          return new Response(
+            JSON.stringify({
+              nonce: 'aa'.repeat(32),
+              expiry: String(Math.floor(Date.now() / 1000) + 300),
+              domain: 'zkCoins/v1/EntrustChallenge',
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ code: 'internal_error', error: 'wrong_phase' }), {
+          status: 500,
+        });
+      }),
+    );
+    // After a recognized already-present, createCoin continues into the
+    // handshake. Stub the rest of the path so we only assert entrust
+    // did not throw — the handshake then fails at the first SDK call.
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    // Entrust must accept this 500. The rest of the handshake then uses
+    // the global fetch stub and ends as JobFailedError — that is still
+    // proof we did not throw `entrust failed`.
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'Entrust500Present',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'JobFailedError' });
   });
 
   it('fails closed when the entrust POST is a non-409/500 error', async () => {

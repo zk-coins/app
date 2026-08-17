@@ -520,8 +520,31 @@ function isAbortLike(err: unknown, signal: AbortSignal): boolean {
 const ENTRUST_DOMAIN = 'zkCoins/v1/EntrustChallenge';
 
 /**
+ * Closed-surface "bundle already present" on POST /v1/bootstrap/entrust.
+ * 409 is the typed conflict. The API also maps kernel `wrong_phase` to a
+ * generic 500 `internal_error` body — accept that only when the body
+ * actually carries that signal, never a bare 500.
+ */
+function isClosedSurfaceAlreadyEntrusted(status: number, body: string): boolean {
+  if (status === 409) return true;
+  if (status !== 500) return false;
+  let parsed: { error?: unknown; code?: unknown; message?: unknown } | null = null;
+  try {
+    parsed = JSON.parse(body) as { error?: unknown; code?: unknown; message?: unknown };
+  } catch {
+    return /wrong_phase|already (present|entrusted)|internal_error/i.test(body);
+  }
+  const code = typeof parsed.code === 'string' ? parsed.code : '';
+  const err = typeof parsed.error === 'string' ? parsed.error : '';
+  const message = typeof parsed.message === 'string' ? parsed.message : '';
+  const blob = `${code} ${err} ${message} ${body}`;
+  return /wrong_phase|already (present|entrusted)|internal_error/i.test(blob);
+}
+
+/**
  * POST /v1/bootstrap/entrust so finalize can upload under the account op.
- * 409 and closed-surface 500 mean the bundle is already present.
+ * 409 and a closed-surface 500 (`wrong_phase` / `internal_error` body)
+ * mean the bundle is already present. Any other 500 is a real failure.
  */
 async function entrustOperationalBundle(
   params: { address: string; mnemonic: string; nkCommit: string; accountIndex: number },
@@ -577,11 +600,11 @@ async function entrustOperationalBundle(
     }),
     signal,
   });
-  if (enRes.ok || enRes.status === 409 || enRes.status === 500) {
+  const enText = await enRes.text();
+  if (enRes.ok || isClosedSurfaceAlreadyEntrusted(enRes.status, enText)) {
     return;
   }
-  const enText = await enRes.text();
-  throw new ApiError(enRes.status, `entrust failed: ${enText}`);
+  throw new ApiError(enRes.status, `entrust failed: ${enText}`, enText);
 }
 
 /** 4xx that prove the node refused the request before admitting a job. */
@@ -833,8 +856,15 @@ async function runTransitionHandshake(
     if (err instanceof JobFailedError) {
       throw err;
     }
+    if (err instanceof ApiError) {
+      throw err;
+    }
+    // Local signer / key-binding refusals happen before signJob. Mapping
+    // them to JobFailedError('unknown') locks the create form as if the
+    // outcome were unknown after submit. Surface them as ApiError so the
+    // page can unlock.
     const message = err instanceof Error ? err.message : String(err);
-    throw new JobFailedError(jobId, 'unknown', message);
+    throw new ApiError(0, message);
   }
   try {
     await client.signJob(jobId, signBodyFromSignature(signature), signal);

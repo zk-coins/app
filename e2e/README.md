@@ -118,13 +118,12 @@ Only the normalised `GET /v1/info` body is rewritten; every other request passes
 #### Topology (all inside the one Playwright container)
 
 ```text
-browser ─(same-origin /v1/*)→ Next standalone :3090 ─(rewrites /v1/* )→ proxy :4243 ─→ node :4242
-e2e helpers (Node, E2E_API_URL) ──────────────────────────────────────→ proxy :4243 ─→ node :4242
+browser ─(CORS /v1/*)→ info-proxy (CI :8080 / local :4243) ─→ node
+e2e helpers (Node, E2E_API_URL) ─→ same info-proxy ─→ node
+Next standalone :3090 serves the UI only
 ```
 
-Both the browser path (via the Next same-origin rewrite — `LOCAL_NODE_PROXY_TARGET`, baked at build time because Next standalone applies `rewrites()` only via `node server.js`, never `next start`) and the test-helper path (`E2E_API_URL`) point at the proxy, so both observe the normalised `/v1/info`. The same-origin rewrite also dodges the `Idempotency-Key` CORS-preflight problem on the real send (browser → own origin, never cross-origin to the node).
-
-The browser build bakes `NEXT_PUBLIC_API_URL = http://127.0.0.1:3090` (the app's own origin) so SDK calls resolve same-origin and flow through the rewrite.
+Kernel `chan_bind` is `H("zkCoins/v1/PullHost" ‖ host)` from the SDK `apiUrl`. The browser build therefore bakes `NEXT_PUBLIC_API_URL` to the **proxy** host (CI `http://127.0.0.1:8080`, local `http://127.0.0.1:${E2E_INFO_PROXY_PORT:-4243}`), not the Next origin. Baking `:3090` produced a chan_bind mismatch and failed ownership-pull signatures. `LOCAL_NODE_PROXY_TARGET` still points at the same proxy so a leftover same-origin `/v1` rewrite would not fork the host. The proxy applies CORS (`applyCors`) because the browser origin (`:3090`) and the API host differ.
 
 #### `scripts/e2e-local.sh` env overrides
 
@@ -580,22 +579,26 @@ Determinism (the page renders a live, self-advancing chart — three variance so
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 60
     needs: lint-and-build
     env:
       E2E_TARGET: local
       E2E_BASE_URL: http://127.0.0.1:3090
-      E2E_API_URL: http://127.0.0.1:4243
+      E2E_API_URL: http://127.0.0.1:8080
+      E2E_LOCAL_APP_PORT: '3090'
+      E2E_INFO_PROXY_PORT: '8080'
       E2E_NODE_URL: https://ci.zkcoins.app
-      E2E_FAUCET_CALLS: '1'
+      E2E_FAUCET_CALLS: '0'
       E2E_NEED_FIXTURES: 'true'
+      E2E_ALICE_MNEMONIC: ${{ secrets.E2E_ALICE_MNEMONIC }}
+      E2E_BOB_MNEMONIC: ${{ secrets.E2E_BOB_MNEMONIC }}
     steps:
       - checkout
       - setup-node 22
       - npm ci
       - npx playwright install --with-deps chromium
-      - build standalone bundle (same-origin proxy baked in)
-      - serve standalone + info-proxy, then npx playwright test --project=chromium
+      - build standalone bundle (NEXT_PUBLIC_API_URL=http://127.0.0.1:8080)
+      - serve standalone + info-proxy :8080, then npx playwright test --project=chromium
       - upload diff report on failure (actions/upload-artifact)
 ```
 

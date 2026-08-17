@@ -15,9 +15,9 @@
  * other `/v1/*` (and health) path through 1:1.
  *
  * ── TOPOLOGY ──────────────────────────────────────────────────────────
- *     browser ──(same-origin /v1/*)──▶ Next standalone
- *                                         └─(rewrites /v1/*)─▶ this proxy ─▶ node
- *     e2e helpers (Node) ──(E2E_API_URL)──────────────────────▶ this proxy ─▶ node
+ *     browser ──(CORS /v1/*)──▶ this proxy ─▶ node
+ *     e2e helpers (Node, E2E_API_URL) ──▶ this proxy ─▶ node
+ *     Next standalone serves UI only; NEXT_PUBLIC_API_URL is this proxy.
  *
  * ── CONFIG (env) ──────────────────────────────────────────────────────
  *   E2E_INFO_PROXY_PORT   listen port           (default 4243)

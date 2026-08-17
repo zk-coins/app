@@ -15,9 +15,9 @@
 #
 # ── WHAT IT DOES (all inside the one container) ───────────────────────
 #   1. npm ci
-#   2. next build with the same-origin proxy config baked in:
-#        NEXT_PUBLIC_API_URL=http://127.0.0.1:<APP_PORT>   (browser → own origin)
-#        LOCAL_NODE_PROXY_TARGET=http://127.0.0.1:<PROXY_PORT> (Next rewrite → proxy)
+#   2. next build with the proxy host baked in (chan_bind must match):
+#        NEXT_PUBLIC_API_URL=http://127.0.0.1:<PROXY_PORT>  (browser → proxy, CORS)
+#        LOCAL_NODE_PROXY_TARGET=http://127.0.0.1:<PROXY_PORT>
 #   3. start the test-only /v1/info capability-normalisation proxy
 #      (scripts/e2e-info-proxy.mjs) → upstream local node
 #   4. start the Next standalone server (node .next/standalone/server.js)
@@ -26,9 +26,10 @@
 #   6. tear everything down
 #
 # ── TOPOLOGY ──────────────────────────────────────────────────────────
-#   browser ─(same-origin /v1/*)→ Next standalone ─(rewrite)→ proxy ─→ node
-#   e2e helpers (Node, E2E_API_URL) ─────────────────────────────────→ proxy ─→ node
-#   Both observe the DEV-normalised /v1/info; everything else hits the node 1:1.
+#   browser ─(CORS /v1/*)→ info-proxy :<PROXY_PORT> ─→ node
+#   e2e helpers (Node, E2E_API_URL) ─→ same info-proxy ─→ node
+#   Next standalone :<APP_PORT> serves UI only. Both observe the
+#   DEV-normalised /v1/info; everything else hits the node 1:1.
 #
 # ── CONFIG (env overrides) ────────────────────────────────────────────
 #   E2E_NODE_URL        upstream node, as seen FROM the container
