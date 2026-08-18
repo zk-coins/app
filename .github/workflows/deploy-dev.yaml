@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-24.04-arm
     steps:
       # App-only checkout. `@zkcoins/sdk` is a git dependency pinned in
-      # package.json (github:zk-coins/sdk#dbea285e4d23cd393514065ec2f59cfd77595c68) — `npm ci`
+      # package.json (github:zk-coins/sdk#d1f0bc8a26ea92940ced9bbc8eddaa91f3eb0099) — `npm ci`
       # inside the Docker build resolves it (lockfile pins the commit SHA).
       # Flip to published `@zkcoins/sdk@^0.4.0` on the release cutover.
       - name: Checkout

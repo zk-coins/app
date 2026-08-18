@@ -1,7 +1,7 @@
 FROM node:22-alpine AS base
 
 # Standalone app image. `@zkcoins/sdk` is resolved as a git dependency
-# (package.json → git+https://github.com/zk-coins/sdk.git#dbea285e4d23cd393514065ec2f59cfd77595c68;
+# (package.json → git+https://github.com/zk-coins/sdk.git#d1f0bc8a26ea92940ced9bbc8eddaa91f3eb0099;
 # flip to the published `@zkcoins/sdk@^0.4.0` once that release ships). No
 # sibling sdk/ checkout is required — `npm ci` fetches and `prepare` builds dist/.
 
