@@ -3122,6 +3122,37 @@ describe('waitForJob branches via completed handshake + poll', () => {
     ).rejects.toMatchObject({ name: 'JobFailedError' });
   });
 
+  it('fails closed when an entrust 500 JSON has non-string fields and no closed-surface signal', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/challenge')) {
+          return new Response(
+            JSON.stringify({
+              nonce: 'aa'.repeat(32),
+              expiry: String(Math.floor(Date.now() / 1000) + 300),
+              domain: 'zkCoins/v1/EntrustChallenge',
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ code: 1, error: 2, message: 3 }), { status: 500 });
+      }),
+    );
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'Entrust500NonString',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'ApiError', status: 500 });
+  });
+
   it('fails closed when the entrust POST is a bare 500 without closed-surface body', async () => {
     vi.stubGlobal(
       'fetch',
