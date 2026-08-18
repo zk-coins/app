@@ -3122,6 +3122,42 @@ describe('waitForJob branches via completed handshake + poll', () => {
     ).rejects.toMatchObject({ name: 'JobFailedError' });
   });
 
+  it('treats an entrust 500 whose JSON message is the closed-surface signal as already present', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes('/challenge')) {
+          return new Response(
+            JSON.stringify({
+              nonce: 'aa'.repeat(32),
+              expiry: String(Math.floor(Date.now() / 1000) + 300),
+              domain: 'zkCoins/v1/EntrustChallenge',
+            }),
+            { status: 200 },
+          );
+        }
+        return new Response(JSON.stringify({ message: 'already entrusted' }), { status: 500 });
+      }),
+    );
+    spyProto('openOwnershipPullSession', async () => {
+      throw new V1ApiError(404, 'not_found', 'missing account');
+    });
+    spyProto('submitTransition', async () => ({ job_id: JOB_ID, status: 'accepted' }));
+    spyProto('signAwaiting', () => DUMMY_SIG);
+    await expect(
+      api.createCoin({
+        account_address: ADDR,
+        name: 'Entrust500Message',
+        decimals: 0,
+        amount: '1',
+        mnemonic: MNEMONIC,
+        nkCommit: NK,
+        accountIndex: 0,
+      }),
+    ).rejects.toMatchObject({ name: 'JobFailedError' });
+  });
+
   it('fails closed when an entrust 500 JSON has non-string fields and no closed-surface signal', async () => {
     vi.stubGlobal(
       'fetch',
