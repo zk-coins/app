@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useCapabilities } from '@/stores/capabilities';
 import { api } from '@/lib/api/client';
+import { useNetworkStore } from '@/stores/network';
 
 const FAIL_CLOSED = {
   address_list: false,
@@ -33,7 +34,12 @@ describe('useCapabilities — initial state', () => {
 
 describe('useCapabilities.fetch — server response handling', () => {
   it('writes server capabilities to the store and sets loaded=true', async () => {
-    vi.spyOn(api, 'info').mockResolvedValue({ network: 'Mutinynet', capabilities: ALL_ON });
+    vi.spyOn(api, 'info').mockResolvedValue({
+      network: 'testnet',
+      protocol_version: 'v1',
+      features: ['wallet'],
+      capabilities: ALL_ON,
+    });
 
     await useCapabilities.getState().fetch();
 
@@ -41,17 +47,21 @@ describe('useCapabilities.fetch — server response handling', () => {
     expect(useCapabilities.getState().loaded).toBe(true);
   });
 
-  it('falls back to fail-closed when the server omits the capabilities field', async () => {
-    // Pre-#29 server: only `network`. Schema allows it, capabilities is undefined.
-    vi.spyOn(api, 'info').mockResolvedValue({ network: 'Mutinynet' });
+  it('fail-closes when the capabilities field is omitted', async () => {
+    vi.spyOn(api, 'info').mockResolvedValue({
+      network: 'testnet',
+      protocol_version: 'v1',
+      features: ['wallet'],
+    });
 
     await useCapabilities.getState().fetch();
 
     expect(useCapabilities.getState().capabilities).toEqual(FAIL_CLOSED);
     expect(useCapabilities.getState().loaded).toBe(true);
+    expect(useNetworkStore.getState().infoError).toMatch(/capabilities missing/);
   });
 
-  it('falls back to fail-closed when /api/info is unreachable', async () => {
+  it('falls back to fail-closed when /v1/info is unreachable', async () => {
     vi.spyOn(api, 'info').mockRejectedValue(new Error('network down'));
 
     await useCapabilities.getState().fetch();
@@ -69,5 +79,79 @@ describe('useCapabilities.fetch — server response handling', () => {
 
     expect(useCapabilities.getState().capabilities).toEqual(FAIL_CLOSED);
     expect(useCapabilities.getState().loaded).toBe(true);
+  });
+
+  it('stringifies non-Error rejections into applyInfoFailure', async () => {
+    vi.spyOn(api, 'info').mockRejectedValue('upstream-string-error');
+
+    await useCapabilities.getState().fetch();
+
+    expect(useCapabilities.getState().capabilities).toEqual(FAIL_CLOSED);
+    expect(useCapabilities.getState().loaded).toBe(true);
+  });
+
+  it('fail-closes when both capabilities and features are absent', async () => {
+    vi.spyOn(api, 'info').mockResolvedValue({
+      network: 'regtest',
+      protocol_version: 'v1',
+    } as never);
+
+    await useCapabilities.getState().fetch();
+
+    expect(useCapabilities.getState().capabilities).toEqual(FAIL_CLOSED);
+    expect(useCapabilities.getState().loaded).toBe(true);
+    expect(useNetworkStore.getState().infoError).toMatch(/capabilities missing/);
+  });
+
+  it('fail-closes capabilities when applyInfo rejects an unknown network tag', async () => {
+    vi.spyOn(api, 'info').mockResolvedValue({
+      network: 'not-a-v1-network',
+      protocol_version: 'v1',
+      features: ['wallet'],
+      capabilities: ALL_ON,
+    });
+
+    await useCapabilities.getState().fetch();
+
+    expect(useCapabilities.getState().capabilities).toEqual(FAIL_CLOSED);
+    expect(useCapabilities.getState().loaded).toBe(true);
+    expect(useNetworkStore.getState().infoError).toMatch(/unsupported network tag/);
+  });
+
+  it('coalesces concurrent fetch() into a single api.info call', async () => {
+    let resolveInfo!: (v: {
+      network: string;
+      protocol_version: string;
+      features: string[];
+      capabilities: typeof ALL_ON;
+    }) => void;
+    const infoPromise = new Promise<{
+      network: string;
+      protocol_version: string;
+      features: string[];
+      capabilities: typeof ALL_ON;
+    }>((r) => {
+      resolveInfo = r;
+    });
+    const infoSpy = vi
+      .spyOn(api, 'info')
+      .mockReturnValue(infoPromise as ReturnType<typeof api.info>);
+
+    const p1 = useCapabilities.getState().fetch();
+    const p2 = useCapabilities.getState().fetch();
+    expect(p1).toBe(p2);
+    expect(infoSpy).toHaveBeenCalledTimes(1);
+
+    resolveInfo({
+      network: 'testnet',
+      protocol_version: 'v1',
+      features: ['wallet'],
+      capabilities: ALL_ON,
+    });
+    await Promise.all([p1, p2]);
+
+    expect(useCapabilities.getState().capabilities).toEqual(ALL_ON);
+    expect(useCapabilities.getState().loaded).toBe(true);
+    expect(infoSpy).toHaveBeenCalledTimes(1);
   });
 });

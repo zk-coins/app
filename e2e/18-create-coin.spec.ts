@@ -2,20 +2,20 @@
  * Spec 18 — Create coin (`/create`)
  *
  * The neutral multi-asset model has no faucet: a wallet funds itself by
- * minting its own asset through this form (creator-signed two-phase mint —
- * `POST /api/jobs/mint` → poll `awaiting_signature` → commit → poll
+ * minting its own asset through this form (creator-signed mint via
+ * `POST /v1/tx` kind=mint → poll `awaiting_signature` → sign → poll
  * `completed`, see `src/lib/api/client.ts::createCoin`). This spec
  * baselines every form state the user can reach:
  *
  *   - initial / empty    (desktop + mobile) — submit disabled
  *   - filled             — all three fields valid, submit enabled
- *   - in-progress        — "Creating coin…" (admit route delayed so the
+ *   - in-progress        — "Creating coin…" (`POST /v1/tx` delayed so the
  *                          button parks in its `creating` state)
- *   - error              — admit route returns a structured 4xx `{error}`
- *   - success            — a REAL mint through the live node (Alice has an
- *                          xpriv); the success screen renders deterministic
- *                          chrome ("Coin created" + Done), amount/name are
- *                          stable because the spec chooses them.
+ *   - error              — `POST /v1/tx` returns a structured 4xx `{error}`
+ *   - success            — a REAL mint through the live node; the success
+ *                          screen renders deterministic chrome
+ *                          ("Coin created" + Done), amount/name are stable
+ *                          because the spec chooses them.
  *
  * `/create` renders with `showNav={false}` (no BottomNav). Only `creating`
  * and `success`/`error` states carry per-run-volatile content — the form
@@ -25,19 +25,20 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { aliceLogin } from './_helpers/fixtures';
-import { clearWalletState, createSeedWallet } from './_helpers/wallet';
+import { clearWalletState, createSeedWallet, restoreSeedWallet } from './_helpers/wallet';
+import { entrustMnemonic } from './_helpers/api';
 import { snap, setViewport } from './_helpers/screenshot';
 import { multiAssetEnabled } from './_helpers/capabilities';
 
-// The zkCoins PWA service worker can pass `/api/jobs/*` traffic before
+// The zkCoins PWA service worker can pass `/v1/tx` traffic before
 // `page.route()` sees it — block it so the route mocks are the only
-// handlers for the admit route (same rationale as spec 13).
+// handlers for the mint admit route.
 test.use({ serviceWorkers: 'block' });
 
 /** Log Alice in and open `/create`. */
 async function aliceGoToCreate(page: Page): Promise<void> {
   await aliceLogin(page);
-  await expect(page.getByTestId('asset-list')).toBeVisible({ timeout: 30_000 });
+  await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
   await page.getByTestId('create-coin-btn').click();
   await expect(page.getByTestId('create-heading')).toBeVisible({ timeout: 10_000 });
 }
@@ -84,20 +85,23 @@ test.describe('Create coin', () => {
 
   test('Visual Regression — create-in-progress', async ({ page }) => {
     await setViewport(page, 'mobile');
-    // Delay the admit route so the button parks in its "Creating coin…"
-    // disabled state long enough to capture (it never resolves within the
-    // shot window — the snapshot is taken while the request is in flight).
-    await page.context().route(/\/api\/jobs\/mint$/, async (route) => {
-      await new Promise((r) => setTimeout(r, 5_000));
-      await route.fulfill({
-        status: 202,
-        contentType: 'application/json',
-        body: JSON.stringify({ job_id: 'e2e-pending', status: 'queued' }),
-      });
+    // Hang POST /v1/tx so the button parks in its "Creating coin…" disabled
+    // state (request never settles — snapshot while Creating).
+    let txPosts = 0;
+    await page.context().route(/\/v1\/tx(?:\?|$)/, async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      txPosts += 1;
+      await new Promise(() => {});
     });
     await aliceGoToCreate(page);
     await fillForm(page);
     await page.getByTestId('create-submit-btn').click();
+    // Pre-pull (ownership session) runs before POST /v1/tx. Wait for the
+    // hung mint admit, not the first tick after click.
+    await expect.poll(() => txPosts, { timeout: 30_000 }).toBeGreaterThanOrEqual(1);
     // The submit button swaps to its "creating" label and disables. Assert the
     // disabled state (locale-independent) rather than the localized label — the
     // form fields are filled, so `disabled` here can only mean `creating`.
@@ -107,15 +111,22 @@ test.describe('Create coin', () => {
 
   test('Visual Regression — create-error', async ({ page }) => {
     await setViewport(page, 'mobile');
-    // Admit route rejects with a structured 4xx `{error}` — exactly the
-    // envelope the node emits when it refuses a mint before enqueueing.
-    await page.context().route(/\/api\/jobs\/mint$/, (route) =>
-      route.fulfill({
+    // POST /v1/tx rejects with a structured 4xx `{error}` — the envelope the
+    // node emits when it refuses a mint before enqueueing. Assert the mock
+    // actually observed the live path (no silent fall-through to the node).
+    const seenBodies: string[] = [];
+    await page.context().route(/\/v1\/tx(?:\?|$)/, async (route) => {
+      if (route.request().method() !== 'POST') {
+        await route.continue();
+        return;
+      }
+      seenBodies.push(route.request().postData() ?? '');
+      await route.fulfill({
         status: 422,
         contentType: 'application/json',
         body: JSON.stringify({ error: 'Invalid mint request' }),
-      }),
-    );
+      });
+    });
     await aliceGoToCreate(page);
     await fillForm(page);
     await page.getByTestId('create-submit-btn').click();
@@ -124,13 +135,16 @@ test.describe('Create coin', () => {
     // the fields still filled it is enabled again. Assert the state, not the
     // localized label.
     await expect(page.getByTestId('create-submit-btn')).toBeEnabled();
+    expect(seenBodies.length).toBe(1);
+    const body = JSON.parse(seenBodies[0]!) as { kind?: string };
+    expect(body.kind).toBe('mint');
     await snap(page, '18-create-error', { fullPage: true });
   });
 
   test('Visual Regression — create-success', async ({ page }) => {
     // A real mint through the live node: proof gen + commit + poll can take
     // well over the 30 s default on Mutinynet.
-    test.setTimeout(180_000);
+    test.setTimeout(1_200_000);
     await setViewport(page, 'mobile');
     // Mint into a FRESH throwaway wallet, not Alice/Bob: a real create-coin
     // mutates the wallet's server-truth portfolio, and Alice (funded) + Bob
@@ -138,7 +152,17 @@ test.describe('Create coin', () => {
     // snapshot. Using a per-test wallet keeps those goldens deterministic
     // under `fullyParallel`.
     await clearWalletState(page);
-    await createSeedWallet(page);
+    const preset = process.env.E2E_CREATE_MNEMONIC?.trim().split(/\s+/);
+    let mnemonic: string[];
+    if (preset && preset.length === 12) {
+      await restoreSeedWallet(page, preset);
+      mnemonic = preset;
+    } else {
+      mnemonic = (await createSeedWallet(page)).mnemonic;
+    }
+    // Finalize uploads under the account op key. Without an operational
+    // bundle the node skips the outbox forever and the mint never completes.
+    await entrustMnemonic(mnemonic.join(' '));
     await expect(page.getByTestId('create-coin-btn')).toBeVisible({ timeout: 30_000 });
     await page.getByTestId('create-coin-btn').click();
     await expect(page.getByTestId('create-heading')).toBeVisible({ timeout: 10_000 });
@@ -153,8 +177,12 @@ test.describe('Create coin', () => {
     // (`onPhase` → `create-phase`) that tracks the job through proving →
     // awaiting_signature → broadcasting. Assert it renders during the flow;
     // it is cleared once the success surface lands.
-    await expect(page.getByTestId('create-phase')).toBeVisible({ timeout: 60_000 });
-    await expect(page.getByTestId('create-success-heading')).toBeVisible({ timeout: 170_000 });
+    // Phase label is optional (poll may skip straight to a later job
+    // status). The success heading is the admit+sign+complete signal.
+    await expect(
+      page.getByTestId('create-phase').or(page.getByTestId('create-success-heading')),
+    ).toBeVisible({ timeout: 900_000 });
+    await expect(page.getByTestId('create-success-heading')).toBeVisible({ timeout: 1_200_000 });
     await expect(page.getByTestId('create-done-btn')).toBeVisible();
     await snap(page, '18-create-success', { fullPage: true });
   });

@@ -33,7 +33,7 @@ export function formatBtcCompact(sats: number): string {
 // Mock USD price during mock-prover phase. Wire to a real oracle later.
 export const MOCK_BTC_USD = 62_000;
 
-export function formatUsd(sats: number, price = MOCK_BTC_USD): string {
+export function formatUsd(sats: number, price: number): string {
   const usd = (sats / SATS_PER_BTC) * price;
   return usd.toLocaleString('en-US', {
     minimumFractionDigits: 2,
@@ -42,18 +42,34 @@ export function formatUsd(sats: number, price = MOCK_BTC_USD): string {
 }
 
 /**
- * Render an address as `<8-char-prefix>@<domain>`. The domain is the
- * external hostname reported by the connected server via `/api/info`
- * — the caller reads it from `useNetworkStore` and passes it in.
- * Returns the empty string when either input is missing so callers
- * can treat "no domain yet" as a loading state without an extra
- * branch at every call-site.
+ * Render a receive **name** for display/QR.
+ *
+ * Identity rule (mandate): present names only — never a raw `zk1…`
+ * address or bare key as the primary identity. When a username is set,
+ * returns `username@domain` (or bare username when the domain is empty).
+ * When only a domain is known and no username, returns empty so the UI
+ * can show a name-setup prompt instead of a truncated key.
+ *
+ * The second argument is kept for call-site compatibility; the first is
+ * the username (preferred) or empty.
  */
-export function toZkAddress(hexAddress: string, domain: string): string {
-  if (!domain) return '';
-  if (!hexAddress) return `@${domain}`;
-  const stripped = hexAddress.toLowerCase().replace(/^0x/, '');
-  return `${stripped.slice(0, 8)}@${domain}`;
+export function toDisplayName(username: string | undefined, domain: string): string {
+  if (!username) return '';
+  if (!domain) return username;
+  return `${username}@${domain}`;
+}
+
+/**
+ * @deprecated Prefer {@link toDisplayName}. Kept as a thin alias so
+ * existing screens compile while identity migration completes. Does
+ * **not** encode raw addresses — returns empty without a username.
+ */
+export function toZkAddress(usernameOrAddress: string, domain: string): string {
+  // If it looks like a bare zk1 / hex key, refuse to format it as identity.
+  if (/^zk1/i.test(usernameOrAddress) || /^[0-9a-f]{64}$/i.test(usernameOrAddress)) {
+    return '';
+  }
+  return toDisplayName(usernameOrAddress, domain);
 }
 
 export function truncateAddress(addr: string, head = 10, tail = 8): string {
@@ -70,21 +86,56 @@ export function formatRelative(ts: number): string {
   return `${Math.floor(diff / 86_400_000)}d ago`;
 }
 
+export function isNonNegativeSafeInteger(value: unknown): value is number {
+  return typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
+}
+
 /**
  * Format a raw integer asset amount (atomic units) using the asset's
  * `decimals`. Neutral multi-asset: there is no BTC/sats assumption — an
  * asset minted with `decimals: 0` renders as a plain integer, one with
- * `decimals: 8` like BTC. A missing `decimals` (received-only asset whose
- * genesis metadata the node never saw) falls back to `0` so the raw
- * integer is shown rather than a guessed scaling.
+ * `decimals: 8` like BTC. Invalid `decimals` or `amount` throw; callers
+ * must show an unavailable label rather than invent a scale.
  */
-export function formatAssetAmount(amount: number, decimals: number | undefined): string {
-  const d = decimals ?? 0;
-  if (d <= 0) return amount.toLocaleString('en-US');
-  return (amount / 10 ** d).toLocaleString('en-US', {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: d,
-  });
+export function formatAssetAmount(amount: number, decimals: number): string {
+  if (!Number.isSafeInteger(decimals) || decimals < 0) {
+    throw new Error(
+      `formatAssetAmount: decimals must be a non-negative integer, got ${JSON.stringify(decimals)}`,
+    );
+  }
+  if (!Number.isSafeInteger(amount) || amount < 0) {
+    throw new Error(
+      `formatAssetAmount: amount must be a non-negative integer, got ${JSON.stringify(amount)}`,
+    );
+  }
+  return formatAssetAmountString(String(amount), decimals);
+}
+
+/** Format an arbitrary-precision atomic-unit digit string without numeric conversion. */
+export function formatAssetAmountString(atomicDigits: string, decimals: number): string {
+  if (!/^[0-9]+$/.test(atomicDigits)) {
+    throw new Error(
+      `formatAssetAmountString: atomicDigits must be a non-empty unsigned decimal digit string, got ${JSON.stringify(atomicDigits)}`,
+    );
+  }
+  if (!Number.isSafeInteger(decimals) || decimals < 0) {
+    throw new Error(
+      `formatAssetAmountString: decimals must be a non-negative integer, got ${JSON.stringify(decimals)}`,
+    );
+  }
+
+  const digits = atomicDigits.replace(/^0+(?=\d)/, '');
+  const decimalIndex = digits.length - decimals;
+  const integerDigits = decimalIndex > 0 ? digits.slice(0, decimalIndex) : '0';
+  const groupedInteger = integerDigits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+
+  if (decimals === 0) return groupedInteger;
+
+  const fractionalDigits =
+    decimalIndex > 0
+      ? digits.slice(decimalIndex).replace(/0+$/, '')
+      : `${'0'.repeat(-decimalIndex)}${digits}`.replace(/0+$/, '');
+  return fractionalDigits.length > 0 ? `${groupedInteger}.${fractionalDigits}` : groupedInteger;
 }
 
 /** Short form of a 32-byte hex asset id — the trust anchor shown next to

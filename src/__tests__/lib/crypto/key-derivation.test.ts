@@ -1,33 +1,24 @@
 import { describe, it, expect } from 'vitest';
-import { deriveMnemonicFromPrf, DERIVATION_VERSION } from '@/lib/crypto/key-derivation';
+import { DERIVATION_VERSION, deriveMnemonicFromPrf } from '@/lib/crypto/key-derivation';
+import { isValidMnemonic } from '@/lib/crypto/account-keys';
 
-describe('key-derivation', () => {
+describe('deriveMnemonicFromPrf', () => {
   it('exports derivation version v1', () => {
     expect(DERIVATION_VERSION).toBe('v1');
   });
 
-  it('derives a mnemonic from PRF output', async () => {
-    const prfOutput = crypto.getRandomValues(new Uint8Array(32));
-    const mnemonic = await deriveMnemonicFromPrf(prfOutput);
-    expect(typeof mnemonic).toBe('string');
-    // The mock WASM returns the test mnemonic
+  it('derives a valid 12-word BIP-39 mnemonic from 32 PRF bytes', async () => {
+    const prf = new Uint8Array(32);
+    for (let i = 0; i < 32; i++) prf[i] = i + 1;
+    const mnemonic = await deriveMnemonicFromPrf(prf);
     expect(mnemonic.split(' ')).toHaveLength(12);
+    expect(await isValidMnemonic(mnemonic)).toBe(true);
   });
 
-  it('produces deterministic mnemonic from same PRF', async () => {
-    const prfOutput = crypto.getRandomValues(new Uint8Array(32));
-    const mnemonic1 = await deriveMnemonicFromPrf(prfOutput);
-    const mnemonic2 = await deriveMnemonicFromPrf(prfOutput);
-    expect(mnemonic1).toBe(mnemonic2);
-  });
-
-  it('calls WASM mnemonicFromEntropy with hex string', async () => {
-    const { initWasm } = await import('@zkcoins/wasm');
-    const wasm = await initWasm();
-
-    const prfOutput = crypto.getRandomValues(new Uint8Array(32));
-    await deriveMnemonicFromPrf(prfOutput);
-
-    expect(wasm.mnemonicFromEntropy).toHaveBeenCalledWith(expect.stringMatching(/^[0-9a-f]{32}$/));
+  it('is deterministic for the same PRF output', async () => {
+    const prf = new Uint8Array(32).fill(7);
+    const a = await deriveMnemonicFromPrf(prf);
+    const b = await deriveMnemonicFromPrf(prf);
+    expect(a).toBe(b);
   });
 });

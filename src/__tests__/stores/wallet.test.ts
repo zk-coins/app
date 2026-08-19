@@ -1,38 +1,101 @@
-import { describe, it, expect, beforeEach } from 'vitest';
-import { useWalletStore } from '@/stores/wallet';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import {
+  useWalletStore,
+  parseWalletPayload,
+  IncompatibleWalletError,
+  WALLET_PAYLOAD_VERSION,
+  WALLET_SESSION_KEY,
+  loadUnlockedSession,
+} from '@/stores/wallet';
 import type { Account } from '@/stores/wallet';
+import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
+import * as accountKeys from '@/lib/crypto/account-keys';
 
+// Syntactically valid drift fixture: address/nkCommit do NOT match the mnemonic.
 const testAccount: Account = {
-  address: 'a'.repeat(64),
-  numPubkeys: 0,
-  xpriv: 'xprv9s21ZrQH143K3GJpoapnV8SFfuZcECe',
+  address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
 };
 
+const consistentKeys = accountKeysFromMnemonic(testAccount.mnemonic);
+const consistentAccount: Account = {
+  address: consistentKeys.address,
+  mnemonic: consistentKeys.mnemonic,
+  nkCommit: consistentKeys.nkCommit,
+};
+
+async function persistRawV2Password(account: Account, password: string): Promise<void> {
+  const { encrypt, deriveKeyFromPassword } = await import('@/lib/crypto/encryption');
+  const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
+  const { key, salt } = await deriveKeyFromPassword(password);
+  const payload = JSON.stringify({
+    version: WALLET_PAYLOAD_VERSION,
+    account: {
+      address: account.address,
+      mnemonic: account.mnemonic,
+      nkCommit: account.nkCommit,
+      ...(account.username !== undefined ? { username: account.username } : {}),
+    },
+  });
+  const encrypted = await encrypt(payload, key, salt);
+  await saveEncryptedWallet({
+    encrypted,
+    authMethod: 'seed',
+    address: account.address,
+    createdAt: Date.now(),
+    payloadVersion: WALLET_PAYLOAD_VERSION,
+  });
+}
+
+async function persistRawV2Prf(account: Account, prfOutput: Uint8Array): Promise<void> {
+  const { encrypt, deriveKeyFromPrf } = await import('@/lib/crypto/encryption');
+  const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
+  const key = await deriveKeyFromPrf(prfOutput);
+  const payload = JSON.stringify({
+    version: WALLET_PAYLOAD_VERSION,
+    account: {
+      address: account.address,
+      mnemonic: account.mnemonic,
+      nkCommit: account.nkCommit,
+      ...(account.username !== undefined ? { username: account.username } : {}),
+    },
+  });
+  const encrypted = await encrypt(payload, key);
+  await saveEncryptedWallet({
+    encrypted,
+    authMethod: 'passkey',
+    address: account.address,
+    createdAt: Date.now(),
+    payloadVersion: WALLET_PAYLOAD_VERSION,
+  });
+}
+
 beforeEach(() => {
-  // Reset store
   useWalletStore.setState({
     account: null,
-    balance: null,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
     storedAddress: null,
     storedAuthMethod: null,
     error: null,
+    needsSeedReimport: false,
   });
-  // IndexedDB is reset in setup.ts via fresh IDBFactory per test
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 describe('wallet store — basic state', () => {
   it('has correct initial state', () => {
     const state = useWalletStore.getState();
     expect(state.account).toBeNull();
-    expect(state.balance).toBeNull();
     expect(state.isLoading).toBe(false);
     expect(state.isLocked).toBe(false);
     expect(state.hasStoredWallet).toBe(false);
     expect(state.error).toBeNull();
+    expect(state.needsSeedReimport).toBe(false);
   });
 
   it('sets account', () => {
@@ -59,66 +122,6 @@ describe('wallet store — basic state', () => {
     useWalletStore.getState().setError(null);
     expect(useWalletStore.getState().error).toBeNull();
   });
-});
-
-describe('wallet store — balance and pubkeys', () => {
-  it('sets balance as a top-level value, independent of account', () => {
-    useWalletStore.getState().setBalance(42000);
-    expect(useWalletStore.getState().balance).toBe(42000);
-    expect(useWalletStore.getState().account).toBeNull();
-  });
-
-  it('keeps balance separate from account identity', () => {
-    useWalletStore.getState().setAccount(testAccount);
-    useWalletStore.getState().setBalance(7777);
-    const state = useWalletStore.getState();
-    expect(state.balance).toBe(7777);
-    expect(state.account).toEqual(testAccount);
-  });
-
-  it('increments pubkeys', () => {
-    useWalletStore.getState().setAccount(testAccount);
-    useWalletStore.getState().incrementPubkeys();
-    expect(useWalletStore.getState().account?.numPubkeys).toBe(1);
-    useWalletStore.getState().incrementPubkeys();
-    expect(useWalletStore.getState().account?.numPubkeys).toBe(2);
-  });
-
-  it('does nothing when incrementing without account', () => {
-    useWalletStore.getState().incrementPubkeys();
-    expect(useWalletStore.getState().account).toBeNull();
-  });
-
-  it('syncs numPubkeys from the server (replaces local counter)', () => {
-    // Regression for the seed-restore desync: a freshly restored wallet
-    // has `numPubkeys = 0` even when the server holds N > 0 sends for
-    // the same address. `syncNumPubkeys(N)` is the authoritative path
-    // that heals the desync — replaces, doesn't increment.
-    useWalletStore.getState().setAccount({ ...testAccount, numPubkeys: 0 });
-    useWalletStore.getState().syncNumPubkeys(5);
-    expect(useWalletStore.getState().account?.numPubkeys).toBe(5);
-    // Subsequent ticks emit the same value — must be a no-op so React
-    // doesn't re-render every 5-s balance poll.
-    const before = useWalletStore.getState().account;
-    useWalletStore.getState().syncNumPubkeys(5);
-    expect(useWalletStore.getState().account).toBe(before);
-  });
-
-  it('syncNumPubkeys is a no-op when no account is loaded', () => {
-    // Defensive: pre-account ticks must not throw and must not
-    // spuriously create an account object.
-    useWalletStore.getState().syncNumPubkeys(3);
-    expect(useWalletStore.getState().account).toBeNull();
-  });
-
-  it('syncNumPubkeys can move the counter both up and down', () => {
-    // Down-counts are not expected in production (server is monotonic),
-    // but the store must not reject them — a desync diagnostic step is
-    // valuable if the server is ever reset/wiped.
-    useWalletStore.getState().setAccount({ ...testAccount, numPubkeys: 7 });
-    useWalletStore.getState().syncNumPubkeys(2);
-    expect(useWalletStore.getState().account?.numPubkeys).toBe(2);
-  });
 
   it('sets username on existing account', () => {
     useWalletStore.getState().setAccount(testAccount);
@@ -136,22 +139,144 @@ describe('wallet store — balance and pubkeys', () => {
     useWalletStore.getState().setUsername('alice');
     const account = useWalletStore.getState().account;
     expect(account?.address).toBe(testAccount.address);
-    expect(account?.numPubkeys).toBe(testAccount.numPubkeys);
+    expect(account?.mnemonic).toBe(testAccount.mnemonic);
+    expect(account?.nkCommit).toBe(testAccount.nkCommit);
     expect(account?.username).toBe('alice');
   });
 });
 
-describe('wallet store — defensive returns when no account', () => {
-  it('saveWithPassword silently returns when no account is set', async () => {
-    // Should not throw, should not write anything.
-    await expect(useWalletStore.getState().saveWithPassword('pw12345678')).resolves.toBeUndefined();
+describe('wallet store — tab session', () => {
+  it('persists a custody-consistent account and restores it after lock', () => {
+    useWalletStore.getState().setAccount(consistentAccount);
+    expect(loadUnlockedSession()).toEqual(consistentAccount);
+
+    useWalletStore.getState().lock();
+    expect(useWalletStore.getState().account).toBeNull();
+    expect(sessionStorage.getItem(WALLET_SESSION_KEY)).toBeNull();
+  });
+
+  it('restoreUnlockedSession rehydrates a persisted consistent account', () => {
+    useWalletStore.getState().setAccount(consistentAccount);
+    useWalletStore.setState({ account: null, isLocked: true });
+    expect(useWalletStore.getState().restoreUnlockedSession()).toBe(true);
+    expect(useWalletStore.getState().account).toEqual(consistentAccount);
+    expect(useWalletStore.getState().isLocked).toBe(false);
+  });
+
+  it('loadUnlockedSession drops a corrupt session payload', () => {
+    sessionStorage.setItem(WALLET_SESSION_KEY, 'not-json');
+    expect(loadUnlockedSession()).toBeNull();
+    expect(sessionStorage.getItem(WALLET_SESSION_KEY)).toBeNull();
+  });
+
+  it('loadUnlockedSession treats an empty session string as absent', () => {
+    sessionStorage.setItem(WALLET_SESSION_KEY, '');
+    expect(loadUnlockedSession()).toBeNull();
+  });
+
+  it('restoreUnlockedSession refuses after an incompatible stored wallet', () => {
+    useWalletStore.getState().setAccount(consistentAccount);
+    expect(loadUnlockedSession()).toEqual(consistentAccount);
+    useWalletStore.setState({
+      needsSeedReimport: true,
+      account: null,
+      isLocked: false,
+    });
+    expect(useWalletStore.getState().restoreUnlockedSession()).toBe(false);
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
+  it('does not persist a custody-inconsistent account', () => {
+    useWalletStore.getState().setAccount(testAccount);
+    expect(loadUnlockedSession()).toBeNull();
+    useWalletStore.setState({ account: null, isLocked: true });
+    expect(useWalletStore.getState().restoreUnlockedSession()).toBe(false);
+  });
+});
+
+describe('parseWalletPayload — versioned persistence', () => {
+  it('accepts a v2 payload with mnemonic + nkCommit', () => {
+    const raw = JSON.stringify({
+      version: WALLET_PAYLOAD_VERSION,
+      account: testAccount,
+    });
+    expect(parseWalletPayload(raw)).toEqual(testAccount);
+  });
+
+  it('accepts optional username and lowercases nkCommit', () => {
+    const raw = JSON.stringify({
+      version: WALLET_PAYLOAD_VERSION,
+      account: {
+        ...testAccount,
+        nkCommit: 'AB'.repeat(32),
+        username: 'alice',
+      },
+    });
+    expect(parseWalletPayload(raw)).toEqual({
+      ...testAccount,
+      nkCommit: 'ab'.repeat(32),
+      username: 'alice',
+    });
+  });
+
+  it('refuses non-object JSON roots', () => {
+    expect(() => parseWalletPayload('null')).toThrow(IncompatibleWalletError);
+    expect(() => parseWalletPayload('"string"')).toThrow(IncompatibleWalletError);
+    expect(() => parseWalletPayload('42')).toThrow(IncompatibleWalletError);
+  });
+
+  it('refuses unversioned legacy xpriv payloads', () => {
+    const raw = JSON.stringify({
+      account: {
+        address: testAccount.address,
+        xpriv: 'xprv-legacy',
+      },
+    });
+    expect(() => parseWalletPayload(raw)).toThrow(IncompatibleWalletError);
+  });
+
+  it('refuses v2 payload whose account is not an object', () => {
+    const raw = JSON.stringify({ version: 2, account: 'not-an-object' });
+    expect(() => parseWalletPayload(raw)).toThrow(IncompatibleWalletError);
+  });
+
+  it('refuses v2 account that still carries xpriv without mnemonic', () => {
+    const raw = JSON.stringify({
+      version: 2,
+      account: {
+        address: testAccount.address,
+        xpriv: 'xprv-still-here',
+        nkCommit: testAccount.nkCommit,
+      },
+    });
+    expect(() => parseWalletPayload(raw)).toThrow(IncompatibleWalletError);
+  });
+
+  it('refuses payload missing mnemonic/nkCommit', () => {
+    const raw = JSON.stringify({
+      version: 2,
+      account: { address: testAccount.address },
+    });
+    expect(() => parseWalletPayload(raw)).toThrow(IncompatibleWalletError);
+  });
+
+  it('refuses invalid JSON', () => {
+    expect(() => parseWalletPayload('not-json')).toThrow(IncompatibleWalletError);
+  });
+});
+
+describe('wallet store — throws when no account', () => {
+  it('saveWithPassword throws when no account is set', async () => {
+    await expect(useWalletStore.getState().saveWithPassword('pw12345678')).rejects.toThrow(
+      'No account to save',
+    );
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     expect(await loadEncryptedWallet()).toBeNull();
   });
 
-  it('saveWithPrf silently returns when no account is set', async () => {
+  it('saveWithPrf throws when no account is set', async () => {
     const prf = crypto.getRandomValues(new Uint8Array(32));
-    await expect(useWalletStore.getState().saveWithPrf(prf)).resolves.toBeUndefined();
+    await expect(useWalletStore.getState().saveWithPrf(prf)).rejects.toThrow('No account to save');
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     expect(await loadEncryptedWallet()).toBeNull();
   });
@@ -161,48 +286,250 @@ describe('wallet store — unlock edge cases', () => {
   it('unlockWithPassword throws on a stored wallet that has no salt', async () => {
     const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
     await saveEncryptedWallet({
-      // Missing salt — represents a corrupted or legacy-format blob.
       encrypted: { ciphertext: 'ct', iv: 'iv' },
       authMethod: 'seed',
       address: 'c'.repeat(64),
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
     await expect(useWalletStore.getState().unlockWithPassword('any')).rejects.toThrow(
       'No salt found in stored wallet',
     );
   });
+
+  it('marks needsSeedReimport when decrypting an incompatible payload', async () => {
+    useWalletStore.getState().setAccount(consistentAccount);
+    await useWalletStore.getState().saveWithPassword('testpassword123');
+
+    // Overwrite ciphertext with a valid-password encrypt of a legacy blob
+    // by re-saving via low-level encrypt of unversioned JSON.
+    // Envelope stays at WALLET_PAYLOAD_VERSION so decrypt-then-parse runs.
+    const { encrypt, deriveKeyFromPassword } = await import('@/lib/crypto/encryption');
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    const stored = await loadEncryptedWallet();
+    expect(stored).not.toBeNull();
+    const saltBin = atob(stored!.encrypted.salt!);
+    const salt = new Uint8Array(saltBin.length);
+    for (let i = 0; i < saltBin.length; i++) salt[i] = saltBin.charCodeAt(i);
+    const { key } = await deriveKeyFromPassword('testpassword123', salt);
+    const legacy = JSON.stringify({
+      account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 },
+    });
+    const encrypted = await encrypt(legacy, key, salt);
+    await saveEncryptedWallet({
+      encrypted,
+      authMethod: 'seed',
+      address: testAccount.address,
+      createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
+    // IndexedDB record must survive so the user can re-import or discard.
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+
+  it('unlockWithPassword refuses foreign payloadVersion without decrypting', async () => {
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'not-valid-ciphertext', iv: 'iv', salt: 'c2FsdA==' },
+      authMethod: 'seed',
+      address: testAccount.address,
+      createdAt: Date.now(),
+      payloadVersion: 1,
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('any-password')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const state = useWalletStore.getState();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.account).toBeNull();
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.isLocked).toBe(false);
+    expect(state.storedAddress).toBeNull();
+    expect(state.storedAuthMethod).toBeNull();
+    expect(state.error).toBe(
+      'Stored wallet format is incompatible with this build. Re-import your 12-word seed phrase.',
+    );
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+
+  it('unlockWithPassword refuses missing payloadVersion without decrypting', async () => {
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'garbage', iv: 'iv', salt: 'c2FsdA==' },
+      authMethod: 'seed',
+      address: testAccount.address,
+      createdAt: Date.now(),
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('any-password')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+
+  it('saveWithPassword activates the account only after a successful write', async () => {
+    expect(useWalletStore.getState().account).toBeNull();
+    await useWalletStore.getState().saveWithPassword('pw12345678', consistentAccount);
+    const state = useWalletStore.getState();
+    expect(state.account).toEqual(consistentAccount);
+    expect(state.hasStoredWallet).toBe(true);
+    expect(state.needsSeedReimport).toBe(false);
+    expect(state.isLocked).toBe(false);
+  });
+
+  it('failed saveWithPassword leaves account null and does not clear reimport', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi
+      .spyOn(storage, 'saveEncryptedWallet')
+      .mockRejectedValueOnce(new Error('IDB write failed'));
+
+    useWalletStore.setState({ needsSeedReimport: true, account: null });
+    await expect(
+      useWalletStore.getState().saveWithPassword('pw12345678', consistentAccount),
+    ).rejects.toThrow('IDB write failed');
+
+    const state = useWalletStore.getState();
+    expect(state.account).toBeNull();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.hasStoredWallet).toBe(false);
+    spy.mockRestore();
+  });
 });
 
 describe('wallet store — password encryption', () => {
-  it('saves and unlocks with password', async () => {
-    // Set up account
-    useWalletStore.getState().setAccount(testAccount);
-
-    // Save encrypted
+  it('saves and unlocks with password (v2 payload)', async () => {
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPassword('testpassword123');
 
-    // Verify wallet is stored in IndexedDB
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     const stored = await loadEncryptedWallet();
     expect(stored).not.toBeNull();
     expect(stored?.authMethod).toBe('seed');
-    expect(stored?.address).toBe(testAccount.address);
+    expect(stored?.address).toBe(consistentAccount.address);
+    expect(stored?.payloadVersion).toBe(WALLET_PAYLOAD_VERSION);
 
-    // Clear state to simulate page reload
     useWalletStore.setState({ account: null });
 
-    // Unlock
     await useWalletStore.getState().unlockWithPassword('testpassword123');
     const state = useWalletStore.getState();
-    expect(state.account).toEqual(testAccount);
+    expect(state.account).toEqual(consistentAccount);
     expect(state.isLocked).toBe(false);
+    expect(state.needsSeedReimport).toBe(false);
+  });
+
+  it('refuses unlock when address/nkCommit drift from the mnemonic', async () => {
+    await persistRawV2Password(testAccount, 'testpassword123');
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const state = useWalletStore.getState();
+    expect(state.account).toBeNull();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.isLocked).toBe(true);
+  });
+
+  it('refuses unlock when only nkCommit drifts from the mnemonic', async () => {
+    const driftedNkCommitAccount: Account = {
+      address: consistentAccount.address,
+      mnemonic: consistentAccount.mnemonic,
+      nkCommit: '11'.repeat(32),
+    };
+    await persistRawV2Password(driftedNkCommitAccount, 'testpassword123');
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
+  it('marks needsSeedReimport when mnemonic derivation throws', async () => {
+    const invalidMnemonicAccount: Account = {
+      address: consistentAccount.address,
+      mnemonic: 'notavalidmnemonicword '.repeat(12).trim(),
+      nkCommit: '00'.repeat(32),
+    };
+    await persistRawV2Password(invalidMnemonicAccount, 'testpassword123');
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
+  it('marks needsSeedReimport with fallback message when derivation throws a non-Error', async () => {
+    await useWalletStore.getState().saveWithPassword('testpassword123', consistentAccount);
+    useWalletStore.setState({ account: null, isLocked: true });
+
+    const spy = vi.spyOn(accountKeys, 'accountKeysFromMnemonic').mockImplementation(() => {
+      throw 'not-an-error';
+    });
+    try {
+      await expect(useWalletStore.getState().unlockWithPassword('testpassword123')).rejects.toThrow(
+        IncompatibleWalletError,
+      );
+      expect(useWalletStore.getState().error).toBe('Custody key derivation failed');
+      expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+      expect(useWalletStore.getState().account).toBeNull();
+    } finally {
+      spy.mockRestore();
+    }
   });
 
   it('fails to unlock with wrong password', async () => {
-    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPassword('correctpassword');
     useWalletStore.setState({ account: null });
     await expect(useWalletStore.getState().unlockWithPassword('wrongpassword')).rejects.toThrow();
+  });
+
+  it('saveWithPassword refuses a drifted custody triple without writing', async () => {
+    await expect(
+      useWalletStore.getState().saveWithPassword('pw12345678', testAccount),
+    ).rejects.toThrow(IncompatibleWalletError);
+    const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    expect(await loadEncryptedWallet()).toBeNull();
+    expect(useWalletStore.getState().account).toBeNull();
+    expect(useWalletStore.getState().needsSeedReimport).toBe(false);
+  });
+
+  it('saveWithPassword refuses an invalid mnemonic without writing', async () => {
+    const invalidMnemonicAccount: Account = {
+      address: consistentAccount.address,
+      mnemonic: 'notavalidmnemonicword '.repeat(12).trim(),
+      nkCommit: '00'.repeat(32),
+    };
+    await expect(
+      useWalletStore.getState().saveWithPassword('pw12345678', invalidMnemonicAccount),
+    ).rejects.toThrow(IncompatibleWalletError);
+    const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    expect(await loadEncryptedWallet()).toBeNull();
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
+  it('saveWithPassword asserts get().account when no second argument is given', async () => {
+    useWalletStore.getState().setAccount(testAccount);
+    await expect(useWalletStore.getState().saveWithPassword('pw12345678')).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    expect(await loadEncryptedWallet()).toBeNull();
+    expect(useWalletStore.getState().account).toEqual(testAccount);
+    expect(useWalletStore.getState().needsSeedReimport).toBe(false);
   });
 
   it('throws when no stored wallet exists', async () => {
@@ -216,20 +543,31 @@ describe('wallet store — PRF encryption', () => {
   it('saves and unlocks with PRF output', async () => {
     const prfOutput = crypto.getRandomValues(new Uint8Array(32));
 
-    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPrf(prfOutput);
 
-    // Verify stored
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     const stored = await loadEncryptedWallet();
     expect(stored?.authMethod).toBe('passkey');
+    expect(stored?.payloadVersion).toBe(WALLET_PAYLOAD_VERSION);
 
-    // Simulate reload
     useWalletStore.setState({ account: null });
 
-    // Unlock with same PRF
     await useWalletStore.getState().unlockWithPrf(prfOutput);
-    expect(useWalletStore.getState().account).toEqual(testAccount);
+    expect(useWalletStore.getState().account).toEqual(consistentAccount);
+  });
+
+  it('refuses PRF unlock when address/nkCommit drift from the mnemonic', async () => {
+    const prfOutput = crypto.getRandomValues(new Uint8Array(32));
+    await persistRawV2Prf(testAccount, prfOutput);
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPrf(prfOutput)).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const state = useWalletStore.getState();
+    expect(state.account).toBeNull();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.isLocked).toBe(true);
   });
 
   it('throws when no stored wallet exists', async () => {
@@ -243,22 +581,127 @@ describe('wallet store — PRF encryption', () => {
     const prf1 = crypto.getRandomValues(new Uint8Array(32));
     const prf2 = crypto.getRandomValues(new Uint8Array(32));
 
-    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPrf(prf1);
     useWalletStore.setState({ account: null });
 
     await expect(useWalletStore.getState().unlockWithPrf(prf2)).rejects.toThrow();
   });
+
+  it('saveWithPrf refuses a drifted custody triple without writing', async () => {
+    const prf = crypto.getRandomValues(new Uint8Array(32));
+    await expect(useWalletStore.getState().saveWithPrf(prf, testAccount)).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    expect(await loadEncryptedWallet()).toBeNull();
+    expect(useWalletStore.getState().account).toBeNull();
+    expect(useWalletStore.getState().needsSeedReimport).toBe(false);
+  });
+
+  it('marks needsSeedReimport when PRF-decrypt yields an incompatible payload', async () => {
+    const prf = crypto.getRandomValues(new Uint8Array(32));
+    useWalletStore.getState().setAccount(consistentAccount);
+    await useWalletStore.getState().saveWithPrf(prf);
+
+    // Envelope stays at WALLET_PAYLOAD_VERSION so decrypt-then-parse runs.
+    const { encrypt, deriveKeyFromPrf } = await import('@/lib/crypto/encryption');
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    const stored = await loadEncryptedWallet();
+    expect(stored).not.toBeNull();
+    const key = await deriveKeyFromPrf(prf);
+    const legacy = JSON.stringify({
+      account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 },
+    });
+    const encrypted = await encrypt(legacy, key);
+    await saveEncryptedWallet({
+      encrypted,
+      authMethod: 'passkey',
+      address: testAccount.address,
+      createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPrf(prf)).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
+  });
+
+  it('unlockWithPrf refuses foreign payloadVersion without decrypting', async () => {
+    const prf = crypto.getRandomValues(new Uint8Array(32));
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'not-valid-ciphertext', iv: 'iv' },
+      authMethod: 'passkey',
+      address: testAccount.address,
+      createdAt: Date.now(),
+      payloadVersion: 1,
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPrf(prf)).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    const state = useWalletStore.getState();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.account).toBeNull();
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.isLocked).toBe(false);
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+
+  it('unlockWithPrf refuses missing payloadVersion without decrypting', async () => {
+    const prf = crypto.getRandomValues(new Uint8Array(32));
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'garbage', iv: 'iv' },
+      authMethod: 'passkey',
+      address: testAccount.address,
+      createdAt: Date.now(),
+    });
+
+    useWalletStore.setState({ account: null, isLocked: true });
+    await expect(useWalletStore.getState().unlockWithPrf(prf)).rejects.toThrow(
+      IncompatibleWalletError,
+    );
+    expect(useWalletStore.getState().needsSeedReimport).toBe(true);
+    expect(useWalletStore.getState().account).toBeNull();
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+});
+
+describe('wallet store — clearNeedsSeedReimport', () => {
+  it('clears the reimport flag without touching the account', () => {
+    useWalletStore.setState({
+      needsSeedReimport: true,
+      account: testAccount,
+      error: 'legacy',
+    });
+    useWalletStore.getState().clearNeedsSeedReimport();
+    expect(useWalletStore.getState().needsSeedReimport).toBe(false);
+    expect(useWalletStore.getState().account).toEqual(testAccount);
+  });
+});
+
+describe('wallet store — serialize username branch', () => {
+  it('persists username when present on the account', async () => {
+    const withUser = { ...consistentAccount, username: 'alice' };
+    await useWalletStore.getState().saveWithPassword('password123', withUser);
+    useWalletStore.setState({ account: null, isLocked: true });
+    await useWalletStore.getState().unlockWithPassword('password123');
+    expect(useWalletStore.getState().account?.username).toBe('alice');
+  });
 });
 
 describe('wallet store — lock', () => {
-  it('clears account, resets balance to null, and sets isLocked', () => {
+  it('clears account and sets isLocked (no balance field)', () => {
     useWalletStore.getState().setAccount(testAccount);
-    useWalletStore.getState().setBalance(50000);
     useWalletStore.getState().lock();
     const state = useWalletStore.getState();
     expect(state.account).toBeNull();
-    expect(state.balance).toBeNull();
     expect(state.isLocked).toBe(true);
     expect(state.storedAddress).toBe(testAccount.address);
   });
@@ -278,7 +721,9 @@ describe('wallet store — checkForStoredWallet', () => {
       authMethod: 'seed',
       address: 'x'.repeat(64),
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
+    useWalletStore.setState({ error: 'stale' });
 
     await useWalletStore.getState().checkForStoredWallet();
     const state = useWalletStore.getState();
@@ -286,43 +731,103 @@ describe('wallet store — checkForStoredWallet', () => {
     expect(state.storedAddress).toBe('x'.repeat(64));
     expect(state.storedAuthMethod).toBe('seed');
     expect(state.isLocked).toBe(true);
+    expect(state.error).toBeNull();
   });
 
-  it('loads legacy localStorage wallet directly', async () => {
-    // Older bundles persisted `{ account, transactions }` in plaintext.
-    // The store now ignores any `transactions` field and loads only the
-    // account — verify the account still hydrates from the legacy blob.
-    const legacyData = {
-      account: testAccount,
-      transactions: [{ id: 'tx-1', type: 'mint', amount: 10000, timestamp: 1700000000000 }],
-    };
-    localStorage.setItem('zkcoins_wallet', JSON.stringify(legacyData));
+  it('requires seed re-import for IDB blob without payloadVersion and keeps the blob', async () => {
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'ct', iv: 'iv' },
+      authMethod: 'seed',
+      address: 'x'.repeat(64),
+      createdAt: Date.now(),
+    });
 
     await useWalletStore.getState().checkForStoredWallet();
     const state = useWalletStore.getState();
-    expect(state.account).toEqual(testAccount);
-    expect(state.isLocked).toBe(false);
+    expect(state.needsSeedReimport).toBe(true);
     expect(state.hasStoredWallet).toBe(false);
+    expect(state.isLocked).toBe(false);
+    expect(state.account).toBeNull();
+    expect(state.storedAddress).toBeNull();
+    expect(state.storedAuthMethod).toBeNull();
+    expect(state.error).toBe(
+      'Stored wallet format is incompatible with this build. Re-import your 12-word seed phrase.',
+    );
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+
+  it('requires seed re-import for IDB blob with foreign payloadVersion and keeps the blob', async () => {
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'ct', iv: 'iv' },
+      authMethod: 'seed',
+      address: 'y'.repeat(64),
+      createdAt: Date.now(),
+      payloadVersion: 1,
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.isLocked).toBe(false);
+    expect(state.account).toBeNull();
+    expect(await loadEncryptedWallet()).not.toBeNull();
+  });
+
+  it('keeps legacy localStorage blobs and requires seed re-import', async () => {
+    // Unversioned plaintext blobs are incompatible — never promote to account,
+    // but keep the only copy until re-import or confirmed discard.
+    const legacyData = {
+      account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 },
+    };
+    localStorage.setItem('zkcoins_wallet', JSON.stringify(legacyData));
+    useWalletStore.setState({ error: 'stale' });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.account).toBeNull();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.hasStoredWallet).toBe(false);
+    // needsSeedReimport is the gate; error is not sticky I/O / guidance here.
+    expect(state.error).toBeNull();
+    expect(localStorage.getItem('zkcoins_wallet')).not.toBeNull();
+  });
+
+  it('clears legacy storage only after successful v2 save', async () => {
+    const legacyData = {
+      account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 },
+    };
+    localStorage.setItem('zkcoins_wallet', JSON.stringify(legacyData));
+    useWalletStore.setState({
+      account: consistentAccount,
+      needsSeedReimport: true,
+    });
+
+    await useWalletStore.getState().saveWithPassword('password123');
+    const state = useWalletStore.getState();
+    expect(localStorage.getItem('zkcoins_wallet')).toBeNull();
+    expect(state.needsSeedReimport).toBe(false);
   });
 
   it('does nothing when no wallet stored anywhere', async () => {
+    useWalletStore.setState({ error: 'stale' });
     await useWalletStore.getState().checkForStoredWallet();
     const state = useWalletStore.getState();
     expect(state.hasStoredWallet).toBe(false);
     expect(state.account).toBeNull();
+    expect(state.error).toBeNull();
   });
 
   it('refreshes stored flags without re-locking on re-mount', async () => {
-    // Simulate a re-mount: the account is already unlocked in memory
-    // (e.g. user navigated away and back) and the encrypted blob still
-    // exists in IndexedDB. checkForStoredWallet should refresh the
-    // hasStoredWallet flag without touching isLocked.
     const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
     await saveEncryptedWallet({
       encrypted: { ciphertext: 'ct', iv: 'iv' },
       authMethod: 'passkey',
       address: 'b'.repeat(64),
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
 
     useWalletStore.setState({
@@ -331,6 +836,7 @@ describe('wallet store — checkForStoredWallet', () => {
       hasStoredWallet: false,
       storedAddress: null,
       storedAuthMethod: null,
+      error: 'stale',
     });
 
     await useWalletStore.getState().checkForStoredWallet();
@@ -340,15 +846,42 @@ describe('wallet store — checkForStoredWallet', () => {
     expect(state.hasStoredWallet).toBe(true);
     expect(state.storedAddress).toBe('b'.repeat(64));
     expect(state.storedAuthMethod).toBe('passkey');
+    expect(state.error).toBeNull();
+  });
+
+  it('re-mount with foreign payloadVersion forces re-import and clears the unlocked account', async () => {
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'ct', iv: 'iv' },
+      authMethod: 'passkey',
+      address: 'b'.repeat(64),
+      createdAt: Date.now(),
+      payloadVersion: 1,
+    });
+
+    useWalletStore.setState({
+      account: testAccount,
+      isLocked: false,
+      hasStoredWallet: true,
+      storedAddress: 'b'.repeat(64),
+      storedAuthMethod: 'passkey',
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.needsSeedReimport).toBe(true);
+    expect(state.account).toBeNull();
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.isLocked).toBe(false);
+    expect(await loadEncryptedWallet()).not.toBeNull();
   });
 
   it('returns early without setting flags when the unlocked account has no stored blob', async () => {
-    // Re-mount path but IndexedDB is empty — the function should still
-    // return early and leave the existing in-memory state intact.
     useWalletStore.setState({
       account: testAccount,
       isLocked: false,
       hasStoredWallet: false,
+      error: 'stale',
     });
 
     await useWalletStore.getState().checkForStoredWallet();
@@ -356,14 +889,138 @@ describe('wallet store — checkForStoredWallet', () => {
     expect(state.account).toEqual(testAccount);
     expect(state.isLocked).toBe(false);
     expect(state.hasStoredWallet).toBe(false);
+    expect(state.error).toBeNull();
+  });
+
+  it('surfaces loadEncryptedWallet error on unlocked path without clearing account', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi
+      .spyOn(storage, 'loadEncryptedWallet')
+      .mockRejectedValue(new Error('IDB unavailable'));
+
+    useWalletStore.setState({
+      account: testAccount,
+      isLocked: false,
+      hasStoredWallet: true,
+      needsSeedReimport: false,
+      error: null,
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('IDB unavailable');
+    expect(state.account).toEqual(testAccount);
+    expect(state.isLocked).toBe(false);
+    expect(state.hasStoredWallet).toBe(true);
+    expect(state.needsSeedReimport).toBe(false);
+    spy.mockRestore();
+  });
+
+  it('surfaces loadEncryptedWallet non-Error throw on unlocked path without clearing account', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi.spyOn(storage, 'loadEncryptedWallet').mockRejectedValue('idb-string-failure');
+
+    useWalletStore.setState({
+      account: testAccount,
+      isLocked: false,
+      hasStoredWallet: true,
+      needsSeedReimport: false,
+      error: null,
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('idb-string-failure');
+    expect(state.account).toEqual(testAccount);
+    expect(state.isLocked).toBe(false);
+    expect(state.hasStoredWallet).toBe(true);
+    expect(state.needsSeedReimport).toBe(false);
+    spy.mockRestore();
+  });
+
+  it('surfaces loadEncryptedWallet error on empty path without treating as no-blob', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi
+      .spyOn(storage, 'loadEncryptedWallet')
+      .mockRejectedValue(new Error('IDB unavailable'));
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('IDB unavailable');
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.needsSeedReimport).toBe(false);
+    expect(state.account).toBeNull();
+    spy.mockRestore();
+  });
+
+  it('surfaces loadEncryptedWallet non-Error throw on empty path without treating as no-blob', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi.spyOn(storage, 'loadEncryptedWallet').mockRejectedValue('idb-string-failure');
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('idb-string-failure');
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.needsSeedReimport).toBe(false);
+    expect(state.account).toBeNull();
+    spy.mockRestore();
+  });
+
+  it('does not fall through to legacy localStorage when loadEncryptedWallet rejects', async () => {
+    localStorage.setItem(
+      'zkcoins_wallet',
+      JSON.stringify({ account: { address: testAccount.address, xpriv: 'xprv…', numPubkeys: 0 } }),
+    );
+    const storage = await import('@/lib/crypto/storage');
+    const spy = vi
+      .spyOn(storage, 'loadEncryptedWallet')
+      .mockRejectedValue(new Error('IDB unavailable'));
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('IDB unavailable');
+    expect(state.needsSeedReimport).toBe(false);
+    expect(localStorage.getItem('zkcoins_wallet')).not.toBeNull();
+    spy.mockRestore();
+  });
+
+  it('surfaces localStorage.getItem Error on the legacy path', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const loadSpy = vi.spyOn(storage, 'loadEncryptedWallet').mockResolvedValue(null);
+    const getItemSpy = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw new Error('localStorage blocked');
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('localStorage blocked');
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.needsSeedReimport).toBe(false);
+    getItemSpy.mockRestore();
+    loadSpy.mockRestore();
+  });
+
+  it('surfaces localStorage.getItem non-Error throw on the legacy path', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const loadSpy = vi.spyOn(storage, 'loadEncryptedWallet').mockResolvedValue(null);
+    const getItemSpy = vi.spyOn(localStorage, 'getItem').mockImplementation(() => {
+      throw 'ls-string-failure';
+    });
+
+    await useWalletStore.getState().checkForStoredWallet();
+    const state = useWalletStore.getState();
+    expect(state.error).toBe('ls-string-failure');
+    expect(state.hasStoredWallet).toBe(false);
+    expect(state.needsSeedReimport).toBe(false);
+    getItemSpy.mockRestore();
+    loadSpy.mockRestore();
   });
 });
 
 describe('wallet store — deleteWallet', () => {
   it('clears IndexedDB, localStorage, and state', async () => {
-    useWalletStore.getState().setAccount(testAccount);
+    useWalletStore.getState().setAccount(consistentAccount);
     await useWalletStore.getState().saveWithPassword('pw12345678');
-    // A stale history cache from an older bundle must be swept on delete.
     localStorage.setItem('zkcoins_transactions', JSON.stringify([{ id: 'x' }]));
 
     await useWalletStore.getState().deleteWallet();
@@ -374,13 +1031,12 @@ describe('wallet store — deleteWallet', () => {
     expect(state.hasStoredWallet).toBe(false);
     expect(state.storedAddress).toBeNull();
     expect(state.storedAuthMethod).toBeNull();
+    expect(state.needsSeedReimport).toBe(false);
 
-    // IndexedDB should be empty
     const { loadEncryptedWallet } = await import('@/lib/crypto/storage');
     const stored = await loadEncryptedWallet();
     expect(stored).toBeNull();
 
-    // Legacy localStorage history cache should be removed
     expect(localStorage.getItem('zkcoins_transactions')).toBeNull();
   });
 });

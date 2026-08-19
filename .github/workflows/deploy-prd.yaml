@@ -24,6 +24,10 @@ jobs:
     name: Build and deploy to PRD
     runs-on: ubuntu-24.04-arm
     steps:
+      # App-only checkout. `@zkcoins/sdk` is a git dependency pinned in
+      # package.json (github:zk-coins/sdk#d1f0bc8a26ea92940ced9bbc8eddaa91f3eb0099) — `npm ci`
+      # inside the Docker build resolves it (lockfile pins the commit SHA).
+      # Flip to published `@zkcoins/sdk@^0.4.0` on the release cutover.
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -40,6 +44,7 @@ jobs:
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile
           push: true
           tags: ${{ env.DOCKER_TAGS }}
           platforms: linux/arm64

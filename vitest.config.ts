@@ -7,7 +7,6 @@ export default defineConfig({
   resolve: {
     alias: {
       '@/': path.resolve(__dirname, './src/') + '/',
-      '@zkcoins/wasm': path.resolve(__dirname, './packages/zkcoins-wasm/src/index.ts'),
     },
   },
   test: {
@@ -22,7 +21,7 @@ export default defineConfig({
         'src/hooks/**',
         'src/components/**',
         'src/app/**',
-        // E2E-only `/api/info` proxy. Not app code, but it is security-
+        // E2E-only `/v1/info` proxy. Not app code, but it is security-
         // sensitive (it handles upstream errors + logs), so its pure
         // logic is unit-tested and pinned at 100 % below. The standalone
         // entry that binds a port is `c8 ignore`d (E2E-exercised only).
@@ -59,29 +58,16 @@ export default defineConfig({
       //    that is not exercised by a test fails CI. Defensive code that
       //    genuinely cannot be reached in the unit test environment (SSR
       //    guards, IDB error callbacks, timeout fallbacks) is marked
-      //    `/* c8 ignore */` at the source.
+      //    `/* v8 ignore */` (or legacy `/* c8 ignore */`) at the source.
       //
-      // 2. Global aggregate (includes `src/app/**` + `src/components/**`).
-      //    The DEBT exclude list is fully burned down — every default-active
-      //    file is now covered, so the only files outside the aggregate are
-      //    the env-gated ones above. The floors below sit just under the live
-      //    numbers so no regression can drop coverage; they ratchet upward and
-      //    never move down. The residual gap to 100 % is the non-function axes
-      //    on the app surface (render branches + defensive guards that are
-      //    exercised by E2E, not unit).
-      //
-      //    Issue #188: the `src/app/**` route surface is at 100 % function
-      //    coverage (every route-component handler is unit-tested), pinned by
-      //    the per-glob `src/app/**` functions:100 gate below.
+      // 2. Global aggregate (includes `src/app/**` + `src/components/**`) —
+      //    strict 100 % on all four axes for every default-active source.
       thresholds: {
-        // Global aggregate over every included file (incl. lib/stores).
-        // Ratcheted up after the DEBT burn-down completed (network-activity
-        // lib + chart UI, decorative icons, root layout all now covered) —
-        // floors sit just under the live numbers and only move upward.
-        lines: 92,
-        statements: 92,
-        functions: 94,
-        branches: 85,
+        // Global hard gate over every included default-active file.
+        lines: 100,
+        statements: 100,
+        functions: 100,
+        branches: 100,
         // Strict gate, applied per-glob aggregate. The aggregate over
         // `src/lib/**` (and `src/stores/**`) must be 100 %, which — since
         // aggregate = covered / total — is equivalent to every file in
@@ -91,12 +77,10 @@ export default defineConfig({
         // Hooks are activated surface too (issue #175 — `useHistory` is the
         // App's only transaction-history source of truth): same strict gate.
         'src/hooks/**': { lines: 100, statements: 100, functions: 100, branches: 100 },
-        // Route surface (issue #188): every route-component handler is now
-        // unit-tested, so pin function coverage at 100 % per-glob. Lines /
-        // statements / branches are NOT yet at 100 % here (several render
-        // branches and defensive guards remain E2E-only), so only the
-        // functions axis is gated — enough to stop an untested handler from
-        // landing in a route component, which the global aggregate let slip.
+        // Route surface (issue #188): the global aggregate already gates all
+        // four axes at 100 %. This per-glob entry is an additional functions
+        // guard on `src/app/**` so an untested route-component handler cannot
+        // slip through even if other surfaces keep the global average green.
         'src/app/**': { functions: 100 },
         // Security-sensitive E2E proxy (CodeQL: stack-trace-exposure +
         // clear-text-logging were fixed here) — keep every reachable

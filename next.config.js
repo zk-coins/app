@@ -6,13 +6,8 @@ const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   output: 'standalone',
-  webpack: (config) => {
-    config.experiments = {
-      ...config.experiments,
-      asyncWebAssembly: true,
-    };
-    return config;
-  },
+  // Compile the SDK package (git dep or published) through Next's graph.
+  transpilePackages: ['@zkcoins/sdk'],
   // Serve the static user handbook (public/handbook/index.html) at the
   // clean URL /handbook. The screenshots subfolder is reached normally
   // via /handbook/screenshots/*.
@@ -23,17 +18,13 @@ const nextConfig = {
     ];
 
     // Local-only same-origin proxy to a zkCoins node. Used by the local
-    // E2E send-leg run (`E2E_API_URL`/`NEXT_PUBLIC_API_URL` point at this
-    // app's own origin), so the browser talks to the node without a
-    // cross-origin preflight — the node's CORS policy allows `*` origin
-    // but not the `Idempotency-Key` request header, which would otherwise
-    // make the admit POST fail with "Failed to fetch". Unset in CI and
-    // the Docker image, so production builds never proxy.
+    // E2E run so the browser talks to the node without a cross-origin
+    // preflight. Proxies the closed `/v1/*` surface (and health).
     const proxyTarget = process.env.LOCAL_NODE_PROXY_TARGET;
     if (proxyTarget) {
       const base = proxyTarget.replace(/\/+$/, '');
       rewrites.push(
-        { source: '/api/:path*', destination: `${base}/api/:path*` },
+        { source: '/v1/:path*', destination: `${base}/v1/:path*` },
         { source: '/health/:path*', destination: `${base}/health/:path*` },
         { source: '/health', destination: `${base}/health` },
       );

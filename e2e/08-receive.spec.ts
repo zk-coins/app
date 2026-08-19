@@ -1,68 +1,49 @@
 /**
- * Spec 08 — Receive Bitcoin (address + QR)
+ * Spec 08 — Receive
  *
- * Covers § 8.8 of e2e/README.md. The `/receive` screen plus the copy
- * affordance. 4 tests, 4 linux baselines.
- *
- * DEV-only widgets visible in these baselines (per § 8.0 (b)):
- *   - Apps tab in BottomNav (hidden via showNav=false on receive page)
- *   - none of the WalletScreen gated UI — receive page is sparse.
- *
- * Locators: testid-based throughout.
+ * Without a provisioned name, Receive is not available (Send rejects raw
+ * zk1 addresses). Fixtures do not claim names, so the honest surface is
+ * `receive-not-available`.
  */
 
 import { expect, test, type Page } from '@playwright/test';
 import { aliceLogin } from './_helpers/fixtures';
-import { getUsernameDomain, zkAddressRegex } from './_helpers/api';
 import { snap, setViewport } from './_helpers/screenshot';
 
-/** Navigate Wallet → /receive via the in-app Receive link. */
 async function goToReceive(page: Page): Promise<void> {
   await page.getByTestId('wallet-receive-btn').click();
   await expect(page.getByTestId('receive-heading')).toBeVisible({ timeout: 10_000 });
 }
 
-test.describe('Receive Bitcoin', () => {
+test.describe('Receive — not available without a name', () => {
   test.beforeEach(async ({ page }) => {
+    test.setTimeout(60_000);
     await aliceLogin(page);
   });
 
-  test('receive-default-desktop', async ({ page }) => {
+  test('receive-not-available-desktop', async ({ page }) => {
     await setViewport(page, 'desktop');
     await goToReceive(page);
+    await expect(page.getByTestId('receive-not-available')).toBeVisible();
+    await expect(page.getByTestId('qr-code')).toHaveCount(0);
     await snap(page, '08-receive-default-desktop');
   });
 
-  test('receive-default-mobile', async ({ page }) => {
+  test('receive-not-available-mobile', async ({ page }) => {
     await setViewport(page, 'mobile');
     await goToReceive(page);
+    await expect(page.getByTestId('receive-not-available')).toBeVisible();
+    await expect(page.getByTestId('receive-copy-btn')).toHaveCount(0);
     await snap(page, '08-receive-default-mobile');
-  });
-
-  test('receive-after-copy', async ({ page }) => {
-    await setViewport(page, 'mobile');
-    await page.context().grantPermissions(['clipboard-read', 'clipboard-write']);
-    await goToReceive(page);
-    await page.getByTestId('receive-copy-btn').click();
-    await expect(page.getByTestId('receive-copy-btn')).toHaveAttribute('data-copied', 'true', {
-      timeout: 2_000,
-    });
-    await snap(page, '08-receive-after-copy');
   });
 
   test('receive-back-to-wallet', async ({ page }) => {
     await setViewport(page, 'mobile');
     await goToReceive(page);
     await page.getByTestId('receive-back-link').click();
-    // The chip is the most reliable marker for WalletScreen.
-    // Suffix is server-reported via /api/info.username_domain (per-stage).
-    const chip = zkAddressRegex(await getUsernameDomain());
-    await expect(page.locator(`text=${chip}`).first()).toBeVisible({
-      timeout: 10_000,
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({
+      timeout: 30_000,
     });
-    // Wait for the balance tick to land so this captures the post-receive
-    // funded view (not the pre-tick empty banner).
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
     await snap(page, '08-receive-back-to-wallet', { fullPage: true });
   });
 });

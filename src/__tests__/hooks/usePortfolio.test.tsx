@@ -1,17 +1,11 @@
 /**
- * `usePortfolio` — server-truth multi-asset portfolio hook
- * (`src/hooks/usePortfolio.ts`).
- *
- * Covers: mount fetch, 5 s re-poll cadence, account-swap reset, the
- * parked `undefined`-address path, error swallowing (keeps the last good
- * list, still flips `loaded`), and unmount cleanup (no post-unmount writes
- * for both the resolve and reject branches).
+ * `usePortfolio` — fail-loud portfolio hook.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { act, renderHook, waitFor } from '@testing-library/react';
 import { usePortfolio } from '@/hooks/usePortfolio';
-import { api, type OwnerBalanceResponse } from '@/lib/api/client';
+import { ApiError, api, type OwnerBalanceResponse } from '@/lib/api/client';
 
 const ADDR_A = 'a'.repeat(64);
 const ADDR_B = 'b'.repeat(64);
@@ -34,13 +28,15 @@ afterEach(() => {
 });
 
 describe('usePortfolio', () => {
-  it('fetches on mount and exposes assets + loaded', async () => {
+  it('fetches on mount and exposes assets + loaded + available', async () => {
     ownerSpy.mockResolvedValue(portfolio([ASSET]));
     const { result } = renderHook(() => usePortfolio(ADDR_A));
     expect(result.current.loaded).toBe(false);
 
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(result.current.assets).toEqual([ASSET]);
+    expect(result.current.available).toBe(true);
+    expect(result.current.error).toBeNull();
     expect(ownerSpy).toHaveBeenCalledWith(ADDR_A);
   });
 
@@ -57,6 +53,7 @@ describe('usePortfolio', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(result.current.assets).toEqual([]);
+    expect(result.current.available).toBe(true);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_000);
@@ -79,6 +76,7 @@ describe('usePortfolio', () => {
     expect(ownerSpy).not.toHaveBeenCalled();
     expect(result.current.assets).toEqual([]);
     expect(result.current.loaded).toBe(false);
+    expect(result.current.available).toBe(false);
   });
 
   it('resets assets + loaded when the address changes', async () => {
@@ -97,9 +95,10 @@ describe('usePortfolio', () => {
 
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(result.current.assets).toEqual([]);
+    expect(result.current.available).toBe(true);
   });
 
-  it('swallows a fetch error, keeps the last good list, still flips loaded', async () => {
+  it('keeps last good list as stale when a later poll fails', async () => {
     ownerSpy.mockResolvedValueOnce(portfolio([ASSET])).mockRejectedValue(new Error('boom'));
 
     vi.useFakeTimers();
@@ -108,19 +107,41 @@ describe('usePortfolio', () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(result.current.assets).toHaveLength(1);
+    expect(result.current.available).toBe(true);
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(result.current.assets).toHaveLength(1);
+    expect(result.current.stale).toBe(true);
+    expect(result.current.error).toMatch(/boom/);
+    expect(result.current.available).toBe(false);
     expect(result.current.loaded).toBe(true);
   });
 
-  it('marks loaded even when the first fetch fails', async () => {
+  it('first non-501 error sets error and does not claim available empty wallet', async () => {
     ownerSpy.mockRejectedValue(new Error('down'));
     const { result } = renderHook(() => usePortfolio(ADDR_A));
     await waitFor(() => expect(result.current.loaded).toBe(true));
     expect(result.current.assets).toEqual([]);
+    expect(result.current.available).toBe(false);
+    expect(result.current.error).toMatch(/down/);
+    expect(result.current.unavailableReason).toBeNull();
+  });
+
+  it('surfaces available:false on 501 (not an empty wallet)', async () => {
+    ownerSpy.mockRejectedValue(
+      new ApiError(
+        501,
+        'portfolio not available in this build — AccountState balances decode is not wired yet',
+      ),
+    );
+    const { result } = renderHook(() => usePortfolio(ADDR_A));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.available).toBe(false);
+    expect(result.current.assets).toEqual([]);
+    expect(result.current.error).toBeNull();
+    expect(result.current.unavailableReason).toMatch(/not available/i);
   });
 
   it('does not write state when the fetch resolves after unmount', async () => {
@@ -164,5 +185,50 @@ describe('usePortfolio', () => {
       await Promise.resolve();
     });
     expect(ownerSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps last good list as stale when a later poll is 501', async () => {
+    ownerSpy
+      .mockResolvedValueOnce(portfolio([ASSET]))
+      .mockRejectedValue(
+        new ApiError(
+          501,
+          'portfolio not available in this build — AccountState balances decode is not wired yet',
+        ),
+      );
+
+    vi.useFakeTimers();
+    const { result } = renderHook(() => usePortfolio(ADDR_A));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(result.current.available).toBe(true);
+    expect(result.current.assets).toHaveLength(1);
+
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(result.current.assets).toHaveLength(1);
+    expect(result.current.stale).toBe(true);
+    expect(result.current.available).toBe(false);
+    expect(result.current.unavailableReason).toMatch(/not available/i);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('uses ApiError.message when serverError is omitted on 501', async () => {
+    const err = new ApiError(501);
+    ownerSpy.mockRejectedValue(err);
+    const { result } = renderHook(() => usePortfolio(ADDR_A));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.unavailableReason).toBe(err.message);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('stringifies non-Error rejections into error', async () => {
+    ownerSpy.mockRejectedValue('raw-portfolio-failure');
+    const { result } = renderHook(() => usePortfolio(ADDR_A));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.error).toBe('raw-portfolio-failure');
+    expect(result.current.available).toBe(false);
   });
 });

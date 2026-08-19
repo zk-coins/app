@@ -14,7 +14,7 @@
  *
  * Kept in its own dependency-free module so the predicate stays
  * unit-testable (see `src/__tests__/e2e/remint-guard.test.ts`) without
- * pulling the SDK/wasm-loading `_helpers/api.ts` into vitest.
+ * pulling the SDK `_helpers/api.ts` into vitest.
  */
 
 /** Node message fragment for a rejected re-mint (`account_node.rs`). */
@@ -22,11 +22,9 @@ export const RE_MINT_REJECTION_FRAGMENT = 'Re-mint into an existing asset accoun
 
 /**
  * True when `err` carries the node's re-mint rejection, regardless of the
- * surface it travelled through: the admit-time HTTP 4xx body (wrapped by
- * `postJson` as `POST /api/jobs/mint <status>: <body>`) or a `failed`
- * job's `error` field (wrapped by the job-poll helpers as
- * `mint job <id> failed: <error>`) — both embed the node message in the
- * thrown `Error`'s message.
+ * surface it travelled through: the admit-time HTTP 4xx body from
+ * `POST /v1/tx` (or the SDK/client wrapper) or a failed job's `error`
+ * field — both embed the node message in the thrown `Error`'s message.
  */
 export function isReMintRejection(err: unknown): boolean {
   return err instanceof Error && err.message.includes(RE_MINT_REJECTION_FRAGMENT);

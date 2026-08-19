@@ -6,10 +6,40 @@ import {
   formatBtcSigned,
   formatBtcCompact,
   formatUsd,
+  MOCK_BTC_USD,
   truncateAddress,
   formatRelative,
   formatTimeOnly,
+  isNonNegativeSafeInteger,
+  formatAssetAmount,
+  formatAssetAmountString,
 } from '@/lib/format';
+
+describe('isNonNegativeSafeInteger', () => {
+  it('accepts 0 and 1', () => {
+    expect(isNonNegativeSafeInteger(0)).toBe(true);
+    expect(isNonNegativeSafeInteger(1)).toBe(true);
+  });
+  it('rejects non-safe, negative, non-number values', () => {
+    expect(isNonNegativeSafeInteger(-1)).toBe(false);
+    expect(isNonNegativeSafeInteger(1.5)).toBe(false);
+    expect(isNonNegativeSafeInteger(Number.NaN)).toBe(false);
+    expect(isNonNegativeSafeInteger(Infinity)).toBe(false);
+    expect(isNonNegativeSafeInteger(Number.MAX_SAFE_INTEGER + 1)).toBe(false);
+    expect(isNonNegativeSafeInteger('1')).toBe(false);
+    expect(isNonNegativeSafeInteger(null)).toBe(false);
+    expect(isNonNegativeSafeInteger(undefined)).toBe(false);
+  });
+});
+
+describe('formatAssetAmount unsafe decimals', () => {
+  it('rejects unsafe decimals in formatAssetAmount and formatAssetAmountString', () => {
+    expect(() => formatAssetAmount(1, Number.MAX_SAFE_INTEGER + 1)).toThrow(/non-negative integer/);
+    expect(() => formatAssetAmountString('1', Number.MAX_SAFE_INTEGER + 1)).toThrow(
+      /non-negative integer/,
+    );
+  });
+});
 
 describe('SATS_PER_BTC constant', () => {
   it('equals 100_000_000', () => {
@@ -110,14 +140,14 @@ describe('formatBtcCompact', () => {
 });
 
 describe('formatUsd', () => {
-  it('formats with default mock BTC price', () => {
+  it('formats with explicit mock BTC price', () => {
     // 100_000_000 sats * $62,000 = $62,000.00
-    const result = formatUsd(100_000_000);
+    const result = formatUsd(100_000_000, MOCK_BTC_USD);
     expect(result).toBe('62,000.00');
   });
 
   it('formats zero', () => {
-    expect(formatUsd(0)).toBe('0.00');
+    expect(formatUsd(0, MOCK_BTC_USD)).toBe('0.00');
   });
 
   it('uses custom price', () => {
@@ -128,7 +158,7 @@ describe('formatUsd', () => {
 
   it('formats small amounts', () => {
     // 10_000 sats * $62,000 = $6.20
-    const result = formatUsd(10_000);
+    const result = formatUsd(10_000, MOCK_BTC_USD);
     expect(result).toBe('6.20');
   });
 });

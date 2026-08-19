@@ -1,57 +1,37 @@
 /**
- * SendPage UI edge cases (`src/app/send/page.tsx`), neutral multi-asset.
- *
- * Complements `SendForm.test.tsx` (amount-field validation) and
- * `send-pipeline.test.tsx` (lifecycle). Targets the conditional renders
- * and state-preservation branches:
- *
- *   - asset not loaded yet: Available reads "— <asset>", Set max disabled,
- *     no-funds banner hidden.
- *   - zero asset balance: no-funds banner visible, Set max disabled.
- *   - funded: Available shows the decimals-formatted balance, Set max on.
- *   - Confirm card cancel: inputs preserved, card gone.
- *   - Balance-not-loaded guard: handleConfirm aborts with the inline error.
- *   - Decimal rounding: a typed amount maps to the exact atomic units the
- *     server expects (no IEEE-754 drift) via the decimals scaling.
+ * Send edge cases under the fail-closed surface.
  */
 
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { act, screen } from '@testing-library/react';
 import { render } from '@/__tests__/_helpers/intl';
 import SendPage from '@/app/send/page';
 import { useWalletStore } from '@/stores/wallet';
+import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
 import { useCapabilities } from '@/stores/capabilities';
-import { api, type OwnerBalanceResponse } from '@/lib/api/client';
 
+const routerReplace = vi.fn();
 vi.mock('next/navigation', () => ({
-  useRouter: () => ({ replace: vi.fn(), push: vi.fn() }),
+  useRouter: () => ({ replace: routerReplace, push: vi.fn() }),
   useSearchParams: () => new URLSearchParams(),
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
-const ASSET_ID = 'c'.repeat(64);
-const ONE_UNIT = 100_000_000; // 8 decimals
-
-function portfolio(balance: number): OwnerBalanceResponse {
-  return {
-    address: ALICE.address,
-    assets: [{ asset_id: ASSET_ID, name: 'BigCoin', decimals: 8, balance, num_sends: 0 }],
-  };
-}
-
-let ownerSpy: ReturnType<typeof vi.spyOn>;
+const ALICE = {
+  address: 'a'.repeat(64),
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 
 beforeEach(() => {
-  // Runtime multi-asset capability ON so SendPage renders the per-asset
-  // selector surface this suite drives.
+  sessionStorage.clear();
+  routerReplace.mockClear();
   useCapabilities.setState({
     capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: true },
     loaded: true,
   });
   useWalletStore.setState({
     account: ALICE,
-    balance: ONE_UNIT,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: true,
@@ -59,109 +39,62 @@ beforeEach(() => {
     storedAuthMethod: 'seed',
     error: null,
   });
-  ownerSpy = vi.spyOn(api, 'ownerBalances').mockResolvedValue(portfolio(ONE_UNIT));
 });
 
-afterEach(() => {
-  ownerSpy.mockRestore();
-});
-
-describe('SendPage — balance display states', () => {
-  it('shows the loading placeholder before the portfolio resolves', () => {
-    // Never-resolving portfolio → no asset selected → loading state.
-    ownerSpy.mockReturnValue(new Promise<never>(() => {}));
+describe('SendPage edge cases — unavailable', () => {
+  it('restores a persisted unlocked session instead of redirecting home', () => {
+    const derived = accountKeysFromMnemonic(ALICE.mnemonic);
+    const consistent = {
+      address: derived.address,
+      mnemonic: ALICE.mnemonic,
+      nkCommit: derived.nkCommit,
+    };
+    useWalletStore.getState().setAccount(consistent);
+    useWalletStore.setState({ account: null, isLocked: true });
     render(<SendPage />);
-
-    const available = screen.getByTestId('send-available');
-    expect(available).toHaveAttribute('data-loading', 'true');
-    expect(screen.getByTestId('send-setmax-btn')).toBeDisabled();
-    expect(screen.queryByTestId('send-no-funds-banner')).not.toBeInTheDocument();
+    expect(useWalletStore.getState().account).toEqual(consistent);
+    expect(routerReplace).not.toHaveBeenCalled();
   });
 
-  it('renders the no-funds banner when the asset balance is exactly 0', async () => {
-    ownerSpy.mockResolvedValue(portfolio(0));
+  it('shows redirecting placeholder without account', () => {
+    useWalletStore.setState({ account: null });
     render(<SendPage />);
-
-    const banner = await screen.findByTestId('send-no-funds-banner');
-    expect(banner).toBeInTheDocument();
-    expect(screen.getByTestId('send-setmax-btn')).toBeDisabled();
+    expect(screen.getByTestId('redirecting-placeholder')).toBeInTheDocument();
   });
 
-  it('renders the formatted balance and enables Set max when funded', async () => {
+  it('never mounts a confirm dialog', () => {
     render(<SendPage />);
-    await screen.findByTestId('send-asset-select');
-
-    // The "Available" readout resolves once the picker effect selects the
-    // first asset (one tick after the select renders), so wait for it.
-    await waitFor(() => {
-      expect(screen.getByTestId('send-available')).toHaveTextContent('1 BigCoin');
-    });
-    expect(screen.queryByTestId('send-no-funds-banner')).not.toBeInTheDocument();
-    expect(screen.getByTestId('send-setmax-btn')).toBeEnabled();
-  });
-});
-
-describe('SendPage — Confirm card cancel', () => {
-  it('preserves the typed recipient and amount when Cancel is clicked', async () => {
-    const user = userEvent.setup();
-    render(<SendPage />);
-    await screen.findByTestId('send-asset-select');
-
-    const recipient = screen.getByTestId('send-recipient-input') as HTMLInputElement;
-    const amount = screen.getByTestId('send-amount-input') as HTMLInputElement;
-
-    await user.type(recipient, 'b'.repeat(64));
-    await user.type(amount, '0.01');
-    await user.click(screen.getByTestId('send-submit-btn'));
-
-    expect(screen.getByTestId('send-confirm-card')).toBeInTheDocument();
-    expect(recipient.value).toBe('b'.repeat(64));
-    expect(amount.value).toBe('0.01');
-
-    await user.click(screen.getByTestId('send-cancel-btn'));
-
-    expect(screen.queryByTestId('send-confirm-card')).not.toBeInTheDocument();
-    expect(recipient.value).toBe('b'.repeat(64));
-    expect(amount.value).toBe('0.01');
-    expect(screen.getByTestId('send-submit-btn')).toBeEnabled();
+    expect(screen.queryByTestId('send-confirm-card')).toBeNull();
   });
 
-  it('shows the typed amount inside the confirm card scaled by decimals', async () => {
-    const user = userEvent.setup();
+  it('redirects after the no-account grace period', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null });
     render(<SendPage />);
-    await screen.findByTestId('send-asset-select');
-
-    await user.type(screen.getByTestId('send-recipient-input'), 'b'.repeat(64));
-    await user.type(screen.getByTestId('send-amount-input'), '0.0021');
-    await user.click(screen.getByTestId('send-submit-btn'));
-
-    expect(screen.getByTestId('send-confirm-card')).toHaveTextContent('0.0021 BigCoin');
-  });
-});
-
-describe('SendPage — decimal rounding', () => {
-  it('maps a typed amount to the exact atomic units (no FP drift)', async () => {
-    const user = userEvent.setup();
-    render(<SendPage />);
-    await screen.findByTestId('send-asset-select');
-
-    await user.type(screen.getByTestId('send-recipient-input'), 'b'.repeat(64));
-    // 0.3 at 8 decimals → 30_000_000 atomic units exactly.
-    await user.type(screen.getByTestId('send-amount-input'), '0.3');
-    await user.click(screen.getByTestId('send-submit-btn'));
-
-    expect(screen.getByTestId('send-confirm-card')).toHaveTextContent('0.3 BigCoin');
+    await act(async () => vi.advanceTimersByTimeAsync(100));
+    expect(routerReplace).toHaveBeenCalledWith('/');
+    vi.useRealTimers();
   });
 
-  it('rounds the smallest unit (0.00000001 at 8 decimals → 1 atomic unit)', async () => {
-    const user = userEvent.setup();
+  it('does not redirect when the store reports an account when the grace callback fires', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null });
     render(<SendPage />);
-    await screen.findByTestId('send-asset-select');
+    const stateWithAccount = { ...useWalletStore.getState(), account: ALICE };
+    const getStateSpy = vi.spyOn(useWalletStore, 'getState').mockReturnValue(stateWithAccount);
+    await act(async () => vi.advanceTimersByTimeAsync(100));
+    expect(routerReplace).not.toHaveBeenCalled();
+    getStateSpy.mockRestore();
+    vi.useRealTimers();
+  });
 
-    await user.type(screen.getByTestId('send-recipient-input'), 'b'.repeat(64));
-    await user.type(screen.getByTestId('send-amount-input'), '0.00000001');
-    await user.click(screen.getByTestId('send-submit-btn'));
-
-    expect(screen.getByTestId('send-confirm-card').textContent).toMatch(/0\.00000001 BigCoin/);
+  it('clears the redirect timer on unmount', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null });
+    const { unmount } = render(<SendPage />);
+    unmount();
+    await act(async () => vi.advanceTimersByTimeAsync(100));
+    expect(routerReplace).not.toHaveBeenCalled();
+    vi.useRealTimers();
   });
 });

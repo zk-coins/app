@@ -1,36 +1,20 @@
 /**
- * `useTransaction` — single-transaction detail hook
- * (`src/hooks/useTransaction.ts`, tx-detail feature).
- *
- * Covers: the parked not-found paths (null id / missing address, no
- * fetch), the success path, the 404 → not_found mapping, the generic
- * error mapping, and the unmount-cancellation guards on both the
- * resolve and reject legs.
+ * `useTransaction` — single-transaction detail via pull-session history.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { renderHook, waitFor, act } from '@testing-library/react';
+import { act, renderHook, waitFor } from '@testing-library/react';
 import { useTransaction } from '@/hooks/useTransaction';
 import { ApiError, api, type TxDetail } from '@/lib/api/client';
 
-const DETAIL: TxDetail = {
-  id: 7,
-  address: 'a'.repeat(64),
-  txid: null,
-  timestamp: 1_780_000_000,
-  direction: 'mint',
-  amount: 10_000,
-  counterparty: null,
-  status: 'pending',
-  block_height: null,
-  memo: null,
-  balance_after: 10_000,
-  balance_before: null,
-  num_sends_after: 0,
-  commitment_public_key: null,
-  circuit_digest: 'cd',
-  commit_output_value: null,
+const ACCOUNT = {
+  address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
 };
+
+const DETAIL: TxDetail = { id: 'r1', kind: 'send', status: 'completed' };
 
 let spy: ReturnType<typeof vi.spyOn>;
 
@@ -43,83 +27,128 @@ afterEach(() => {
 });
 
 describe('useTransaction', () => {
-  it('resolves to not_found without fetching when the id is null', async () => {
-    const { result } = renderHook(() => useTransaction(null, 'a'.repeat(64)));
+  it('resolves not_found when id is null', async () => {
+    const { result } = renderHook(() => useTransaction(null, ACCOUNT));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.error).toBe('not_found');
-    expect(result.current.detail).toBeNull();
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('resolves to not_found without fetching when the address is missing', async () => {
+  it('resolves wallet_unavailable when account is missing', async () => {
     const { result } = renderHook(() => useTransaction(7, undefined));
     await waitFor(() => expect(result.current.loading).toBe(false));
-    expect(result.current.error).toBe('not_found');
+    expect(result.current.error).toBe('wallet_unavailable');
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('fetches and exposes the detail on success', async () => {
+  it('resolves wallet_unavailable when mnemonic is missing', async () => {
+    const { result } = renderHook(() => useTransaction(7, { ...ACCOUNT, mnemonic: '' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('wallet_unavailable');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('resolves wallet_unavailable when nkCommit is missing', async () => {
+    const { result } = renderHook(() => useTransaction(7, { ...ACCOUNT, nkCommit: '' }));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('wallet_unavailable');
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('loads detail for a valid id', async () => {
     spy.mockResolvedValue(DETAIL);
-    const { result } = renderHook(() => useTransaction(7, 'a'.repeat(64)));
-    expect(result.current.loading).toBe(true);
+    const { result } = renderHook(() => useTransaction('r1', ACCOUNT));
     await waitFor(() => expect(result.current.loading).toBe(false));
     expect(result.current.detail).toEqual(DETAIL);
-    expect(result.current.error).toBeNull();
-    expect(spy).toHaveBeenCalledWith(7, 'a'.repeat(64));
+    expect(spy).toHaveBeenCalledWith(
+      'r1',
+      { ...ACCOUNT, accountIndex: 0 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
-  it('maps a 404 ApiError to not_found', async () => {
-    spy.mockRejectedValue(new ApiError(404, 'Transaction not found'));
-    const { result } = renderHook(() => useTransaction(999, 'a'.repeat(64)));
-    await waitFor(() => expect(result.current.error).toBe('not_found'));
-    expect(result.current.detail).toBeNull();
-    expect(result.current.loading).toBe(false);
+  it('maps transaction_not_found to not_found', async () => {
+    spy.mockRejectedValue(
+      new ApiError(404, 'transaction not found', undefined, 'transaction_not_found'),
+    );
+    const { result } = renderHook(() => useTransaction('missing', ACCOUNT));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('not_found');
   });
 
-  it('maps any non-404 failure to a generic error', async () => {
-    spy.mockRejectedValue(new ApiError(500, 'Database error'));
-    const { result } = renderHook(() => useTransaction(7, 'a'.repeat(64)));
-    await waitFor(() => expect(result.current.error).toBe('error'));
+  it('maps account not_found 404 to error, not tx-missing', async () => {
+    spy.mockRejectedValue(new ApiError(404, 'Unknown account address', undefined, 'not_found'));
+    const { result } = renderHook(() => useTransaction('r1', ACCOUNT));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('error');
   });
 
-  it('maps a non-ApiError throw (network) to a generic error', async () => {
-    spy.mockRejectedValue(new Error('Failed to fetch'));
-    const { result } = renderHook(() => useTransaction(7, 'a'.repeat(64)));
-    await waitFor(() => expect(result.current.error).toBe('error'));
+  it('maps bare 404 without transaction_not_found to error', async () => {
+    spy.mockRejectedValue(new ApiError(404, 'gone'));
+    const { result } = renderHook(() => useTransaction('r1', ACCOUNT));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('error');
   });
 
-  it('does not write state when the fetch RESOLVES after unmount', async () => {
-    let resolve!: (d: TxDetail) => void;
+  it('maps other failures to error', async () => {
+    spy.mockRejectedValue(new ApiError(500, 'internal_error'));
+    const { result } = renderHook(() => useTransaction('r1', ACCOUNT));
+    await waitFor(() => expect(result.current.loading).toBe(false));
+    expect(result.current.error).toBe('error');
+  });
+
+  it('does not write state when success resolves after unmount', async () => {
+    let resolveFetch!: (v: TxDetail) => void;
     spy.mockReturnValue(
       new Promise<TxDetail>((res) => {
-        resolve = res;
+        resolveFetch = res;
       }),
     );
-    const { unmount } = renderHook(() => useTransaction(7, 'a'.repeat(64)));
-    expect(spy).toHaveBeenCalledTimes(1);
+    const { unmount } = renderHook(() => useTransaction('r1', ACCOUNT));
     unmount();
     await act(async () => {
-      resolve(DETAIL);
+      resolveFetch(DETAIL);
       await Promise.resolve();
     });
-    // Reaching here without an act() warning is the assertion: the
-    // cancelled guard swallowed the post-unmount resolve.
     expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('does not write state when the fetch REJECTS after unmount', async () => {
-    let reject!: (e: Error) => void;
+  it('does not write state when rejection lands after unmount', async () => {
+    let rejectFetch!: (e: unknown) => void;
     spy.mockReturnValue(
       new Promise<TxDetail>((_res, rej) => {
-        reject = rej;
+        rejectFetch = rej;
       }),
     );
-    const { unmount } = renderHook(() => useTransaction(7, 'a'.repeat(64)));
+    const { unmount } = renderHook(() => useTransaction('r1', ACCOUNT));
     unmount();
     await act(async () => {
-      reject(new ApiError(404, 'gone'));
+      rejectFetch(new ApiError(500, 'late'));
       await Promise.resolve();
     });
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts in-flight getTransaction on unmount without committing error state', async () => {
+    let rejectFetch!: (e: unknown) => void;
+    spy.mockReturnValue(
+      new Promise<TxDetail>((_res, rej) => {
+        rejectFetch = rej;
+      }),
+    );
+    const { result, unmount } = renderHook(() => useTransaction('r1', ACCOUNT));
+    expect(spy).toHaveBeenCalledWith(
+      'r1',
+      { ...ACCOUNT, accountIndex: 0 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    unmount();
+    await act(async () => {
+      rejectFetch(new DOMException('Aborted', 'AbortError'));
+      await Promise.resolve();
+    });
+    expect(result.current.error).toBeNull();
+    expect(result.current.detail).toBeNull();
+    expect(result.current.loading).toBe(true);
   });
 });

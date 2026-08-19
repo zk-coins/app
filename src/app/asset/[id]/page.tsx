@@ -7,11 +7,13 @@ import { useTranslations } from 'next-intl';
 import { ArrowLeft, ArrowUpRight, ArrowDownLeft, Plus, Receipt, Info } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
+import { useNetworkStore } from '@/stores/network';
 import { usePortfolio } from '@/hooks/usePortfolio';
 import { useHistory } from '@/hooks/useHistory';
 import type { HistoryItem } from '@/lib/api/client';
-import { formatAssetAmount, shortAssetId } from '@/lib/format';
+import { formatAssetAmount, shortAssetId, isNonNegativeSafeInteger } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
+import { useCapabilities } from '@/stores/capabilities';
 
 export default function AssetDetailPage() {
   const router = useRouter();
@@ -19,20 +21,57 @@ export default function AssetDetailPage() {
   const t = useTranslations('asset');
   const tWallet = useTranslations('wallet');
   const account = useWalletStore((s) => s.account);
-  const { MULTI_ASSET: multiAssetRuntime } = useFeatures();
+  const infoError = useNetworkStore((s) => s.infoError);
+  const isLoading = useWalletStore((s) => s.isLoading);
+  const { MULTI_ASSET: multiAssetRuntime, loaded: featuresLoaded } = useFeatures();
+
+  useEffect(() => {
+    void useCapabilities.getState().fetch();
+  }, []);
 
   // Runtime gate: a capability-adaptive bundle talking to a single-asset
-  // node has no per-asset detail — redirect home.
+  // node has no per-asset detail — redirect home. Wait for capabilities so
+  // fail-closed defaults do not bounce before /v1/info lands. Do not redirect
+  // on infoError: fail-closed multi_asset:false after a failed GET /v1/info is
+  // not "feature missing".
   useEffect(() => {
-    if (!multiAssetRuntime && typeof window !== 'undefined') {
+    if (
+      featuresLoaded &&
+      !multiAssetRuntime &&
+      !infoError &&
+      /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+      typeof window !== 'undefined'
+    ) {
       router.replace('/');
     }
-  }, [multiAssetRuntime, router]);
+  }, [featuresLoaded, multiAssetRuntime, infoError, router]);
 
   const assetId = params.id;
-  const { assets, loaded } = usePortfolio(account?.address);
-  const { items: history } = useHistory(account?.address);
-  const asset = assets.find((a) => a.asset_id === assetId);
+  const {
+    assets,
+    loaded,
+    available: portfolioAvailable,
+    error: portfolioError,
+    unavailableReason,
+  } = usePortfolio(account?.address);
+  const historyAccount =
+    account && account.mnemonic && account.nkCommit
+      ? {
+          address: account.address,
+          mnemonic: account.mnemonic,
+          nkCommit: account.nkCommit,
+        }
+      : undefined;
+  const { items: history } = useHistory(historyAccount);
+  // not-found only after a successful, available portfolio read without this asset
+  const asset = portfolioAvailable ? assets.find((a) => a.asset_id === assetId) : undefined;
+  const portfolioBlocked = loaded && (!portfolioAvailable || portfolioError !== null);
+  const walletUnavailable = account == null && !isLoading;
+  const rawDecimals = asset?.decimals;
+  const validDecimals =
+    typeof rawDecimals === 'number' && Number.isSafeInteger(rawDecimals) && rawDecimals >= 0
+      ? rawDecimals
+      : null;
 
   return (
     <AppShell showNav={false}>
@@ -50,7 +89,46 @@ export default function AssetDetailPage() {
         </span>
       </header>
 
-      {!asset ? (
+      {walletUnavailable ? (
+        <div
+          data-testid="asset-detail-wallet-unavailable"
+          className="flex min-h-[60vh] flex-col items-center justify-center text-center"
+          role="status"
+        >
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-line bg-surface text-ink4">
+            <Info size={22} strokeWidth={1.75} />
+          </div>
+          <p className="mt-4 text-[15px] font-semibold text-ink">{tWallet('txUnlockToView')}</p>
+          <Link
+            href="/"
+            className="mt-6 rounded-md bg-bitcoin px-6 py-2.5 text-[13px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover"
+          >
+            {t('backToWallet')}
+          </Link>
+        </div>
+      ) : portfolioBlocked ? (
+        <div
+          data-testid={portfolioError ? 'asset-detail-error' : 'asset-detail-unavailable'}
+          className="flex min-h-[60vh] flex-col items-center justify-center text-center"
+          role="status"
+        >
+          <div className="flex h-14 w-14 items-center justify-center rounded-full border border-line bg-surface text-ink4">
+            <Info size={22} strokeWidth={1.75} />
+          </div>
+          <p className="mt-4 text-[15px] font-semibold text-ink">
+            {portfolioError ? t('errorTitle') : t('unavailableTitle')}
+          </p>
+          <p className="mt-1 max-w-[280px] text-[13px] leading-relaxed text-ink3">
+            {portfolioError ? portfolioError : (unavailableReason ?? t('unavailableBody'))}
+          </p>
+          <Link
+            href="/"
+            className="mt-6 rounded-md bg-bitcoin px-6 py-2.5 text-[13px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover"
+          >
+            {t('backToWallet')}
+          </Link>
+        </div>
+      ) : !asset ? (
         loaded ? (
           <div
             data-testid="asset-detail-missing"
@@ -82,7 +160,9 @@ export default function AssetDetailPage() {
               data-testid="asset-detail-balance"
               className="mt-1 mono text-[34px] font-bold tabular-nums text-ink"
             >
-              {formatAssetAmount(asset.balance, asset.decimals)}
+              {validDecimals !== null && Number.isSafeInteger(asset.balance) && asset.balance >= 0
+                ? formatAssetAmount(asset.balance, validDecimals)
+                : t('unknownAmount')}
             </p>
             <p
               data-testid="asset-detail-id-short"
@@ -108,11 +188,17 @@ export default function AssetDetailPage() {
                 </span>
               </DetailRow>
               <DetailRow label={t('decimals')} testid="asset-row-decimals">
-                <span className="mono text-[12px] text-ink">{asset.decimals ?? 0}</span>
+                <span className="mono text-[12px] text-ink">
+                  {validDecimals !== null ? validDecimals : t('unknownDecimals')}
+                </span>
               </DetailRow>
               <DetailRow label={t('balanceLabel')} testid="asset-row-balance">
                 <span className="mono text-[12px] text-ink">
-                  {formatAssetAmount(asset.balance, asset.decimals)}
+                  {validDecimals !== null &&
+                  Number.isSafeInteger(asset.balance) &&
+                  asset.balance >= 0
+                    ? formatAssetAmount(asset.balance, validDecimals)
+                    : t('unknownAmount')}
                 </span>
               </DetailRow>
               <DetailRow label={t('sends')} testid="asset-row-sends">
@@ -148,6 +234,7 @@ export default function AssetDetailPage() {
                 sent: tWallet('txSent'),
                 received: tWallet('txReceived'),
                 mint: tWallet('txMint'),
+                unknown: tWallet('txUnknown'),
               }}
             />
           </div>
@@ -181,7 +268,7 @@ function AssetHistory({
   labels,
 }: {
   items: HistoryItem[];
-  labels: { sent: string; received: string; mint: string };
+  labels: { sent: string; received: string; mint: string; unknown: string };
 }) {
   if (items.length === 0) {
     return null;
@@ -189,15 +276,31 @@ function AssetHistory({
   return (
     <ul className="space-y-2">
       {items.map((tx) => {
-        const positive = tx.direction !== 'send';
-        const label =
-          tx.direction === 'mint'
-            ? labels.mint
-            : tx.direction === 'send'
-              ? labels.sent
-              : labels.received;
-        const Icon =
-          tx.direction === 'send' ? ArrowUpRight : tx.direction === 'mint' ? Plus : ArrowDownLeft;
+        const kind = tx.kind;
+        let polarity: 'credit' | 'debit' | 'unknown';
+        let label: string;
+        let Icon: typeof ArrowUpRight;
+        if (kind === 'mint') {
+          polarity = 'credit';
+          label = labels.mint;
+          Icon = Plus;
+        } else if (kind === 'send') {
+          polarity = 'debit';
+          label = labels.sent;
+          Icon = ArrowUpRight;
+        } else if (kind === 'receive') {
+          polarity = 'credit';
+          label = labels.received;
+          Icon = ArrowDownLeft;
+        } else {
+          polarity = 'unknown';
+          label = labels.unknown;
+          Icon = Receipt;
+        }
+        const isDebit = polarity === 'debit';
+        const amountText = isNonNegativeSafeInteger(tx.amount)
+          ? tx.amount.toLocaleString('en-US')
+          : '—';
         return (
           <li key={tx.id}>
             <Link
@@ -208,7 +311,7 @@ function AssetHistory({
               <div className="flex items-center gap-3">
                 <div
                   className={`flex h-9 w-9 items-center justify-center rounded-md ${
-                    positive ? 'bg-line text-ink2' : 'bg-bitcoin/10 text-bitcoin'
+                    isDebit ? 'bg-bitcoin/10 text-bitcoin' : 'bg-line text-ink2'
                   }`}
                 >
                   <Icon size={15} strokeWidth={2.25} />
@@ -216,7 +319,7 @@ function AssetHistory({
                 <p className="text-[13px] font-medium text-ink">{label}</p>
               </div>
               <span className="mono text-[13px] font-medium tabular-nums text-ink2">
-                {tx.amount.toLocaleString('en-US')}
+                {amountText}
               </span>
             </Link>
           </li>

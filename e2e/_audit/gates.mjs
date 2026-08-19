@@ -20,7 +20,7 @@
  *
  * NOT included (deliberately):
  *   - Runtime *server* capabilities (`username_claim`, …). Those are
- *     reported by `/api/info`, not build flags, and are exempted
+ *     reported by `/v1/info`, not build flags, and are exempted
  *     per-testid in `coverage.mjs` (ground (b)); they gate no route.
  *   - Build flags that exist but gate neither a route nor an audited
  *     element today (`AUTO_LOCK`, `ADDRESS_ROTATION`, `TOR_ROUTING`).
@@ -34,11 +34,7 @@
  * bundles, so code behind them is dead-stripped and out of scope (env-gated).
  * Names match the keys of `FEATURES` in `src/lib/features.ts`.
  */
-export const ENV_GATED_FEATURES = Object.freeze([
-  'PASSKEY',
-  'APPS_DIRECTORY',
-  'DEV_ROUTES',
-]);
+export const ENV_GATED_FEATURES = Object.freeze(['PASSKEY', 'APPS_DIRECTORY', 'DEV_ROUTES']);
 
 /** Whether `flag` is a recognised env-gate (one of {@link ENV_GATED_FEATURES}). */
 export function isEnvGatedFeature(flag) {

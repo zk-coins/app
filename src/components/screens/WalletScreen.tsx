@@ -18,9 +18,15 @@ import { Logo } from '../icons/Logo';
 import { PwaPrompt } from '../PwaPrompt';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { ApiError, api, type HistoryItem, type AssetBalance } from '@/lib/api/client';
-import { userMessageFor } from '@/lib/api/errorMessages';
-import { formatAssetAmount, formatBtc, formatUsd, shortAssetId, toZkAddress } from '@/lib/format';
+import { useCapabilities } from '@/stores/capabilities';
+import { historyItemDate, type HistoryItem, type AssetBalance } from '@/lib/api/client';
+import {
+  formatAssetAmount,
+  formatBtc,
+  shortAssetId,
+  toZkAddress,
+  isNonNegativeSafeInteger,
+} from '@/lib/format';
 import { useFeatures } from '@/lib/features';
 import { useHistory } from '@/hooks/useHistory';
 import { usePortfolio } from '@/hooks/usePortfolio';
@@ -29,107 +35,57 @@ const HIDDEN = '••••';
 
 export function WalletScreen() {
   const t = useTranslations('wallet');
-  const tErrors = useTranslations('errors');
-  const { account, balance, setBalance, setUsername, syncNumPubkeys } = useWalletStore();
-  const { items: history, loaded: historyLoaded } = useHistory(account?.address);
-  const features = useFeatures();
-  // `MULTI_ASSET` here is the *runtime* node capability (see lib/features):
-  // false → render the single-asset balance hero + faucet, true → the
-  // per-asset portfolio + create-coin entry. The dedicated multi-asset
-  // routes (/create, /asset/[id]) are additionally build-time gated.
-  const multiAsset = features.MULTI_ASSET;
-  // Only the multi-asset surface renders the portfolio; gate the hook input
-  // so a single-asset node is not polled on `GET /api/balance/:address`
-  // (which 404s there) every 5 s. `usePortfolio` parks on `undefined`.
-  const { assets, loaded: portfolioLoaded } = usePortfolio(
-    multiAsset ? account?.address : undefined,
-  );
+  const tAsset = useTranslations('asset');
+  const { account } = useWalletStore();
+  const historyAccount =
+    account && account.mnemonic && account.nkCommit
+      ? {
+          address: account.address,
+          mnemonic: account.mnemonic,
+          nkCommit: account.nkCommit,
+        }
+      : undefined;
   const {
-    networkName,
-    bitcoinNetwork,
-    usernameDomain,
-    setNetworkName,
-    setBitcoinNetwork,
-    setUsernameDomain,
-  } = useNetworkStore();
+    items: history,
+    loaded: historyLoaded,
+    available: historyAvailable,
+    error: historyError,
+    stale: historyStale,
+  } = useHistory(historyAccount);
+  const features = useFeatures();
+  // Runtime multi-asset capability. Portfolio / send still show "not
+  // available yet" until AccountState balances + coin inventory decode.
+  const multiAsset = features.MULTI_ASSET;
+  const {
+    assets,
+    loaded: portfolioLoaded,
+    available: portfolioAvailable,
+    error: portfolioError,
+    unavailableReason: portfolioUnavailableReason,
+    stale: portfolioStale,
+  } = usePortfolio(multiAsset ? account?.address : undefined);
+  const { usernameDomain, infoError, infoLoaded } = useNetworkStore();
   const [hidden, setHidden] = useState(false);
   const [copied, setCopied] = useState(false);
-  const [minting, setMinting] = useState(false);
-  const [mintError, setMintError] = useState<string | null>(null);
-  const [claimInput, setClaimInput] = useState('');
-  const [claiming, setClaiming] = useState(false);
-  const [claimError, setClaimError] = useState<string | null>(null);
 
-  // Faucet visibility (single-asset surface only): the faucet is a
-  // creator-signed self-mint (`api.mint` → `createCoin` — the node's
-  // neutral permissionless model has no server-mediated mint), so it works
-  // on every node; the only gate is defence-in-depth against minting on
-  // mainnet. `bitcoin_network` is the normalised enum (node#193); fall back
-  // to a lower-cased free-text compare when a pre-#193 node omits it.
-  const isMainnet =
-    bitcoinNetwork === 'mainnet' ||
-    (bitcoinNetwork === '' && networkName.toLowerCase() === 'mainnet');
-  const networkResolved = bitcoinNetwork !== '' || networkName !== '';
-  const showFaucet = networkResolved && !isMainnet;
-
-  // Fetch network info once. The server is the source of truth for the
-  // username domain — see `useNetworkStore` for the rationale.
+  // Capabilities/Info over useCapabilities.fetch (same path as Home).
+  const fetchCapabilities = useCapabilities((s) => s.fetch);
   useEffect(() => {
-    api
-      .info()
-      .then((info) => {
-        setNetworkName(info.network);
-        setBitcoinNetwork(info.bitcoin_network ?? '');
-        setUsernameDomain(info.username_domain ?? '');
-      })
-      .catch(() => {});
-  }, [setNetworkName, setBitcoinNetwork, setUsernameDomain]);
+    void fetchCapabilities();
+  }, [fetchCapabilities]);
 
-  // Single-asset balance polling. Only runs on the single-asset surface —
-  // the multi-asset surface uses `usePortfolio` instead.
-  useEffect(() => {
-    if (multiAsset || !account) return;
-    const tick = async () => {
-      try {
-        const res = await api.walletBalance(account.address);
-        setBalance(res.balance);
-        syncNumPubkeys(res.num_sends);
-        if (res.username && !account.username) {
-          setUsername(res.username);
-        }
-      } catch {
-        /* silent */
-      }
-    };
-    tick();
-    const interval = setInterval(tick, 5000);
-    return () => clearInterval(interval);
-  }, [multiAsset, account, setBalance, setUsername, syncNumPubkeys]);
-
-  const zkAddress = account ? toZkAddress(account.address, usernameDomain) : '';
-
-  const claimUsername = useCallback(async () => {
-    if (!account || !claimInput || !account.xpriv) return;
-    setClaiming(true);
-    setClaimError(null);
-    try {
-      const res = await api.claimUsername({
-        username: claimInput,
-        address: account.address,
-        xpriv: account.xpriv,
-      });
-      setUsername(res.username);
-      setClaimInput('');
-    } catch (err) {
-      setClaimError(err instanceof Error ? err.message : t('claimFailed'));
-    } finally {
-      setClaiming(false);
-    }
-  }, [account, claimInput, setUsername, t]);
+  // Receive identity is the name when set — never a raw address as identity.
+  const displayName = account
+    ? account.username
+      ? toZkAddress(account.username, usernameDomain)
+      : ''
+    : '';
 
   const copyAddress = useCallback(() => {
-    if (!account) return;
-    navigator.clipboard.writeText(zkAddress).then(
+    /* v8 ignore start -- copyAddress is attached only on the account-gated claim-row copy button, which renders only when displayName is truthy; both !account and !displayName are unreachable from any rendered control. */
+    if (!account || !displayName) return;
+    /* v8 ignore stop */
+    navigator.clipboard.writeText(displayName).then(
       () => {
         setCopied(true);
         setTimeout(() => setCopied(false), 1500);
@@ -138,70 +94,63 @@ export function WalletScreen() {
         /* clipboard not available */
       },
     );
-  }, [account, zkAddress]);
+  }, [account, displayName]);
 
   const claimRow = account && (
     <>
-      {account.username && usernameDomain && (
-        <p className="mono text-[12px] text-ink2">{`${account.username}@${usernameDomain}`}</p>
+      {infoLoaded && infoError && (
+        <p data-testid="network-info-error" className="text-[12px] text-bad" role="alert">
+          {t('networkInfoError', { error: infoError })}
+        </p>
       )}
-      {features.USERNAME_CLAIM && !account.username && (
-        <form
-          className="flex items-center gap-2"
-          onSubmit={(e) => {
-            e.preventDefault();
-            claimUsername();
-          }}
+      {displayName && (
+        <p className="mono text-[12px] text-ink2" data-testid="account-display-name">
+          {displayName}
+        </p>
+      )}
+      {/* Name claim is not wired on the closed /v1 surface (NIP-05 setup
+          missing SDK-side). Hide the form rather than offering a 501 path. */}
+      {!account.username && (
+        <p data-testid="name-claim-unavailable" className="text-[11px] text-ink3">
+          {t('nameClaimUnavailable')}
+        </p>
+      )}
+      {displayName && (
+        <button
+          data-testid="address-copy-btn"
+          data-copied={copied || undefined}
+          onClick={copyAddress}
+          className="inline-flex items-center gap-1.5 mono text-[11px] text-ink3 transition-colors hover:text-ink"
+          title={displayName}
         >
-          <input
-            type="text"
-            value={claimInput}
-            onChange={(e) => {
-              setClaimInput(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ''));
-              setClaimError(null);
-            }}
-            placeholder={t('claimUsernamePlaceholder')}
-            className="flex-1 rounded-md border border-line2 bg-surface px-2.5 py-1.5 mono text-[11px] text-ink placeholder:text-ink4 outline-none transition-colors focus:border-bitcoin"
-          />
-          <button
-            type="submit"
-            data-testid="username-claim-btn"
-            disabled={claiming || !claimInput}
-            className="rounded-md bg-bitcoin px-3 py-1.5 text-[11px] font-semibold text-bg transition-colors hover:bg-bitcoin-hover disabled:opacity-50"
-          >
-            {claiming ? t('claiming') : t('claim')}
-          </button>
-        </form>
+          {copied ? (
+            <Check size={11} strokeWidth={2.5} className="text-bitcoin" />
+          ) : (
+            <Copy size={11} strokeWidth={2} />
+          )}
+          <span>{displayName}</span>
+          {copied && (
+            <span data-testid="address-copied-feedback" className="text-bitcoin">
+              {t('copied')}
+            </span>
+          )}
+        </button>
       )}
-      {features.USERNAME_CLAIM && claimError && (
-        <p className="text-[11px] text-bad">{claimError}</p>
-      )}
-      <button
-        data-testid="address-copy-btn"
-        data-copied={copied || undefined}
-        onClick={copyAddress}
-        className="inline-flex items-center gap-1.5 mono text-[11px] text-ink3 transition-colors hover:text-ink"
-        title={account.address}
-      >
-        {copied ? (
-          <Check size={11} strokeWidth={2.5} className="text-bitcoin" />
-        ) : (
-          <Copy size={11} strokeWidth={2} />
-        )}
-        <span>{zkAddress}</span>
-        {copied && (
-          <span data-testid="address-copied-feedback" className="text-bitcoin">
-            {t('copied')}
-          </span>
-        )}
-      </button>
     </>
   );
 
-  const balanceLoaded = balance !== null;
-  const btc = balanceLoaded ? formatBtc(balance) : '—';
-  const usd = balanceLoaded ? formatUsd(balance) : '—';
-  const portfolioEmpty = portfolioLoaded && assets.length === 0;
+  // Empty portfolio only after a successful read with zero assets — never
+  // after a load failure or intentional unavailability.
+  const portfolioEmpty =
+    portfolioLoaded && portfolioAvailable && !portfolioError && assets.length === 0;
+  const portfolioBlocked = portfolioLoaded && (!portfolioAvailable || portfolioError !== null);
+  // Send needs coin inventory selection from AccountState — not wired yet.
+  // Fail closed on BOTH surfaces (never enable a button that leads to an
+  // empty-input_coins /v1/tx). The /send route itself also refuses.
+  const sendAvailable = false;
+  const sendDisabled = !account || !sendAvailable;
+  const historyEmpty = historyLoaded && historyAvailable && !historyError && history.length === 0;
+  const historyBlocked = historyLoaded && (!historyAvailable || historyError !== null);
 
   return (
     <section className="space-y-7">
@@ -216,15 +165,16 @@ export function WalletScreen() {
         //    per-asset portfolio list below) ──
         account && <div className="space-y-1.5">{claimRow}</div>
       ) : (
-        // ── Single-asset surface: USD/BTC balance hero + eye toggle ──
+        // ── Single-asset surface: honest "not available" (never fake 0) ──
         <div data-testid="balance-value">
           <div className="flex items-center gap-3">
             <h1
               data-testid="balance-amount-usd"
-              data-loading={!balanceLoaded || undefined}
-              className="text-[56px] font-bold leading-none -tracking-[0.02em] text-ink tabular-nums"
+              data-loading={undefined}
+              data-unavailable="true"
+              className="text-[28px] font-bold leading-none -tracking-[0.02em] text-ink"
             >
-              {hidden ? HIDDEN : `$${usd}`}
+              {hidden ? HIDDEN : t('balanceUnavailableTitle')}
             </h1>
             <button
               data-testid="balance-toggle-btn"
@@ -238,10 +188,10 @@ export function WalletScreen() {
           </div>
           <p
             data-testid="balance-amount-btc"
-            data-loading={!balanceLoaded || undefined}
-            className="mt-2 mono text-[14px] text-ink2 tabular-nums"
+            data-unavailable="true"
+            className="mt-2 text-[13px] text-ink2"
           >
-            {hidden ? HIDDEN : `${btc} BTC`}
+            {hidden ? HIDDEN : t('balanceUnavailableBody')}
           </p>
 
           {account && <div className="mt-2 space-y-1.5">{claimRow}</div>}
@@ -250,12 +200,7 @@ export function WalletScreen() {
 
       {/* Send + Receive */}
       <div className="grid grid-cols-2 gap-3">
-        <PrimaryButton
-          href="/send"
-          disabled={!account || (multiAsset && assets.length === 0)}
-          icon="send"
-          label={t('send')}
-        />
+        <PrimaryButton href="/send" disabled={sendDisabled} icon="send" label={t('send')} />
         <PrimaryButton href="/receive" disabled={!account} icon="receive" label={t('receive')} />
       </div>
 
@@ -283,8 +228,37 @@ export function WalletScreen() {
             <h2 className="mb-2 text-[11px] font-semibold tracking-wider text-ink3 uppercase">
               {t('portfolioTitle')}
             </h2>
-            {assets.length > 0 ? (
-              <AssetList assets={assets} unknownName={t('txMint')} />
+            {portfolioBlocked ? (
+              portfolioError ? (
+                <UnavailableBanner
+                  testId="portfolio-error-banner"
+                  title={t('portfolioErrorTitle')}
+                  body={portfolioStale ? t('portfolioStaleBody') : portfolioError}
+                />
+              ) : (
+                <UnavailableBanner
+                  testId="portfolio-unavailable-banner"
+                  title={t('portfolioUnavailableTitle')}
+                  body={portfolioUnavailableReason ?? t('portfolioUnavailableBody')}
+                />
+              )
+            ) : assets.length > 0 ? (
+              <>
+                {portfolioStale && (
+                  <p
+                    data-testid="portfolio-stale-note"
+                    className="mb-2 text-[11px] text-ink3"
+                    role="status"
+                  >
+                    {t('portfolioStaleBody')}
+                  </p>
+                )}
+                <AssetList
+                  assets={assets}
+                  unknownName={t('unknownName')}
+                  unknownAmount={tAsset('unknownAmount')}
+                />
+              </>
             ) : !account || portfolioEmpty ? (
               <EmptyPortfolio
                 hasWallet={!!account}
@@ -295,90 +269,66 @@ export function WalletScreen() {
           </div>
         </>
       ) : (
-        // ── Single-asset empty-wallet helper + faucet ──
-        account &&
-        balance === 0 && (
-          <div
-            data-testid="wallet-empty-banner"
-            className="flex items-start gap-3 rounded-md border border-bitcoin/30 bg-bitcoin/5 p-3"
-          >
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-bitcoin/10 text-bitcoin">
-              <CircleDollarSign size={14} strokeWidth={2} />
-            </div>
-            <div className="min-w-0 flex-1">
-              <p className="text-[12px] font-semibold text-ink">{t('emptyWalletTitle')}</p>
-              <p className="mt-0.5 text-[11px] leading-relaxed text-ink2">
-                {(() => {
-                  const key = showFaucet
-                    ? 'emptyFaucetBody'
-                    : features.APPS_DIRECTORY
-                      ? 'emptyDfxBody'
-                      : 'emptyReceiveBody';
-                  return t.rich(key, {
-                    receive: (chunks) => (
-                      <Link href="/receive" className="text-bitcoin hover:underline">
-                        {chunks}
-                      </Link>
-                    ),
-                    dfx: (chunks) => (
-                      <Link href="/apps" className="text-bitcoin hover:underline">
-                        {chunks}
-                      </Link>
-                    ),
-                  });
-                })()}
-              </p>
-              {showFaucet && (
-                <button
-                  data-testid="faucet-btn"
-                  data-minting={minting || undefined}
-                  onClick={async () => {
-                    // The creator-signed self-mint needs the wallet key —
-                    // same guard as the username claim above.
-                    if (!account || !account.xpriv || minting) return;
-                    setMinting(true);
-                    setMintError(null);
-                    try {
-                      await api.mint({ account_address: account.address, xpriv: account.xpriv });
-                      const res = await api.walletBalance(account.address);
-                      setBalance(res.balance);
-                      syncNumPubkeys(res.num_sends);
-                    } catch (err) {
-                      if (err instanceof ApiError) {
-                        setMintError(userMessageFor(err, tErrors));
-                      }
-                    } finally {
-                      setMinting(false);
-                    }
-                  }}
-                  disabled={minting}
-                  className="mt-2 rounded-md border border-bitcoin/40 px-3 py-1.5 text-[11px] font-semibold text-bitcoin transition-colors hover:bg-bitcoin/10 disabled:opacity-50"
-                >
-                  {minting ? t('minting') : t('faucet')}
-                </button>
-              )}
-              {mintError && (
-                <p data-testid="wallet-mint-error" className="mt-2 text-[11px] text-bad">
-                  {mintError}
-                </p>
-              )}
-            </div>
-          </div>
+        // Single-asset: never show "wallet is empty" when balance is unavailable.
+        account && (
+          <UnavailableBanner
+            testId="balance-unavailable-banner"
+            title={t('balanceUnavailableTitle')}
+            body={t('balanceUnavailableBody')}
+          />
         )
       )}
 
       {/* PWA install prompt */}
       <PwaPrompt />
 
-      {/* Transactions */}
-      <div>
+      {/* Transactions — empty copy only after a successful empty read.
+          `data-loaded` lets E2E wait out the first pull so snapshots do
+          not race the loading gap against the empty state or a mint row. */}
+      <div
+        data-testid="tx-list"
+        data-loaded={!historyAccount || historyLoaded ? 'true' : 'false'}
+        data-state={
+          !historyAccount
+            ? 'parked'
+            : !historyLoaded
+              ? 'loading'
+              : history.length > 0
+                ? 'items'
+                : historyBlocked
+                  ? 'error'
+                  : 'empty'
+        }
+      >
         {history.length > 0 ? (
-          <TransactionsList
-            items={history.slice(0, 10)}
-            multiAsset={multiAsset}
-            labels={{ sent: t('txSent'), received: t('txReceived'), mint: t('txMint') }}
+          <>
+            {historyStale && (
+              <p
+                data-testid="history-stale-note"
+                className="mb-2 text-[11px] text-ink3"
+                role="status"
+              >
+                {t('historyStaleBody')}
+              </p>
+            )}
+            <TransactionsList
+              items={history.slice(0, 10)}
+              multiAsset={multiAsset}
+              labels={{
+                sent: t('txSent'),
+                received: t('txReceived'),
+                mint: t('txMint'),
+                unknown: t('txUnknown'),
+              }}
+            />
+          </>
+        ) : historyBlocked ? (
+          <UnavailableBanner
+            testId="history-error-banner"
+            title={t('historyErrorTitle')}
+            body={historyError ? historyError : t('historyErrorBody')}
           />
-        ) : !account || historyLoaded ? (
+        ) : !account || historyEmpty ? (
           <EmptyTransactions
             hasWallet={!!account}
             title={t('noTransactionsTitle')}
@@ -388,6 +338,32 @@ export function WalletScreen() {
         ) : null}
       </div>
     </section>
+  );
+}
+
+function UnavailableBanner({
+  testId,
+  title,
+  body,
+}: {
+  testId: string;
+  title: string;
+  body: string;
+}) {
+  return (
+    <div
+      data-testid={testId}
+      className="flex items-start gap-3 rounded-md border border-line2 bg-surface p-3"
+      role="status"
+    >
+      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-line text-ink3">
+        <CircleDollarSign size={14} strokeWidth={2} />
+      </div>
+      <div className="min-w-0 flex-1">
+        <p className="text-[12px] font-semibold text-ink">{title}</p>
+        <p className="mt-0.5 text-[11px] leading-relaxed text-ink2">{body}</p>
+      </div>
+    </div>
   );
 }
 
@@ -422,45 +398,64 @@ function PrimaryButton({
   );
 }
 
-function AssetList({ assets, unknownName }: { assets: AssetBalance[]; unknownName: string }) {
+function AssetList({
+  assets,
+  unknownName,
+  unknownAmount,
+}: {
+  assets: AssetBalance[];
+  unknownName: string;
+  unknownAmount: string;
+}) {
   return (
     <ul data-testid="asset-list" className="space-y-2">
-      {assets.map((asset) => (
-        <li key={asset.asset_id}>
-          <Link
-            href={`/asset/${asset.asset_id}`}
-            data-testid="asset-row"
-            className="flex items-center justify-between rounded-md border border-line bg-surface px-4 py-3 transition-colors hover:border-line2"
-          >
-            <div className="flex items-center gap-3">
-              <div className="flex h-9 w-9 items-center justify-center rounded-md bg-bitcoin/10 text-bitcoin">
-                <CircleDollarSign size={15} strokeWidth={2.25} />
-              </div>
-              <div className="min-w-0">
-                <p
-                  data-testid="asset-row-name"
-                  className="truncate text-[13px] font-medium text-ink"
-                >
-                  {asset.name ?? unknownName}
-                </p>
-                <p
-                  data-testid="asset-row-id"
-                  className="mono text-[11px] text-ink3"
-                  title={asset.asset_id}
-                >
-                  {shortAssetId(asset.asset_id)}
-                </p>
-              </div>
-            </div>
-            <span
-              data-testid="asset-row-balance"
-              className="mono text-[13px] font-medium tabular-nums text-ink"
+      {assets.map((asset) => {
+        const decimals = asset.decimals;
+        const amountText =
+          typeof decimals === 'number' &&
+          Number.isSafeInteger(decimals) &&
+          decimals >= 0 &&
+          Number.isSafeInteger(asset.balance) &&
+          asset.balance >= 0
+            ? formatAssetAmount(asset.balance, decimals)
+            : unknownAmount;
+        return (
+          <li key={asset.asset_id}>
+            <Link
+              href={`/asset/${asset.asset_id}`}
+              data-testid="asset-row"
+              className="flex items-center justify-between rounded-md border border-line bg-surface px-4 py-3 transition-colors hover:border-line2"
             >
-              {formatAssetAmount(asset.balance, asset.decimals)}
-            </span>
-          </Link>
-        </li>
-      ))}
+              <div className="flex items-center gap-3">
+                <div className="flex h-9 w-9 items-center justify-center rounded-md bg-bitcoin/10 text-bitcoin">
+                  <CircleDollarSign size={15} strokeWidth={2.25} />
+                </div>
+                <div className="min-w-0">
+                  <p
+                    data-testid="asset-row-name"
+                    className="truncate text-[13px] font-medium text-ink"
+                  >
+                    {asset.name ?? unknownName}
+                  </p>
+                  <p
+                    data-testid="asset-row-id"
+                    className="mono text-[11px] text-ink3"
+                    title={asset.asset_id}
+                  >
+                    {shortAssetId(asset.asset_id)}
+                  </p>
+                </div>
+              </div>
+              <span
+                data-testid="asset-row-balance"
+                className="mono text-[13px] font-medium tabular-nums text-ink"
+              >
+                {amountText}
+              </span>
+            </Link>
+          </li>
+        );
+      })}
     </ul>
   );
 }
@@ -502,7 +497,7 @@ function EmptyTransactions({
   noWalletBody: string;
 }) {
   return (
-    <div className="flex flex-col items-center pt-8 pb-4 text-center">
+    <div data-testid="tx-list-empty" className="flex flex-col items-center pt-8 pb-4 text-center">
       <div className="flex h-14 w-14 items-center justify-center rounded-full border border-line bg-surface text-ink4">
         <Receipt size={22} strokeWidth={1.75} />
       </div>
@@ -520,26 +515,50 @@ function TransactionsList({
   multiAsset,
 }: {
   items: HistoryItem[];
-  labels: { sent: string; received: string; mint: string };
+  labels: { sent: string; received: string; mint: string; unknown: string };
   multiAsset: boolean;
 }) {
   return (
     <ul className="space-y-2">
       {items.map((tx) => {
-        const positive = tx.direction !== 'send';
-        const label =
-          tx.direction === 'mint'
-            ? labels.mint
-            : tx.direction === 'send'
-              ? labels.sent
-              : labels.received;
-        const Icon =
-          tx.direction === 'send' ? ArrowUpRight : tx.direction === 'mint' ? Plus : ArrowDownLeft;
+        const kind = tx.kind;
+        let polarity: 'credit' | 'debit' | 'unknown';
+        let label: string;
+        let Icon: typeof ArrowUpRight;
+        if (kind === 'mint') {
+          polarity = 'credit';
+          label = labels.mint;
+          Icon = Plus;
+        } else if (kind === 'send') {
+          polarity = 'debit';
+          label = labels.sent;
+          Icon = ArrowUpRight;
+        } else if (kind === 'receive') {
+          polarity = 'credit';
+          label = labels.received;
+          Icon = ArrowDownLeft;
+        } else {
+          polarity = 'unknown';
+          label = labels.unknown;
+          Icon = Receipt;
+        }
+        const isDebit = polarity === 'debit';
         // Single-asset history renders BTC-denominated amounts; multi-asset
         // history renders raw atomic counts (per-asset decimals differ, so a
-        // single unit suffix would be wrong).
-        const signed = positive ? tx.amount : -tx.amount;
-        const amountText = multiAsset ? signed.toLocaleString('en-US') : `${formatBtc(signed)} BTC`;
+        // single unit suffix would be wrong). Amount is optional on thin
+        // pull-session locators. Unknown polarity keeps the raw amount.
+        const amount = isNonNegativeSafeInteger(tx.amount) ? tx.amount : undefined;
+        const displayAmount = amount === undefined ? undefined : isDebit ? -amount : amount;
+        const amountText =
+          displayAmount === undefined
+            ? '—'
+            : multiAsset
+              ? displayAmount.toLocaleString('en-US')
+              : `${formatBtc(displayAmount)} BTC`;
+        const when = historyItemDate(tx);
+        const timeText = Number.isNaN(when.getTime())
+          ? '—'
+          : when.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         return (
           <li key={tx.id}>
             <Link
@@ -550,7 +569,7 @@ function TransactionsList({
               <div className="flex items-center gap-3">
                 <div
                   className={`flex h-9 w-9 items-center justify-center rounded-md ${
-                    positive ? 'bg-line text-ink2' : 'bg-bitcoin/10 text-bitcoin'
+                    isDebit ? 'bg-bitcoin/10 text-bitcoin' : 'bg-line text-ink2'
                   }`}
                 >
                   <Icon size={15} strokeWidth={2.25} />
@@ -558,17 +577,14 @@ function TransactionsList({
                 <div>
                   <p className="text-[13px] font-medium text-ink">{label}</p>
                   <p data-testid="tx-row-time" className="mono text-[11px] text-ink3 tabular-nums">
-                    {new Date(tx.timestamp * 1000).toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
+                    {timeText}
                   </p>
                 </div>
               </div>
               <span
                 data-testid="tx-row-amount"
                 className={`mono text-[13px] font-medium tabular-nums ${
-                  positive ? 'text-ink' : 'text-bitcoin'
+                  isDebit ? 'text-bitcoin' : 'text-ink'
                 }`}
               >
                 {amountText}

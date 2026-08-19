@@ -7,8 +7,11 @@ import { PixelLogo } from '../icons/PixelLogo';
 import { Logo } from '../icons/Logo';
 import { useWalletStore } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
-import { api } from '@/lib/api/client';
-import { initWasm } from '@zkcoins/wasm';
+import {
+  accountKeysFromMnemonic,
+  createMnemonic,
+  isValidMnemonic,
+} from '@/lib/crypto/account-keys';
 import {
   createPasskey,
   authenticatePasskey,
@@ -43,8 +46,23 @@ function StepHeader({ onBack }: { onBack?: () => void }) {
 
 type Step = 'welcome' | 'seed' | 'passkey' | 'seed-import' | 'passkey-restore';
 
-export function Onboarding() {
+/**
+ * Legacy / incompatible wallet detected: guide the user to re-import
+ * their seed. Hides "Create wallet" and keeps the legacy blob until
+ * a successful re-import or an explicit discard.
+ */
+export type OnboardingProps =
+  | {
+      reimportRequired: true;
+      onDiscardLegacy: () => void | Promise<void>;
+    }
+  | {
+      reimportRequired?: false;
+    };
+
+export function Onboarding(props: OnboardingProps) {
   const [step, setStep] = useState<Step>('welcome');
+  const reimportRequired = props.reimportRequired === true;
 
   return (
     <div className="relative min-h-screen overflow-x-hidden bg-bg">
@@ -58,25 +76,34 @@ export function Onboarding() {
           px-6 py-12 overflow-hidden
           md:my-10 md:rounded-2xl md:border md:border-ink md:bg-surface md:px-8 md:py-14 md:shadow-[0_20px_80px_-20px_rgba(247,147,26,0.12)]"
       >
-        {step === 'welcome' && (
-          <Welcome
-            onNext={() => setStep(FEATURES.PASSKEY ? 'passkey' : 'seed')}
-            onRestore={() => setStep('seed-import')}
-          />
-        )}
-        {FEATURES.PASSKEY && step === 'passkey' && (
+        {step === 'welcome' &&
+          (props.reimportRequired === true ? (
+            <Welcome
+              reimportRequired
+              onRestore={() => setStep('seed-import')}
+              onDiscardLegacy={props.onDiscardLegacy}
+            />
+          ) : (
+            <Welcome
+              onNext={() => setStep(FEATURES.PASSKEY ? 'passkey' : 'seed')}
+              onRestore={() => setStep('seed-import')}
+            />
+          ))}
+        {FEATURES.PASSKEY && step === 'passkey' && !reimportRequired && (
           <PasskeyFlow onBack={() => setStep('welcome')} onUseSeed={() => setStep('seed')} />
         )}
-        {step === 'seed' && (
+        {step === 'seed' && !reimportRequired && (
           <SeedFlow onBack={() => setStep(FEATURES.PASSKEY ? 'passkey' : 'welcome')} />
         )}
         {step === 'seed-import' && (
           <SeedImportFlow
             onBack={() => setStep('welcome')}
-            onPasskeyRestore={FEATURES.PASSKEY ? () => setStep('passkey-restore') : undefined}
+            onPasskeyRestore={
+              FEATURES.PASSKEY && !reimportRequired ? () => setStep('passkey-restore') : undefined
+            }
           />
         )}
-        {FEATURES.PASSKEY && step === 'passkey-restore' && (
+        {FEATURES.PASSKEY && step === 'passkey-restore' && !reimportRequired && (
           <PasskeyRestoreFlow onBack={() => setStep('seed-import')} />
         )}
       </div>
@@ -84,7 +111,24 @@ export function Onboarding() {
   );
 }
 
-function Welcome({ onNext, onRestore }: { onNext: () => void; onRestore: () => void }) {
+type WelcomeProps =
+  | {
+      reimportRequired: true;
+      onRestore: () => void;
+      onDiscardLegacy: () => void | Promise<void>;
+    }
+  | {
+      reimportRequired?: false;
+      onNext: () => void;
+      onRestore: () => void;
+    };
+
+function Welcome(props: WelcomeProps) {
+  const reimportRequired = props.reimportRequired === true;
+  const { onRestore } = props;
+  const [discarding, setDiscarding] = useState(false);
+  const [discardError, setDiscardError] = useState<string | null>(null);
+
   return (
     <div className="relative -mx-6 -my-12 min-h-screen overflow-hidden lg:-mx-8 lg:-my-14">
       {/* Hero glow */}
@@ -131,48 +175,109 @@ function Welcome({ onNext, onRestore }: { onNext: () => void; onRestore: () => v
           data-testid="welcome-heading"
           className="flex items-center gap-3 text-[26px] font-semibold tracking-tight text-ink"
         >
-          Welcome to zkCoins
+          {reimportRequired ? 'Re-import your wallet' : 'Welcome to zkCoins'}
           <PixelIcon name="ghost" size={26} color="#f7931a" />
         </h1>
 
-        <ul className="mt-8 space-y-5">
-          <Benefit
-            icon={Lock}
-            title="Truly private by default"
-            description="Amounts, sender, receiver, and the transaction graph are hidden. Only a 64-byte nullifier hits the chain — a meaningless blob to anyone but you."
-          />
-          <Benefit
-            icon={Zap}
-            title="Just Bitcoin, not a new blockchain"
-            description="Shielded CSV uses Client-Side Validation + ZK proofs on Bitcoin as it exists today. No soft fork, no new chain, no sidechain to bridge into."
-          />
-          <Benefit
-            icon={Key}
-            title="You hold the keys"
-            description="Self-custodial by construction. Keys are generated locally and encrypted with AES-256-GCM in IndexedDB. They never leave your device."
-          />
-        </ul>
+        {reimportRequired ? (
+          <div
+            data-testid="seed-reimport-required"
+            className="mt-6 rounded-md border border-line2 bg-surface p-4 text-[13px] leading-relaxed text-ink2"
+            role="status"
+          >
+            <p className="font-semibold text-ink">Incompatible wallet data on this device</p>
+            <p className="mt-1">
+              A previous wallet store is still present but cannot be opened by this build. Re-import
+              your 12-word seed phrase to continue. The old data is kept until you re-import or
+              explicitly discard it.
+            </p>
+          </div>
+        ) : (
+          <ul className="mt-8 space-y-5">
+            <Benefit
+              icon={Lock}
+              title="Truly private by default"
+              description="Amounts, sender, receiver, and the transaction graph are hidden. Only a 64-byte nullifier hits the chain — a meaningless blob to anyone but you."
+            />
+            <Benefit
+              icon={Zap}
+              title="Just Bitcoin, not a new blockchain"
+              description="Shielded CSV uses Client-Side Validation + ZK proofs on Bitcoin as it exists today. No soft fork, no new chain, no sidechain to bridge into."
+            />
+            <Benefit
+              icon={Key}
+              title="You hold the keys"
+              description="Self-custodial by construction. Keys are generated locally and encrypted with AES-256-GCM in IndexedDB. They never leave your device."
+            />
+          </ul>
+        )}
 
         <div className="mt-10">
-          <button
-            data-testid="onboarding-create-btn"
-            onClick={onNext}
-            className="flex w-full items-center justify-center gap-2 rounded-md bg-bitcoin py-4 text-[13px] font-semibold tracking-wider text-bg transition-colors hover:bg-bitcoin-hover"
-          >
-            <PixelIcon name="plus" size={12} />
-            CREATE WALLET
-          </button>
+          {props.reimportRequired === true ? (
+            <button
+              data-testid="onboarding-restore-btn"
+              onClick={onRestore}
+              className="flex w-full items-center justify-center gap-2 rounded-md bg-bitcoin py-4 text-[13px] font-semibold tracking-wider text-bg transition-colors hover:bg-bitcoin-hover"
+            >
+              <PixelIcon name="key" size={12} />
+              RE-IMPORT SEED PHRASE
+            </button>
+          ) : (
+            <button
+              data-testid="onboarding-create-btn"
+              onClick={props.onNext}
+              className="flex w-full items-center justify-center gap-2 rounded-md bg-bitcoin py-4 text-[13px] font-semibold tracking-wider text-bg transition-colors hover:bg-bitcoin-hover"
+            >
+              <PixelIcon name="plus" size={12} />
+              CREATE WALLET
+            </button>
+          )}
         </div>
 
-        <div className="mt-6 text-center">
-          <button
-            data-testid="onboarding-restore-btn"
-            onClick={onRestore}
-            className="text-[12px] font-medium text-ink2 transition-colors hover:text-bitcoin"
-          >
-            Restore existing wallet
-          </button>
-        </div>
+        {props.reimportRequired === true ? (
+          <div className="mt-6 text-center">
+            <button
+              data-testid="onboarding-discard-legacy-btn"
+              disabled={discarding}
+              onClick={() => {
+                void (async () => {
+                  setDiscarding(true);
+                  setDiscardError(null);
+                  try {
+                    await props.onDiscardLegacy();
+                  } catch (err) {
+                    setDiscardError(
+                      err instanceof Error ? err.message : 'Failed to discard old wallet data',
+                    );
+                  } finally {
+                    setDiscarding(false);
+                  }
+                })();
+              }}
+              className="text-[12px] font-medium text-ink2 transition-colors hover:text-bad disabled:opacity-50"
+            >
+              Discard old wallet data
+            </button>
+            {discardError && (
+              <p
+                data-testid="onboarding-discard-legacy-error"
+                className="mt-3 text-[12px] text-bad"
+              >
+                <span className="text-ink3">err:</span> {discardError}
+              </p>
+            )}
+          </div>
+        ) : (
+          <div className="mt-6 text-center">
+            <button
+              data-testid="onboarding-restore-btn"
+              onClick={onRestore}
+              className="text-[12px] font-medium text-ink2 transition-colors hover:text-bitcoin"
+            >
+              Restore existing wallet
+            </button>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -203,7 +308,7 @@ function Benefit({
 /* ---------- Seed Flow ---------- */
 
 function SeedFlow({ onBack }: { onBack: () => void }) {
-  const { setAccount, setBalance, saveWithPassword } = useWalletStore();
+  const { saveWithPassword } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'generating' | 'reveal' | 'confirm' | 'password' | 'creating'>(
     'generating',
@@ -219,8 +324,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
     let cancelled = false;
     (async () => {
       try {
-        const wasm = await initWasm();
-        const phrase = wasm.generateMnemonic();
+        const phrase = await createMnemonic();
         if (!cancelled) {
           setMnemonic(phrase.split(' '));
           setStage('reveal');
@@ -249,31 +353,23 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
     setStage('creating');
     setError(null);
     try {
-      const wasm = await initWasm();
       const phrase = mnemonic.join(' ');
-      const ad = await wasm.createAccountFromMnemonic(phrase);
-      setAccount({
+      const ad = accountKeysFromMnemonic(phrase);
+      // Activate account only after confirmed v2 write — never leave a
+      // half-created wallet open if IndexedDB encryption fails.
+      await saveWithPassword(password, {
         address: ad.address,
-        numPubkeys: ad.numPubkeys,
-        xpriv: ad.xpriv,
+        mnemonic: ad.mnemonic,
+        nkCommit: ad.nkCommit,
       });
-
-      // Encrypt and persist to IndexedDB.
-      await saveWithPassword(password);
       setAuth('seed');
-
-      // Best-effort balance fetch.
-      try {
-        const { assets } = await api.ownerBalances(ad.address);
-        setBalance(assets.reduce((sum, a) => sum + a.balance, 0));
-      } catch {
-        // Non-fatal — WalletScreen will keep its loading placeholder.
-      }
+      // Balance is node-owned and not readable without AccountState decode —
+      // do not invent 0 or cache a store balance (thin-client rule).
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to create wallet');
       setStage('password');
     }
-  }, [mnemonic, password, passwordConfirm, setAccount, setBalance, saveWithPassword, setAuth]);
+  }, [mnemonic, password, passwordConfirm, saveWithPassword, setAuth]);
 
   return (
     <div className="space-y-6 py-2">
@@ -426,7 +522,7 @@ function SeedFlow({ onBack }: { onBack: () => void }) {
 /* ---------- Passkey Flow ---------- */
 
 function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () => void }) {
-  const { setAccount, setBalance, saveWithPrf } = useWalletStore();
+  const { saveWithPrf } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'intro' | 'registering' | 'creating'>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -448,14 +544,7 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
       // Phase 2 — derive mnemonic from PRF output and create wallet deterministically.
       setStage('creating');
       const mnemonic = await deriveMnemonicFromPrf(result.prfOutput);
-      const wasm = await initWasm();
-      const ad = await wasm.createAccountFromMnemonic(mnemonic);
-
-      setAccount({
-        address: ad.address,
-        numPubkeys: ad.numPubkeys,
-        xpriv: ad.xpriv,
-      });
+      const ad = accountKeysFromMnemonic(mnemonic);
 
       // Persist passkey credential metadata to IndexedDB.
       await saveCredential({
@@ -464,17 +553,13 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
         createdAt: Date.now(),
       });
 
-      // Encrypt wallet with PRF output and save to IndexedDB.
-      await saveWithPrf(result.prfOutput);
+      // Encrypt + activate only after confirmed v2 write.
+      await saveWithPrf(result.prfOutput, {
+        address: ad.address,
+        mnemonic: ad.mnemonic,
+        nkCommit: ad.nkCommit,
+      });
       setAuth('passkey', result.credentialId);
-
-      // Best-effort balance fetch.
-      try {
-        const { assets } = await api.ownerBalances(ad.address);
-        setBalance(assets.reduce((sum, a) => sum + a.balance, 0));
-      } catch {
-        // Non-fatal — WalletScreen will keep its loading placeholder.
-      }
     } catch (err) {
       if (err instanceof PasskeyPrfUnsupportedError) {
         setError(
@@ -493,7 +578,7 @@ function PasskeyFlow({ onBack, onUseSeed }: { onBack: () => void; onUseSeed: () 
       }
       setStage('intro');
     }
-  }, [setAccount, setBalance, saveWithPrf, setAuth]);
+  }, [saveWithPrf, setAuth]);
 
   return (
     <div className="space-y-6 py-2">
@@ -575,7 +660,7 @@ function SeedImportFlow({
   onBack: () => void;
   onPasskeyRestore?: () => void;
 }) {
-  const { setAccount, setBalance, syncNumPubkeys, saveWithPassword } = useWalletStore();
+  const { saveWithPassword } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'input' | 'password' | 'restoring'>('input');
   const [phrase, setPhrase] = useState('');
@@ -592,8 +677,7 @@ function SeedImportFlow({
       return;
     }
     try {
-      const wasm = await initWasm();
-      if (!wasm.validateMnemonic(trimmed)) {
+      if (!(await isValidMnemonic(trimmed))) {
         setError('Invalid seed phrase — check your words and try again');
         return;
       }
@@ -616,44 +700,23 @@ function SeedImportFlow({
     setStage('restoring');
     setError(null);
     try {
-      const wasm = await initWasm();
       const trimmed = phrase.trim().toLowerCase();
-      const ad = await wasm.createAccountFromMnemonic(trimmed);
-      setAccount({
+      const ad = accountKeysFromMnemonic(trimmed);
+      // Atomic reimport: do not set the global account until v2 persist
+      // succeeds. On failure Home stays on reimport/onboarding and the
+      // error remains visible; legacy IDB/localStorage is untouched.
+      await saveWithPassword(password, {
         address: ad.address,
-        numPubkeys: ad.numPubkeys,
-        xpriv: ad.xpriv,
+        mnemonic: ad.mnemonic,
+        nkCommit: ad.nkCommit,
       });
-      await saveWithPassword(password);
       setAuth('seed');
-
-      try {
-        const res = await api.ownerBalances(ad.address);
-        setBalance(res.assets.reduce((sum, a) => sum + a.balance, 0));
-        // Restore-from-seed has no local memory of past sends — the
-        // mnemonic could correspond to an address that has already
-        // sent N times against this server. Hydrate the BIP-32
-        // child-index counter from the server BEFORE the user
-        // navigates to /send to avoid the "Vorheriger Public Key
-        // fehlt" 400 documented on `BalanceResponseSchema.num_sends`.
-        syncNumPubkeys(res.assets.reduce((sum, a) => sum + a.num_sends, 0));
-      } catch {
-        // Non-fatal — WalletScreen will keep its loading placeholder.
-      }
+      // No balance hydration — thin client; balances not available yet.
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to restore wallet');
       setStage('password');
     }
-  }, [
-    phrase,
-    password,
-    passwordConfirm,
-    setAccount,
-    setBalance,
-    syncNumPubkeys,
-    saveWithPassword,
-    setAuth,
-  ]);
+  }, [phrase, password, passwordConfirm, saveWithPassword, setAuth]);
 
   return (
     <div className="space-y-6 py-2">
@@ -776,7 +839,7 @@ function SeedImportFlow({
 /* ---------- Passkey Restore Flow ---------- */
 
 function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
-  const { setAccount, setBalance, syncNumPubkeys, saveWithPrf } = useWalletStore();
+  const { saveWithPrf } = useWalletStore();
   const { setAuth } = useAuthStore();
   const [stage, setStage] = useState<'intro' | 'authenticating' | 'restoring'>('intro');
   const [error, setError] = useState<string | null>(null);
@@ -796,14 +859,7 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
 
       setStage('restoring');
       const mnemonic = await deriveMnemonicFromPrf(result.prfOutput);
-      const wasm = await initWasm();
-      const ad = await wasm.createAccountFromMnemonic(mnemonic);
-
-      setAccount({
-        address: ad.address,
-        numPubkeys: ad.numPubkeys,
-        xpriv: ad.xpriv,
-      });
+      const ad = accountKeysFromMnemonic(mnemonic);
 
       await saveCredential({
         credentialId: result.credentialId,
@@ -811,19 +867,13 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
         createdAt: Date.now(),
       });
 
-      await saveWithPrf(result.prfOutput);
+      // Activate only after confirmed v2 write.
+      await saveWithPrf(result.prfOutput, {
+        address: ad.address,
+        mnemonic: ad.mnemonic,
+        nkCommit: ad.nkCommit,
+      });
       setAuth('passkey', result.credentialId);
-
-      try {
-        const res = await api.ownerBalances(ad.address);
-        setBalance(res.assets.reduce((sum, a) => sum + a.balance, 0));
-        // Same rationale as the seed-restore path: a passkey-restored
-        // wallet has no local memory of past sends. Hydrate the
-        // counter from the server now to avoid a /send 400 later.
-        syncNumPubkeys(res.assets.reduce((sum, a) => sum + a.num_sends, 0));
-      } catch {
-        // Non-fatal.
-      }
     } catch (err) {
       if (err instanceof PasskeyPrfUnsupportedError) {
         setError(
@@ -842,7 +892,7 @@ function PasskeyRestoreFlow({ onBack }: { onBack: () => void }) {
       }
       setStage('intro');
     }
-  }, [setAccount, setBalance, syncNumPubkeys, saveWithPrf, setAuth]);
+  }, [saveWithPrf, setAuth]);
 
   return (
     <div className="space-y-6 py-2">

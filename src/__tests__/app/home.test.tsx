@@ -18,9 +18,10 @@
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import Home from '@/app/page';
-import { useWalletStore } from '@/stores/wallet';
+import { useWalletStore, WALLET_PAYLOAD_VERSION } from '@/stores/wallet';
 import { useAuthStore } from '@/stores/auth';
 import { api } from '@/lib/api/client';
 
@@ -53,8 +54,9 @@ vi.mock('next/navigation', () => ({
 
 const ALICE = {
   address: 'a'.repeat(64),
-  numPubkeys: 0,
-  xpriv: 'xprv9s21ZrQH143K3GJpoapnV8SFfuZcECe',
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
 };
 
 beforeEach(() => {
@@ -71,12 +73,12 @@ beforeEach(() => {
   mockPathname = '/';
   useWalletStore.setState({
     account: null,
-    balance: null,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
     storedAddress: null,
     storedAuthMethod: null,
+    needsSeedReimport: false,
     error: null,
   });
   useAuthStore.setState({ authMethod: null, credentialId: null, isHydrated: false });
@@ -84,7 +86,11 @@ beforeEach(() => {
   // WalletScreen + UnlockScreen both fire api.info / api.balance on mount;
   // WalletScreen's useHistory additionally fires api.getHistory.
   // Stub them so the routing assertions don't race the network layer.
-  vi.spyOn(api, 'info').mockResolvedValue({ network: 'signet' });
+  vi.spyOn(api, 'info').mockResolvedValue({
+    network: 'testnet',
+    protocol_version: 'v1',
+    features: ['wallet'],
+  });
   vi.spyOn(api, 'ownerBalances').mockResolvedValue({ address: ALICE.address, assets: [] });
   vi.spyOn(api, 'getHistory').mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
 });
@@ -98,6 +104,58 @@ describe('Home — onboarding branch (no stored wallet, no account)', () => {
   });
 });
 
+describe('Home — legacy reimport branch', () => {
+  it('keeps legacy data and shows reimport guidance instead of plain create', async () => {
+    localStorage.setItem(
+      'zkcoins_wallet',
+      JSON.stringify({ account: { address: ALICE.address, xpriv: 'xprv…', numPubkeys: 0 } }),
+    );
+
+    render(<Home />);
+    expect(await screen.findByTestId('seed-reimport-required')).toBeInTheDocument();
+    expect(screen.queryByTestId('onboarding-create-btn')).not.toBeInTheDocument();
+    expect(screen.getByTestId('onboarding-restore-btn')).toBeInTheDocument();
+    // Legacy blob must still be present until re-import or discard.
+    expect(localStorage.getItem('zkcoins_wallet')).not.toBeNull();
+  });
+
+  it('unlock of encrypted incompatible wallet routes to reimport and keeps the IDB blob', async () => {
+    const user = (await import('@testing-library/user-event')).default.setup();
+    const { encrypt, deriveKeyFromPassword } = await import('@/lib/crypto/encryption');
+    const { saveEncryptedWallet, loadEncryptedWallet } = await import('@/lib/crypto/storage');
+
+    // Seed a password-encrypted but schema-incompatible (xpriv-era) blob.
+    const password = 'testpassword123';
+    const { key, salt } = await deriveKeyFromPassword(password);
+    const legacy = JSON.stringify({
+      account: { address: ALICE.address, xpriv: 'xprv…', numPubkeys: 0 },
+    });
+    const encrypted = await encrypt(legacy, key, salt);
+    await saveEncryptedWallet({
+      encrypted,
+      authMethod: 'seed',
+      address: ALICE.address,
+      createdAt: Date.now(),
+      // Outer envelope is current; inner plaintext is xpriv-era incompatible.
+      payloadVersion: WALLET_PAYLOAD_VERSION,
+    });
+
+    render(<Home />);
+    expect(await screen.findByTestId('unlock-heading')).toBeInTheDocument();
+
+    await user.type(screen.getByTestId('unlock-password-input'), password);
+    await user.click(screen.getByTestId('unlock-submit-btn'));
+
+    // needsSeedReimport must win over hasStoredWallet+isLocked.
+    expect(await screen.findByTestId('seed-reimport-required')).toBeInTheDocument();
+    expect(screen.queryByTestId('unlock-heading')).not.toBeInTheDocument();
+    // Encrypted blob must remain until re-import or discard.
+    const stored = await loadEncryptedWallet();
+    expect(stored).not.toBeNull();
+    expect(stored?.address).toBe(ALICE.address);
+  });
+});
+
 describe('Home — unlock branch (stored wallet, locked)', () => {
   it('renders <UnlockScreen /> when checkForStoredWallet finds an encrypted blob', async () => {
     // Pre-seed IndexedDB with an encrypted wallet so checkForStoredWallet
@@ -108,6 +166,7 @@ describe('Home — unlock branch (stored wallet, locked)', () => {
       authMethod: 'seed',
       address: ALICE.address,
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
 
     render(<Home />);
@@ -129,6 +188,76 @@ describe('Home — wallet branch (account in memory)', () => {
   });
 });
 
+describe('Home — storage error surface', () => {
+  it('shows storage-error with the store message and hides onboarding/unlock', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const loadSpy = vi
+      .spyOn(storage, 'loadEncryptedWallet')
+      .mockRejectedValue(new Error('IDB unavailable'));
+
+    try {
+      render(<Home />);
+
+      const surface = await screen.findByTestId('storage-error');
+      expect(surface).toHaveTextContent('IDB unavailable');
+      expect(screen.queryByTestId('welcome-heading')).not.toBeInTheDocument();
+      expect(screen.queryByTestId('unlock-heading')).not.toBeInTheDocument();
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
+  it('retry re-invokes checkForStoredWallet via another loadEncryptedWallet call', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    const loadSpy = vi
+      .spyOn(storage, 'loadEncryptedWallet')
+      .mockRejectedValue(new Error('IDB unavailable'));
+
+    try {
+      render(<Home />);
+      await screen.findByTestId('storage-error');
+      const callsBefore = loadSpy.mock.calls.length;
+
+      await userEvent.click(screen.getByTestId('storage-error-retry'));
+
+      await waitFor(() => {
+        expect(loadSpy.mock.calls.length).toBeGreaterThan(callsBefore);
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+
+  it('retry keeps storage-error mounted while the check is pending (no onboarding flash)', async () => {
+    const storage = await import('@/lib/crypto/storage');
+    let resolveSecond!: (v: null) => void;
+    const loadSpy = vi.spyOn(storage, 'loadEncryptedWallet');
+    loadSpy.mockRejectedValueOnce(new Error('IDB unavailable')).mockReturnValueOnce(
+      new Promise<null>((res) => {
+        resolveSecond = res;
+      }),
+    );
+
+    try {
+      render(<Home />);
+      await screen.findByTestId('storage-error');
+
+      await userEvent.click(screen.getByTestId('storage-error-retry'));
+
+      // Check is pending: error surface stays, onboarding does not flash.
+      expect(screen.getByTestId('storage-error')).toBeInTheDocument();
+      expect(screen.queryByTestId('welcome-heading')).not.toBeInTheDocument();
+
+      resolveSecond(null);
+      await waitFor(() => {
+        expect(screen.queryByTestId('storage-error')).not.toBeInTheDocument();
+      });
+    } finally {
+      loadSpy.mockRestore();
+    }
+  });
+});
+
 describe('Home — branch priority', () => {
   it('prefers the wallet branch over the unlock branch when both gates would match', async () => {
     // Both `account` is set AND a stored blob exists (the post-unlock
@@ -140,6 +269,7 @@ describe('Home — branch priority', () => {
       authMethod: 'seed',
       address: ALICE.address,
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
     useWalletStore.setState({ account: ALICE, isLocked: false });
 
@@ -157,8 +287,30 @@ describe('Home — branch priority', () => {
       authMethod: 'passkey',
       address: ALICE.address,
       createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
     });
     render(<Home />);
     expect(await screen.findByTestId('unlock-heading')).toBeInTheDocument();
+  });
+
+  it('prefers reimport over unlock when needsSeedReimport is set with a stored wallet', async () => {
+    const { saveEncryptedWallet } = await import('@/lib/crypto/storage');
+    await saveEncryptedWallet({
+      encrypted: { ciphertext: 'ct', iv: 'iv', salt: 'salt' },
+      authMethod: 'seed',
+      address: ALICE.address,
+      createdAt: Date.now(),
+      payloadVersion: WALLET_PAYLOAD_VERSION,
+    });
+    useWalletStore.setState({
+      account: null,
+      isLocked: true,
+      hasStoredWallet: true,
+      needsSeedReimport: true,
+      storedAuthMethod: 'seed',
+    });
+    render(<Home />);
+    expect(await screen.findByTestId('seed-reimport-required')).toBeInTheDocument();
+    expect(screen.queryByTestId('unlock-heading')).not.toBeInTheDocument();
   });
 });

@@ -1,41 +1,27 @@
-FROM node:20-alpine AS base
+FROM node:22-alpine AS base
+
+# Standalone app image. `@zkcoins/sdk` is resolved as a git dependency
+# (package.json → git+https://github.com/zk-coins/sdk.git#d1f0bc8a26ea92940ced9bbc8eddaa91f3eb0099;
+# flip to the published `@zkcoins/sdk@^0.4.0` once that release ships). No
+# sibling sdk/ checkout is required — `npm ci` fetches and `prepare` builds dist/.
 
 FROM base AS deps
+RUN apk add --no-cache git
 WORKDIR /app
 COPY package.json package-lock.json ./
-COPY packages/zkcoins-wasm/package.json ./packages/zkcoins-wasm/
-# `@zkcoins/sdk` is the one vendored tarball dependency
-# (`"@zkcoins/sdk": "file:vendor/zkcoins-sdk-<ver>.tgz"`), so the file
-# must be present before `npm ci` resolves it — otherwise the install
-# fails with `ENOENT … vendor/zkcoins-sdk-*.tgz`. (The wasm package
-# above is a tsconfig path-alias bundled from source in the builder
-# stage, not an npm dependency, so it needs no tarball here.)
-COPY vendor ./vendor
 RUN npm ci
 
 FROM base AS builder
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
-COPY . .
+COPY . ./
 
 # Build-time placeholders — replaced at runtime by entrypoint.sh
 ENV NEXT_PUBLIC_API_URL=NEXT_PUBLIC_API_URL_PLACEHOLDER
 ENV NEXT_PUBLIC_EXPLORER_URL=NEXT_PUBLIC_EXPLORER_URL_PLACEHOLDER
 
 # Build-time client gates (`NEXT_PUBLIC_ENABLE_*`) are intentionally not
-# declared here. They are a local-developer convenience read from
-# `.env.local` to preview work-in-progress UI; the deployed image must
-# not ship any gated branch. Without an ENV in this stage,
-# `process.env.NEXT_PUBLIC_ENABLE_*` is undefined at build time, every
-# `FEATURES.X` resolves to `false`, and Next.js DCE strips the gated
-# branches from the bundle. When a feature is ready to ship, the gate
-# is dropped from the code — never enabled via env var.
-#
-# Server-side feature gates (`FAUCET`, `USERNAMES`) are NOT build-time
-# anymore. They are reported by the server at `/api/info.capabilities`
-# and consumed via `useFeatures()` at runtime, so this image runs the
-# same code regardless of which Cargo features the server was compiled
-# with. The server is the single source of truth.
+# declared here. Server capabilities come from GET /v1/info at runtime.
 RUN npm run build
 
 FROM base AS runner

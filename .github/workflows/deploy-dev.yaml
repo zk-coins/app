@@ -27,6 +27,10 @@ jobs:
     name: Build and deploy to DEV
     runs-on: ubuntu-24.04-arm
     steps:
+      # App-only checkout. `@zkcoins/sdk` is a git dependency pinned in
+      # package.json (github:zk-coins/sdk#d1f0bc8a26ea92940ced9bbc8eddaa91f3eb0099) — `npm ci`
+      # inside the Docker build resolves it (lockfile pins the commit SHA).
+      # Flip to published `@zkcoins/sdk@^0.4.0` on the release cutover.
       - name: Checkout
         uses: actions/checkout@v4
 
@@ -42,13 +46,13 @@ jobs:
       - name: Build and push Docker image
         # DEV mirrors PRD — no feature-flag build-args. Build-time
         # client gates (`NEXT_PUBLIC_ENABLE_*`) default to false and
-        # DCE strips them from the bundle. Server-gated UI
-        # (faucet, usernames) is driven by `/api/info.capabilities` at
-        # runtime, so the same image works against any DEV / PRD server
-        # without rebuilding. See issues #30 and #97.
+        # DCE strips them from the bundle. Server-gated UI is driven
+        # by GET /v1/info.features at runtime, so the same image works
+        # against any DEV / PRD server without rebuilding.
         uses: docker/build-push-action@v6
         with:
           context: .
+          file: Dockerfile
           push: true
           tags: ${{ env.DOCKER_TAGS }}
           platforms: linux/arm64

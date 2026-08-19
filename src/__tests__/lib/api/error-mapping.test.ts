@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { ApiError, JobFailedError } from '@/lib/api/client';
 import {
   KNOWN_SERVER_ERRORS,
+  MACHINE_CODE_TO_KEY,
   SERVER_ERROR_TO_USER_MESSAGE,
   userMessageFor,
 } from '@/lib/api/errorMessages';
@@ -33,6 +34,22 @@ describe('userMessageFor', () => {
     // user-readable string.
     const apiErr = new ApiError(502, 'Bad Gateway');
     expect(userMessageFor(apiErr)).toBe('Serverfehler 502: Bad Gateway');
+  });
+
+  it('falls back to ApiError.code machine mapping when serverError is unmapped', () => {
+    expect(MACHINE_CODE_TO_KEY['insufficient_funds']).toBe('insufficientFunds');
+    const apiErr = new ApiError(422, 'totally-unmapped', undefined, 'insufficient_funds');
+    expect(userMessageFor(apiErr)).toBe(SERVER_ERROR_TO_USER_MESSAGE['Insufficient funds']);
+  });
+
+  it('falls back when both serverError and code are unmapped', () => {
+    const apiErr = new ApiError(418, 'totally-unmapped', undefined, 'also-unmapped');
+    expect(userMessageFor(apiErr)).toBe('Serverfehler 418: totally-unmapped');
+  });
+
+  it('resolves a mapped ApiError.code on an isolated call', () => {
+    const apiErr = new ApiError(422, 'totally-unmapped', undefined, 'insufficient_funds');
+    expect(userMessageFor(apiErr)).toBe(SERVER_ERROR_TO_USER_MESSAGE['Insufficient funds']);
   });
 
   describe('family pattern matching', () => {

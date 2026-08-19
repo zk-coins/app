@@ -15,7 +15,7 @@ type Mode =
   | { kind: 'ios' } // iOS Safari — share-icon manual instructions
   | { kind: 'manual'; body: string }; // Desktop without BIP — show address-bar hint
 
-function detectMode(): Mode {
+export function detectMode(): Mode {
   if (typeof window === 'undefined') {
     return { kind: 'manual', body: 'Install zkCoins for the smoothest experience.' };
   }
@@ -44,8 +44,13 @@ export function PwaPrompt() {
   const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
+    /* v8 ignore next -- React effects never execute during SSR, so window is necessarily defined whenever this callback runs. */
     if (typeof window === 'undefined') return;
-    setDismissed(localStorage.getItem(KEY) === '1');
+    try {
+      setDismissed(localStorage.getItem(KEY) === '1');
+    } catch {
+      // Keep initial dismissed=true when storage is unavailable.
+    }
     setInstalled(
       window.matchMedia?.('(display-mode: standalone)').matches ||
         // @ts-expect-error iOS legacy
@@ -80,12 +85,18 @@ export function PwaPrompt() {
 
   const dismiss = () => {
     setDismissed(true);
+    /* v8 ignore next -- Dismiss is reachable only from browser-rendered buttons in this client component. */
     if (typeof window !== 'undefined') {
-      localStorage.setItem(KEY, '1');
+      try {
+        localStorage.setItem(KEY, '1');
+      } catch {
+        // React state still dismisses when storage is unavailable.
+      }
     }
   };
 
   const install = async () => {
+    /* v8 ignore next -- The install callback is attached only in the native-mode render branch and cannot be invoked by another mode. */
     if (mode.kind !== 'native') return;
     setInstalling(true);
     try {
