@@ -15,28 +15,27 @@
 #
 # ── WHAT IT DOES (all inside the one container) ───────────────────────
 #   1. npm ci
-#   2. next build with the same-origin proxy config baked in:
-#        NEXT_PUBLIC_API_URL=http://127.0.0.1:<APP_PORT>   (browser → own origin)
-#        LOCAL_NODE_PROXY_TARGET=http://127.0.0.1:<PROXY_PORT> (Next rewrite → proxy)
-#   3. start the test-only /api/info capability-normalisation proxy
+#   2. next build with the proxy host baked in (chan_bind must match):
+#        NEXT_PUBLIC_API_URL=http://127.0.0.1:<PROXY_PORT>  (browser → proxy, CORS)
+#        LOCAL_NODE_PROXY_TARGET=http://127.0.0.1:<PROXY_PORT>
+#   3. start the test-only /v1/info capability-normalisation proxy
 #      (scripts/e2e-info-proxy.mjs) → upstream local node
 #   4. start the Next standalone server (node .next/standalone/server.js)
-#   5. Playwright, two legs:
-#        leg 1: --grep-invert "send-success" (parallel, fixtures minted once)
-#        leg 2: --grep "send-success" --workers=1 (ONE real send via the node)
+#   5. Playwright chromium suite (send is unavailable in this build — no
+#      separate send-success leg)
 #   6. tear everything down
 #
 # ── TOPOLOGY ──────────────────────────────────────────────────────────
-#   browser ─(same-origin /api/*)→ Next standalone ─(rewrite)→ proxy ─→ node
-#   e2e helpers (Node, E2E_API_URL) ─────────────────────────────────→ proxy ─→ node
-#   Both observe the DEV-normalised /api/info; everything else hits the node 1:1.
+#   browser ─(CORS /v1/*)→ info-proxy :<PROXY_PORT> ─→ node
+#   e2e helpers (Node, E2E_API_URL) ─→ same info-proxy ─→ node
+#   Next standalone :<APP_PORT> serves UI only. Both observe the
+#   DEV-normalised /v1/info; everything else hits the node 1:1.
 #
 # ── CONFIG (env overrides) ────────────────────────────────────────────
 #   E2E_NODE_URL        upstream node, as seen FROM the container
 #                       (default http://host.docker.internal:4242)
 #   E2E_LOCAL_APP_PORT  standalone app port inside container (default 3090)
 #   E2E_INFO_PROXY_PORT info-proxy port inside container     (default 4243)
-#   E2E_NETWORK_EXPECTED network badge label                 (default signet)
 #   E2E_FAUCET_CALLS    mint cycles to seed Alice            (default 1)
 #
 # Usage:  npm run test:e2e:local     (or)   scripts/e2e-local.sh [-- extra playwright args]
@@ -46,7 +45,7 @@ set -euo pipefail
 # ──────────────────────────────────────────────────────────────────────
 # IN-CONTAINER ENTRYPOINT
 # When invoked with the internal flag we are already inside the Playwright
-# Linux image. Build, serve, and run the two-leg suite here.
+# Linux image. Build, serve, and run the single chromium suite here.
 # ──────────────────────────────────────────────────────────────────────
 if [[ "${1:-}" == "__in_container" ]]; then
   shift
@@ -72,8 +71,11 @@ if [[ "${1:-}" == "__in_container" ]]; then
   # which serves English. The app is German-first by default (`i18n/config.ts`),
   # so bake the e2e-only `NEXT_PUBLIC_E2E_LOCALE=en` override to reproduce the
   # baseline locale here. Production builds never set this and stay German.
-  echo "▶ [container] next build (NEXT_PUBLIC_API_URL=http://127.0.0.1:${APP_PORT}, proxy→127.0.0.1:${PROXY_PORT}, locale=en)"
-  NEXT_PUBLIC_API_URL="http://127.0.0.1:${APP_PORT}" \
+  # Browser and e2e helpers must share one host string: kernel chan_bind is
+  # ZKCOINS_PUBLIC_HOST (typically 127.0.0.1:${PROXY_PORT}). Same-origin
+  # :${APP_PORT} made ownership-pull signatures fail (chan_bind mismatch).
+  echo "▶ [container] next build (NEXT_PUBLIC_API_URL=http://127.0.0.1:${PROXY_PORT}, proxy→127.0.0.1:${PROXY_PORT}, locale=en)"
+  NEXT_PUBLIC_API_URL="http://127.0.0.1:${PROXY_PORT}" \
   NEXT_PUBLIC_EXPLORER_URL="https://zkcoins.space" \
   NEXT_PUBLIC_E2E_LOCALE="en" \
   LOCAL_NODE_PROXY_TARGET="http://127.0.0.1:${PROXY_PORT}" \
@@ -121,7 +123,7 @@ if [[ "${1:-}" == "__in_container" ]]; then
   # failure in the readiness wait can never leak the proxy / app servers.
   trap 'publish_artifacts; cleanup' EXIT
 
-  echo "▶ [container] starting /api/info normalisation proxy :${PROXY_PORT} → ${NODE_URL} (multi_asset=${E2E_MULTI_ASSET:-false})"
+  echo "▶ [container] starting /v1/info normalisation proxy :${PROXY_PORT} → ${NODE_URL} (multi_asset=${E2E_MULTI_ASSET:-false})"
   E2E_INFO_PROXY_PORT="$PROXY_PORT" \
   E2E_NODE_URL="$NODE_URL" \
   E2E_INFO_USERNAME_DOMAIN="dev.zkcoins.app" \
@@ -136,13 +138,13 @@ if [[ "${1:-}" == "__in_container" ]]; then
   # Wait for both to answer before handing off to Playwright.
   echo "▶ [container] waiting for proxy + app to come up"
   for i in $(seq 1 60); do
-    if curl -sf "http://127.0.0.1:${PROXY_PORT}/api/info" >/dev/null 2>&1 &&
+    if curl -sf "http://127.0.0.1:${PROXY_PORT}/v1/info" >/dev/null 2>&1 &&
       curl -sf "http://127.0.0.1:${APP_PORT}/" >/dev/null 2>&1; then
       break
     fi
     if [[ "$i" == "60" ]]; then
       echo "✗ proxy or app did not come up within 60s" >&2
-      curl -s "http://127.0.0.1:${PROXY_PORT}/api/info" || true
+      curl -s "http://127.0.0.1:${PROXY_PORT}/v1/info" || true
       exit 1
     fi
     sleep 1
@@ -150,11 +152,11 @@ if [[ "${1:-}" == "__in_container" ]]; then
 
   # Sanity: the proxy must report the DEV surface (caps OFF). A mismatch
   # here would silently break ~16 baselines, so fail loud instead.
-  PROXY_INFO="$(curl -s "http://127.0.0.1:${PROXY_PORT}/api/info")"
-  echo "▶ [container] proxied /api/info → ${PROXY_INFO}"
+  PROXY_INFO="$(curl -s "http://127.0.0.1:${PROXY_PORT}/v1/info")"
+  echo "▶ [container] proxied /v1/info → ${PROXY_INFO}"
   case "$PROXY_INFO" in
-    *'"username_claim":true'*)
-      echo "✗ proxy did not normalise username_claim to false — baselines would break" >&2
+    *'"wallet"'*)
+      echo "✗ proxy did not normalise features away from wallet (username claim)" >&2
       exit 1
       ;;
   esac
@@ -163,15 +165,11 @@ if [[ "${1:-}" == "__in_container" ]]; then
   export E2E_BASE_URL="http://127.0.0.1:${APP_PORT}"
   export E2E_API_URL="http://127.0.0.1:${PROXY_PORT}"
   export E2E_LOCAL_APP_PORT="$APP_PORT"
-  export E2E_NETWORK_EXPECTED="${E2E_NETWORK_EXPECTED:-signet}"
   export E2E_FAUCET_CALLS="${E2E_FAUCET_CALLS:-1}"
   export E2E_NEED_FIXTURES="true"
 
-  echo "▶ [container] E2E leg 1 — parallel suite (excluding send-success)"
-  npx playwright test --project=chromium --grep-invert "send-success" "$@"
-
-  echo "▶ [container] E2E leg 2 — send-success (one real send, workers=1)"
-  npx playwright test --project=chromium --grep "send-success" --workers=1 "$@"
+  echo "▶ [container] E2E chromium suite (send unavailable — no send-success leg)"
+  npx playwright test --project=chromium "$@"
 
   echo "✓ [container] local E2E suite complete"
   exit 0
@@ -224,18 +222,31 @@ echo "▶ [host] report + artifacts → ${OUT_DIR}"
 # the run so a non-zero exit (e.g. a few specs failing on an
 # `--update-snapshots` regen) does NOT abort before that sync step — the
 # whole point of a regen run is to surface the baselines it produced.
+# Prefer --env-file for fixture mnemonics so they never appear on `ps`.
+DOCKER_ENV_ARGS=(
+  -e E2E_NODE_URL="${NODE_URL}"
+  -e E2E_LOCAL_APP_PORT="${E2E_LOCAL_APP_PORT:-3090}"
+  -e E2E_INFO_PROXY_PORT="${E2E_INFO_PROXY_PORT:-4243}"
+  -e E2E_FAUCET_CALLS="${E2E_FAUCET_CALLS:-1}"
+  -e E2E_MULTI_ASSET="${E2E_MULTI_ASSET:-}"
+  -e CI="${CI:-}"
+)
+if [[ -n "${E2E_ENV_FILE:-}" ]]; then
+  DOCKER_ENV_ARGS+=(--env-file "${E2E_ENV_FILE}")
+else
+  DOCKER_ENV_ARGS+=(
+    -e E2E_ALICE_MNEMONIC="${E2E_ALICE_MNEMONIC:-}"
+    -e E2E_BOB_MNEMONIC="${E2E_BOB_MNEMONIC:-}"
+    -e E2E_CREATE_MNEMONIC="${E2E_CREATE_MNEMONIC:-}"
+  )
+fi
+
 set +e
 docker run --rm -i \
   --add-host=host.docker.internal:host-gateway \
   -v "${REPO_ROOT}:/src:ro" \
   -v "${OUT_DIR}:/out" \
-  -e E2E_NODE_URL="${NODE_URL}" \
-  -e E2E_LOCAL_APP_PORT="${E2E_LOCAL_APP_PORT:-3090}" \
-  -e E2E_INFO_PROXY_PORT="${E2E_INFO_PROXY_PORT:-4243}" \
-  -e E2E_NETWORK_EXPECTED="${E2E_NETWORK_EXPECTED:-signet}" \
-  -e E2E_FAUCET_CALLS="${E2E_FAUCET_CALLS:-1}" \
-  -e E2E_MULTI_ASSET="${E2E_MULTI_ASSET:-}" \
-  -e CI="${CI:-}" \
+  "${DOCKER_ENV_ARGS[@]}" \
   "${IMAGE}" \
   bash /src/scripts/e2e-local.sh __in_container "$@"
 DOCKER_EXIT=$?

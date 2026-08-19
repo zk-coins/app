@@ -51,12 +51,12 @@ const EXEMPT_TESTIDS = new Set([
   'passkey-restore-btn',
   'unlock-passkey-btn',
   // Gated on the runtime `username_claim` capability reported by
-  // /api/info — hosted DEV + PRD images report `false` (Cargo feature
+  // /v1/info — hosted DEV + PRD images report `false` (Cargo feature
   // off on the node), so the button does not render against either.
   // Self-hosters who flip the server-side feature ship their own E2E.
   'username-claim-btn',
   // Disabled loading states are visually transient -- Playwright cannot
-  // reliably catch them without artificially slowing WASM calls.
+  // reliably catch them without artificially slowing stage transitions.
   'seed-creating-btn',
   'seed-import-restoring-btn',
   // Transient send-job phase label (queued/proving/awaiting_signature/
@@ -65,10 +65,65 @@ const EXEMPT_TESTIDS = new Set([
   // reliably catch; the phase transitions are covered by the client
   // lifecycle unit tests' `onPhase` assertions instead.
   'send-phase',
-  // Faucet error toast (issue #99) -- only fires when /api/jobs/mint
+  // Faucet error toast (issue #99) -- only fires when POST /v1/tx kind=mint
   // returns an ApiError; covered by the unit-level mapping tests, not
   // reachable in the happy-path E2E flow.
   'wallet-mint-error',
+  // Seed mnemonic reveal generates faster than Playwright can catch.
+  'seed-generating',
+  // Clipboard feedback is a 1.5s flash after copy — unit-covered.
+  'address-copied-feedback',
+  // Single-asset hero chrome. Hosted E2E forces multi_asset:true via the
+  // info-proxy, so the single-asset surface never mounts in CI.
+  'balance-value',
+  'balance-toggle-btn',
+  // Funded portfolio/asset rows need AccountState inventory — not wired
+  // on the closed v1 thin-client surface (honest unavailable banners only).
+  'asset-row',
+  'asset-row-name',
+  'asset-row-id',
+  'asset-row-balance',
+  'asset-row-decimals',
+  'asset-row-sends',
+  'asset-send-btn',
+  'asset-tx-row',
+  'asset-detail-name',
+  'asset-detail-balance',
+  'asset-detail-id-short',
+  'asset-history-note',
+  // Error-banner twin of asset-detail-unavailable; this suite drives the
+  // unavailable (not error) portfolio-blocked path.
+  'asset-detail-error',
+  // Stale notes only render after a successful read that later goes stale —
+  // impossible while portfolio/history remain unavailable by design.
+  'portfolio-stale-note',
+  'history-stale-note',
+  // history-error-banner only when historyBlocked (failed history read).
+  // Hosted E2E happy path has a successful read (empty or list); unit-covered
+  // in src/__tests__/components/WalletScreen.history.test.tsx.
+  'history-error-banner',
+  // network-info-error only after /v1/info failure with infoLoaded; unit-tested.
+  'network-info-error',
+  // Send is hard-disabled (sendAvailable=false); QrScanModal never mounts.
+  'qr-scan-camera-error',
+  'qr-scan-close-btn',
+  'qr-scan-file-error',
+  'qr-scan-file-input',
+  'qr-scan-invalid',
+  'qr-scan-starting',
+  'qr-scan-upload-btn',
+  'qr-scan-video',
+  // Legacy store / IDB failure surfaces — forced only via unit tests of the
+  // wallet store; no durable fixture for E2E without inventing storage state.
+  'seed-reimport-required',
+  'onboarding-discard-legacy-btn',
+  'onboarding-discard-legacy-error',
+  'storage-error',
+  'storage-error-retry',
+  // On-chain explorer link only when the pull record carries a broadcast txid
+  // and an explorer base URL is configured — not guaranteed on the CI mint.
+  'tx-detail-explorer-link',
+  'tx-detail-txid',
 ]);
 
 // Generic wrapper components are allowed to expose <button> without testid
@@ -141,9 +196,12 @@ function rel(file) {
 
 // --- Section A + B: testid universe ---------------------------------------
 
-const SRC_LITERAL_RE = /(?:data-)?testid=["']([a-z0-9-]+)["']/g;
+// JSX: data-testid="…" / testid="…" / React prop testId="…" (UnavailableBanner).
+const SRC_LITERAL_RE = /(?:data-)?test[Ii]d=["']([a-z0-9-]+)["']/gi;
 // Capture the full template content; the variable parts ${...} become wildcards.
-const SRC_TEMPLATE_RE = /(?:data-)?testid=\{`([^`]+)`\}/g;
+const SRC_TEMPLATE_RE = /(?:data-)?test[Ii]d=\{`([^`]+)`\}/gi;
+// Ternary / expression forms: data-testid={cond ? 'a' : 'b'} or testId={…}.
+const SRC_EXPR_STRING_RE = /(?:data-)?test[Ii]d=\{[^}]*['"]([a-z0-9-]+)['"]/gi;
 const E2E_GETBY_RE = /getByTestId\(['"]([a-z0-9-]+)['"]\)/g;
 const E2E_LOCATOR_RE = /\[data-testid=["']([a-z0-9-]+)["']\]/g;
 const E2E_STRING_RE = /['"]([a-z][a-z0-9-]{3,})['"]/g; // fallback: any quoted token
@@ -160,18 +218,36 @@ function templateToRegex(template) {
   return new RegExp('^' + pattern + '$');
 }
 
+function registerSrcId(id, file, line) {
+  if (!srcLiteralIds.has(id)) srcLiteralIds.set(id, []);
+  srcLiteralIds.get(id).push({ file: rel(file), line });
+}
+
 for (const file of walk(srcDir, ['.ts', '.tsx'])) {
   const lines = fs.readFileSync(file, 'utf8').split('\n');
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
     for (const m of line.matchAll(SRC_LITERAL_RE)) {
-      const id = m[1];
-      if (!srcLiteralIds.has(id)) srcLiteralIds.set(id, []);
-      srcLiteralIds.get(id).push({ file: rel(file), line: i + 1 });
+      registerSrcId(m[1], file, i + 1);
+    }
+    // Multi-line expressions are rare; also scan the joined ±1 line window
+    // so `data-testid={a ? 'x' : 'y'}` split across lines still registers.
+    const window = lines.slice(Math.max(0, i - 1), Math.min(lines.length, i + 2)).join('\n');
+    for (const m of window.matchAll(SRC_EXPR_STRING_RE)) {
+      registerSrcId(m[1], file, i + 1);
     }
     for (const m of line.matchAll(SRC_TEMPLATE_RE)) {
       const template = m[1];
       srcTemplatePatterns.push({ template, regex: templateToRegex(template) });
+    }
+    // Ternary `testid={cond ? 'a' : 'b'}` (any case): register each quoted
+    // kebab-case token on the same line as a src literal.
+    if (/(?:data-)?testid=\{/i.test(line)) {
+      for (const m of line.matchAll(/['"]([a-z0-9-]+)['"]/g)) {
+        const id = m[1];
+        if (!srcLiteralIds.has(id)) srcLiteralIds.set(id, []);
+        srcLiteralIds.get(id).push({ file: rel(file), line: i + 1 });
+      }
     }
   }
 }
@@ -255,9 +331,7 @@ function isFeatureGatedExempt(entry) {
 
 const fails = {
   uncoveredTestids: sectionA.filter((e) => !e.exempt),
-  unlabeledButtons: sectionC.filter(
-    (e) => !EXEMPT_FILES.has(e.file) && !isFeatureGatedExempt(e),
-  ),
+  unlabeledButtons: sectionC.filter((e) => !EXEMPT_FILES.has(e.file) && !isFeatureGatedExempt(e)),
 };
 
 const passed = fails.uncoveredTestids.length === 0 && fails.unlabeledButtons.length === 0;

@@ -1,25 +1,19 @@
 /**
- * ReceivePage tests (`src/app/receive/page.tsx`).
+ * ReceivePage — honest unavailability until name resolution is wired.
  *
- * The page renders a QR for the user's zkAddress, an address text
- * card, and a Copy button with a 1.5 s "Copied" feedback flip. It
- * also bounces to `/` if no account is in the store, with a 100 ms
- * grace window that suppresses the redirect when the account lands
- * inside that window (race between `useEffect` mount and Zustand
- * hydration from a re-mount).
- *
- * `e2e/08-receive.spec.ts` covers the styled output but does not
- * lock in the copy-feedback timer, the clipboard reject path, or
- * the 100 ms redirect grace.
+ * Product contract (src/lib/api/client.ts::resolveUsername → 501):
+ * even a stored `username` is not a Send-accepted receive path without
+ * live NIP-05 resolution. Raw zk1 is rejected by extractRecipient.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
-import userEvent from '@testing-library/user-event';
+import { act, render, screen } from '@/__tests__/_helpers/intl';
 import ReceivePage from '@/app/receive/page';
 import { useWalletStore } from '@/stores/wallet';
+import { accountKeysFromMnemonic } from '@/lib/crypto/account-keys';
 import { useNetworkStore } from '@/stores/network';
-import { toZkAddress } from '@/lib/format';
+import { extractRecipient } from '@/lib/qr';
+import { api } from '@/lib/api/client';
 
 const routerReplace = vi.fn();
 vi.mock('next/navigation', () => ({
@@ -28,19 +22,24 @@ vi.mock('next/navigation', () => ({
 }));
 
 const ALICE = {
-  address: 'a'.repeat(64),
-  numPubkeys: 0,
-  xpriv: 'xprv-alice',
+  username: 'alice',
+  address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
 };
 const DOMAIN = 'zkcoins.app';
-const ALICE_ZK = toZkAddress(ALICE.address, DOMAIN);
 
 beforeEach(() => {
   routerReplace.mockClear();
-  useNetworkStore.setState({ networkName: '', usernameDomain: DOMAIN });
+  useNetworkStore.setState({
+    network: 'regtest',
+    usernameDomain: DOMAIN,
+    infoError: null,
+    infoLoaded: true,
+  });
   useWalletStore.setState({
     account: ALICE,
-    balance: 0,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: true,
@@ -49,6 +48,7 @@ beforeEach(() => {
     error: null,
   });
   localStorage.clear();
+  sessionStorage.clear();
 });
 
 afterEach(() => {
@@ -57,134 +57,79 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe('ReceivePage — funded render', () => {
-  it('renders the receive heading, QR, address card, and copy button', () => {
+describe('ReceivePage — send acceptance contract', () => {
+  it('stays unavailable even when a local username is stored (resolveUsername is 501)', async () => {
     render(<ReceivePage />);
-    expect(screen.getByTestId('receive-heading')).toHaveTextContent('Receive Bitcoin');
-    expect(screen.getByTestId('qr-code')).toBeInTheDocument();
-    expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy address');
-    // The address card shows the zk-form of the address ({hex}@zkcoins.app).
-    expect(screen.getByText(ALICE_ZK)).toBeInTheDocument();
+    expect(screen.getByTestId('receive-heading')).toHaveTextContent('Empfangen');
+    expect(screen.getByTestId('receive-not-available')).toBeInTheDocument();
+    expect(screen.queryByTestId('qr-code')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('receive-copy-btn')).not.toBeInTheDocument();
+
+    // Product send path: name resolution is not a /v1 route.
+    await expect(api.resolveUsername(ALICE.username!)).rejects.toMatchObject({ status: 501 });
+  });
+
+  it('without a name marks receive as not available (no zk1 payload)', () => {
+    useWalletStore.setState({
+      account: { ...ALICE, username: undefined },
+    });
+    render(<ReceivePage />);
+    expect(screen.getByTestId('receive-not-available')).toBeInTheDocument();
+    expect(screen.queryByTestId('qr-code')).not.toBeInTheDocument();
+    // Raw address is not a Send-accepted recipient.
+    expect(extractRecipient(ALICE.address)).toBeNull();
   });
 
   it('the back link routes to /', () => {
     render(<ReceivePage />);
     expect(screen.getByTestId('receive-back-link')).toHaveAttribute('href', '/');
   });
-});
 
-describe('ReceivePage — copy feedback', () => {
-  // happy-dom ships a working `navigator.clipboard.writeText` that
-  // resolves successfully and stores the value in an in-memory
-  // clipboard. The tests below rely on that real implementation
-  // instead of fighting happy-dom's non-configurable navigator
-  // property to swap in a mock.
-
-  it('flips the button to "Copied" after a successful clipboard write', async () => {
-    const user = userEvent.setup();
+  it('restores a persisted unlocked session instead of redirecting home', () => {
+    const derived = accountKeysFromMnemonic(ALICE.mnemonic);
+    const consistent = {
+      address: derived.address,
+      mnemonic: ALICE.mnemonic,
+      nkCommit: derived.nkCommit,
+    };
+    useWalletStore.getState().setAccount(consistent);
+    useWalletStore.setState({ account: null, isLocked: true });
     render(<ReceivePage />);
-
-    const button = screen.getByTestId('receive-copy-btn');
-    expect(button).toHaveTextContent('Copy address');
-    expect(button).not.toHaveAttribute('data-copied');
-
-    await user.click(button);
-    // The .then handler resolves on a microtask — wait for the flip.
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(button).toHaveTextContent('Copied');
-    expect(button).toHaveAttribute('data-copied', 'true');
-    // happy-dom's clipboard captured the zk-form address.
-    await expect(navigator.clipboard.readText()).resolves.toBe(ALICE_ZK);
+    expect(useWalletStore.getState().account).toEqual(consistent);
+    expect(routerReplace).not.toHaveBeenCalled();
+    expect(screen.getByTestId('receive-heading')).toBeInTheDocument();
   });
 
-  it('reverts the button to "Copy address" after the 1.5 s timeout', async () => {
-    // Collapse the 1.5 s `setTimeout(setCopied(false), 1500)` to a
-    // microtask so the assertion lands inside the default test
-    // budget. Targeting only delay=1500 leaves every other timer
-    // (happy-dom clipboard internals, React effect scheduling)
-    // untouched.
-    const realSetTimeout = globalThis.setTimeout;
-    const timerSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
-      cb: () => void,
-      delay?: number,
-      ...args: unknown[]
-    ) => {
-      if (delay === 1_500) {
-        queueMicrotask(cb);
-        return 0 as unknown as ReturnType<typeof setTimeout>;
-      }
-      return realSetTimeout(cb, delay as number, ...(args as []));
-    }) as unknown as typeof setTimeout);
-
-    const user = userEvent.setup();
-    render(<ReceivePage />);
-    await user.click(screen.getByTestId('receive-copy-btn'));
-    // Two microtask drains: one for clipboard.writeText().then, one
-    // for the queueMicrotask(setCopied(false)).
-    await act(async () => {
-      await Promise.resolve();
-    });
-    await act(async () => {
-      await Promise.resolve();
-    });
-    expect(screen.getByTestId('receive-copy-btn')).toHaveTextContent('Copy address');
-    expect(timerSpy).toHaveBeenCalledWith(expect.any(Function), 1_500);
-    timerSpy.mockRestore();
-  });
-
-  it('stays on "Copy address" when the clipboard write is rejected', async () => {
-    // Exercises the `writeText(...).then(onOk, onErr)` rejection leg: a
-    // denied/unavailable clipboard must leave the button untouched (no
-    // "Copied" flip) and must not throw.
-    const writeSpy = vi
-      .spyOn(navigator.clipboard, 'writeText')
-      .mockRejectedValue(new Error('clipboard denied'));
-    const user = userEvent.setup();
-    render(<ReceivePage />);
-
-    const button = screen.getByTestId('receive-copy-btn');
-    await user.click(button);
-    await act(async () => {
-      await Promise.resolve();
-    });
-
-    expect(writeSpy).toHaveBeenCalledWith(ALICE_ZK);
-    expect(button).toHaveTextContent('Copy address');
-    expect(button).not.toHaveAttribute('data-copied');
-  });
-});
-
-describe('ReceivePage — no-account redirect', () => {
-  it('renders the redirecting placeholder when no account is in the store', () => {
-    useWalletStore.setState({ account: null });
+  it('shows redirecting placeholder and replaces home when no account', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null, hasStoredWallet: false });
     render(<ReceivePage />);
     expect(screen.getByTestId('redirecting-placeholder')).toBeInTheDocument();
-    // The Receive content is suppressed.
-    expect(screen.queryByTestId('receive-heading')).not.toBeInTheDocument();
-  });
-
-  it('calls router.replace("/") after the 100 ms grace window expires', async () => {
-    useWalletStore.setState({ account: null });
-    vi.useFakeTimers();
-    render(<ReceivePage />);
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(150);
+      await vi.advanceTimersByTimeAsync(100);
     });
     expect(routerReplace).toHaveBeenCalledWith('/');
   });
 
-  it('suppresses the redirect when the account lands inside the 100 ms grace window', async () => {
-    useWalletStore.setState({ account: null });
+  it('clears the redirect timer on unmount before it fires', async () => {
     vi.useFakeTimers();
-    render(<ReceivePage />);
-    act(() => {
-      useWalletStore.setState({ account: ALICE });
-    });
+    useWalletStore.setState({ account: null, hasStoredWallet: false });
+    const { unmount } = render(<ReceivePage />);
+    unmount();
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(150);
+      await vi.advanceTimersByTimeAsync(200);
     });
     expect(routerReplace).not.toHaveBeenCalled();
+  });
+
+  it('does not redirect when the store reports an account when the grace callback fires', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: null, hasStoredWallet: false });
+    render(<ReceivePage />);
+    const stateWithAccount = { ...useWalletStore.getState(), account: ALICE };
+    const getStateSpy = vi.spyOn(useWalletStore, 'getState').mockReturnValue(stateWithAccount);
+    await act(async () => vi.advanceTimersByTimeAsync(100));
+    expect(routerReplace).not.toHaveBeenCalled();
+    getStateSpy.mockRestore();
   });
 });

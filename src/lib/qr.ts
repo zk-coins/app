@@ -13,16 +13,11 @@
  *
  *   2. `extractRecipient(...)` — normalise a raw QR payload into a
  *      recipient string the Send form accepts, or `null` when the
- *      payload is not a plausible zkCoins recipient. The accepted shapes
- *      mirror exactly what `src/app/send/page.tsx` already resolves: a
- *      64-hex address (optionally `0x`-prefixed), a `$`-prefixed handle,
- *      or a `username` / `username@domain` form (the latter is what the
- *      Receive screen encodes — see `toZkAddress` in `lib/format.ts`).
+ *      payload is not a plausible zkCoins recipient. Identity rule:
+ *      names and Invoice JSON only — never a raw `zk1…` or bare hex key.
  *
- * The Receive QR encodes `toZkAddress(address, domain)` = `<8hex>@<domain>`,
- * so a clean round-trip (scan what Receive shows) lands in the
- * `username@domain` branch and resolves through `/api/username/resolve`,
- * identical to typing it by hand.
+ * The Receive QR encodes the account name (`username@domain`), so a clean
+ * round-trip (scan what Receive shows) lands in the name branch.
  */
 
 import jsQR from 'jsqr';
@@ -43,19 +38,19 @@ export function decodeQr(data: Uint8ClampedArray, width: number, height: number)
 /** URI schemes we unwrap before looking at the payload (case-insensitive). */
 const KNOWN_SCHEMES = ['zkcoins', 'bitcoin'];
 
-/** A 64-char hex address, optionally `0x`-prefixed. */
-const HEX_ADDRESS_RE = /^(0x)?[0-9a-f]{64}$/i;
-
 /**
  * A bare handle or `handle@domain`. The handle is a conservative
  * username charset; the optional domain is a dotted host. Deliberately
  * narrow so free-form text (URLs, sentences, BIP-21 amount blobs) does
- * not masquerade as a recipient.
+ * not masquerade as a recipient. Raw hex / zk1 addresses are rejected.
  */
 const HANDLE_RE = /^[a-z0-9](?:[a-z0-9._-]*[a-z0-9])?(?:@[a-z0-9.-]+)?$/i;
 
+/** Invoice JSON delivery credential (starts with `{`). */
+const INVOICE_JSON_RE = /^\s*\{[\s\S]*\}\s*$/;
+
 /** Upper bound on a sane recipient payload — guards against pathological blobs. */
-const MAX_RECIPIENT_LEN = 100;
+const MAX_RECIPIENT_LEN = 8_192;
 
 /**
  * Strip a recognised `scheme:` prefix plus any `?query`/`#fragment`
@@ -77,17 +72,18 @@ export function parseScannedRecipient(raw: string): string {
 }
 
 /**
- * Whether `candidate` is a plausible zkCoins recipient: a 64-hex address
- * (optionally `0x`), a `$handle`, or a `handle` / `handle@domain`. The
- * leading `$` is allowed because the Send form itself strips it before
- * resolving (see `src/app/send/page.tsx`).
+ * Whether `candidate` is a plausible zkCoins recipient: a `$handle`, a
+ * `handle` / `handle@domain`, or Invoice JSON. Raw `zk1…` / bare hex
+ * keys are rejected (identity rule: names only).
  */
 export function isLikelyRecipient(candidate: string): boolean {
   if (!candidate || candidate.length > MAX_RECIPIENT_LEN) return false;
+  if (INVOICE_JSON_RE.test(candidate)) return true;
   if (/\s/.test(candidate)) return false;
+  if (/^zk1/i.test(candidate) || /^(0x)?[0-9a-f]{64}$/i.test(candidate)) return false;
   const handle = candidate.startsWith('$') ? candidate.slice(1) : candidate;
   if (!handle) return false;
-  return HEX_ADDRESS_RE.test(handle) || HANDLE_RE.test(handle);
+  return HANDLE_RE.test(handle);
 }
 
 /**

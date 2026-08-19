@@ -1,195 +1,195 @@
 /**
- * `useHistory` — server-truth transaction history hook
- * (`src/hooks/useHistory.ts`, issue #175).
- *
- * Covers: mount fetch, 5 s re-poll cadence, account-swap reset (no
- * cross-account leak), the parked `undefined`-address path, error
- * swallowing (keeps the last good list, still flips `loaded`), and the
- * unmount cleanup (no post-unmount state writes, interval cleared).
+ * `useHistory` — fail-loud pull-session history hook.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, renderHook, waitFor } from '@testing-library/react';
+import { renderHook, waitFor, act } from '@testing-library/react';
 import { useHistory } from '@/hooks/useHistory';
-import { api, type HistoryResponse } from '@/lib/api/client';
+import { ApiError, api, type HistoryResponse } from '@/lib/api/client';
 
-const ADDR_A = 'a'.repeat(64);
-const ADDR_B = 'b'.repeat(64);
-
-function page(items: HistoryResponse['items'], total = items.length): HistoryResponse {
-  return { items, total, limit: 50, offset: 0 };
-}
-
-const MINT_ROW = {
-  id: 1,
-  txid: null,
-  timestamp: 1_780_000_000,
-  direction: 'mint' as const,
-  amount: 10_000,
-  counterparty: null,
-  status: 'pending' as const,
-  block_height: null,
-  memo: null,
+const ACCOUNT = {
+  address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
 };
 
-let historySpy: ReturnType<typeof vi.spyOn>;
+const empty: HistoryResponse = { items: [], total: 0, limit: 50, offset: 0 };
+
+let spy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
-  historySpy = vi.spyOn(api, 'getHistory');
+  spy = vi.spyOn(api, 'getHistory');
 });
 
 afterEach(() => {
+  spy.mockRestore();
   vi.useRealTimers();
-  historySpy.mockRestore();
 });
 
 describe('useHistory', () => {
-  it('fetches on mount and exposes the items + loaded flag', async () => {
-    historySpy.mockResolvedValue(page([MINT_ROW]));
-
-    const { result } = renderHook(() => useHistory(ADDR_A));
-    expect(result.current.loaded).toBe(false);
-
+  it('fetches history for the account on mount', async () => {
+    spy.mockResolvedValue({
+      items: [{ id: 'r1', kind: 'send' }],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    const { result } = renderHook(() => useHistory(ACCOUNT));
     await waitFor(() => expect(result.current.loaded).toBe(true));
-    expect(result.current.items).toEqual([MINT_ROW]);
-    expect(historySpy).toHaveBeenCalledWith(ADDR_A);
-  });
-
-  it('re-polls every 5 s', async () => {
-    historySpy
-      .mockResolvedValueOnce(page([]))
-      .mockResolvedValueOnce(page([MINT_ROW]))
-      .mockResolvedValue(page([MINT_ROW, { ...MINT_ROW, id: 2 }]));
-
-    vi.useFakeTimers();
-    const { result } = renderHook(() => useHistory(ADDR_A));
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(0);
-    });
-    expect(result.current.items).toEqual([]);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
-    });
     expect(result.current.items).toHaveLength(1);
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(5_000);
-    });
-    expect(result.current.items).toHaveLength(2);
-    expect(historySpy).toHaveBeenCalledTimes(3);
-  });
-
-  it('does not fetch when the address is undefined (parked)', async () => {
-    vi.useFakeTimers();
-    const { result } = renderHook(() => useHistory(undefined));
-
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(15_000);
-    });
-    expect(historySpy).not.toHaveBeenCalled();
-    expect(result.current.items).toEqual([]);
-    expect(result.current.loaded).toBe(false);
-  });
-
-  it('resets items + loaded when the address changes (no cross-account leak)', async () => {
-    historySpy.mockImplementation((address: string) =>
-      Promise.resolve(address === ADDR_A ? page([MINT_ROW]) : page([])),
+    expect(result.current.available).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(spy).toHaveBeenCalledWith(
+      { ...ACCOUNT, accountIndex: 0 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
-
-    const { result, rerender } = renderHook(({ addr }) => useHistory(addr), {
-      initialProps: { addr: ADDR_A },
-    });
-    await waitFor(() => expect(result.current.items).toHaveLength(1));
-
-    rerender({ addr: ADDR_B });
-    // Synchronously reset before the new fetch resolves — the old account's
-    // row must not linger.
-    expect(result.current.loaded).toBe(false);
-    expect(result.current.items).toEqual([]);
-
-    await waitFor(() => expect(result.current.loaded).toBe(true));
-    expect(result.current.items).toEqual([]);
   });
 
-  it('swallows a fetch error, keeps the last good list, and still flips loaded', async () => {
-    historySpy.mockResolvedValueOnce(page([MINT_ROW])).mockRejectedValue(new Error('boom'));
+  it('parks when account is undefined', async () => {
+    const { result } = renderHook(() => useHistory(undefined));
+    expect(result.current.loaded).toBe(false);
+    expect(result.current.items).toEqual([]);
+    expect(result.current.available).toBe(false);
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('first error sets error and does not claim available empty history', async () => {
+    spy.mockRejectedValueOnce(new Error('network'));
+    const { result } = renderHook(() => useHistory(ACCOUNT));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.items).toEqual([]);
+    expect(result.current.available).toBe(false);
+    expect(result.current.error).toMatch(/network/);
+  });
+
+  it('successful empty response is available with no error', async () => {
+    spy.mockResolvedValue(empty);
+    const { result } = renderHook(() => useHistory(ACCOUNT));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.items).toEqual([]);
+    expect(result.current.available).toBe(true);
+    expect(result.current.error).toBeNull();
+  });
+
+  it('keeps last good list as stale when a later poll fails', async () => {
+    spy
+      .mockResolvedValueOnce({
+        items: [{ id: 'r1', kind: 'mint' }],
+        total: 1,
+        limit: 50,
+        offset: 0,
+      })
+      .mockRejectedValue(new Error('down'));
 
     vi.useFakeTimers();
-    const { result } = renderHook(() => useHistory(ADDR_A));
-
+    const { result } = renderHook(() => useHistory(ACCOUNT));
     await act(async () => {
       await vi.advanceTimersByTimeAsync(0);
     });
     expect(result.current.items).toHaveLength(1);
 
-    // Next tick rejects — the good list survives, loaded stays true.
     await act(async () => {
       await vi.advanceTimersByTimeAsync(5_000);
     });
     expect(result.current.items).toHaveLength(1);
-    expect(result.current.loaded).toBe(true);
+    expect(result.current.stale).toBe(true);
+    expect(result.current.available).toBe(false);
+    expect(result.current.error).toMatch(/down/);
   });
 
-  it('marks loaded even when the very first fetch fails', async () => {
-    historySpy.mockRejectedValue(new Error('down'));
-
-    const { result } = renderHook(() => useHistory(ADDR_A));
+  it('re-fetches when the account address changes', async () => {
+    spy.mockResolvedValue(empty);
+    const { result, rerender } = renderHook(({ acc }) => useHistory(acc), {
+      initialProps: { acc: ACCOUNT as typeof ACCOUNT | undefined },
+    });
     await waitFor(() => expect(result.current.loaded).toBe(true));
-    expect(result.current.items).toEqual([]);
+    const other = {
+      ...ACCOUNT,
+      address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqpr',
+    };
+    rerender({ acc: other });
+    await waitFor(() =>
+      expect(spy).toHaveBeenLastCalledWith(
+        { ...other, accountIndex: 0 },
+        expect.objectContaining({ signal: expect.any(AbortSignal) }),
+      ),
+    );
   });
 
-  it('stops polling after unmount and never writes state post-unmount', async () => {
-    // A deferred promise lets us resolve the in-flight fetch AFTER unmount,
-    // exercising the `cancelled` guard that prevents a post-unmount setState.
+  it('surfaces ApiError.serverError (or message) on first failure', async () => {
+    spy.mockRejectedValue(new ApiError(503, 'node_unavailable'));
+    const { result } = renderHook(() => useHistory(ACCOUNT));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.error).toBe('node_unavailable');
+    expect(result.current.available).toBe(false);
+  });
+
+  it('falls back to ApiError.message when serverError is omitted', async () => {
+    spy.mockRejectedValue(new ApiError(502));
+    const { result } = renderHook(() => useHistory(ACCOUNT));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.error).toBe('HTTP 502');
+  });
+
+  it('stringifies non-Error rejections', async () => {
+    spy.mockRejectedValue('raw-history-failure');
+    const { result } = renderHook(() => useHistory(ACCOUNT));
+    await waitFor(() => expect(result.current.loaded).toBe(true));
+    expect(result.current.error).toBe('raw-history-failure');
+  });
+
+  it('does not write state when a success resolves after unmount', async () => {
     let resolveFetch!: (v: HistoryResponse) => void;
-    historySpy.mockReturnValue(
+    spy.mockReturnValue(
       new Promise<HistoryResponse>((res) => {
         resolveFetch = res;
       }),
     );
-
-    const { unmount } = renderHook(() => useHistory(ADDR_A));
-    expect(historySpy).toHaveBeenCalledTimes(1);
-
+    const { unmount } = renderHook(() => useHistory(ACCOUNT));
     unmount();
-    // Resolving now hits the cancelled guard — no throw, no state write.
     await act(async () => {
-      resolveFetch(page([MINT_ROW]));
+      resolveFetch({ items: [{ id: 'late', kind: 'mint' }], total: 1, limit: 50, offset: 0 });
       await Promise.resolve();
     });
-
-    vi.useFakeTimers();
-    await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000);
-    });
-    // No further polls after unmount.
-    expect(historySpy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledTimes(1);
   });
 
-  it('does not write state when the in-flight fetch REJECTS after unmount', async () => {
-    // Mirror of the success-after-unmount case for the catch branch: the
-    // `cancelled` guard must also short-circuit a rejection so no setState
-    // fires on an unmounted hook.
-    let rejectFetch!: (e: Error) => void;
-    historySpy.mockReturnValue(
+  it('does not write state when a rejection lands after unmount', async () => {
+    let rejectFetch!: (e: unknown) => void;
+    spy.mockReturnValue(
       new Promise<HistoryResponse>((_res, rej) => {
         rejectFetch = rej;
       }),
     );
-
-    const { unmount } = renderHook(() => useHistory(ADDR_A));
-    expect(historySpy).toHaveBeenCalledTimes(1);
-
+    const { unmount } = renderHook(() => useHistory(ACCOUNT));
     unmount();
     await act(async () => {
-      rejectFetch(new Error('late failure'));
+      rejectFetch(new Error('late'));
       await Promise.resolve();
     });
-    // Reaching here without an act() warning / unhandled rejection is the
-    // assertion: the cancelled guard in the catch swallowed the post-unmount
-    // settle.
-    expect(historySpy).toHaveBeenCalledTimes(1);
+    expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('aborts in-flight getHistory on unmount without committing error state', async () => {
+    let rejectFetch!: (e: unknown) => void;
+    spy.mockReturnValue(
+      new Promise<HistoryResponse>((_res, rej) => {
+        rejectFetch = rej;
+      }),
+    );
+    const { result, unmount } = renderHook(() => useHistory(ACCOUNT));
+    expect(spy).toHaveBeenCalledWith(
+      { ...ACCOUNT, accountIndex: 0 },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
+    unmount();
+    await act(async () => {
+      rejectFetch(new DOMException('Aborted', 'AbortError'));
+      await Promise.resolve();
+    });
+    expect(result.current.error).toBeNull();
+    expect(result.current.loaded).toBe(false);
+    expect(result.current.available).toBe(false);
   });
 });

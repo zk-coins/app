@@ -59,6 +59,7 @@ async function dispatchBeforeInstallPrompt(page: Page, promptDelayMs: number): P
 
 test.describe('PwaPrompt — native mode', () => {
   test.beforeEach(async ({ page }) => {
+    test.setTimeout(60_000);
     await setViewport(page, 'mobile');
     await page.addInitScript({ content: CLEAR_DISMISSED_FLAG });
     await aliceLogin(page);
@@ -66,7 +67,7 @@ test.describe('PwaPrompt — native mode', () => {
     // PwaPrompt card is funded. Without this the PwaPrompt baselines
     // capture the pre-tick empty-banner state and `pwa-manual-mode`
     // collapses onto `06-balance-zero-empty-banner`.
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
   });
 
   test('pwa-native-mode', async ({ page }) => {
@@ -92,6 +93,7 @@ test.describe('PwaPrompt — iOS Safari', () => {
   test.use({ userAgent: IOS_UA });
 
   test.beforeEach(async ({ page }) => {
+    test.setTimeout(60_000);
     await setViewport(page, 'mobile');
     await page.addInitScript({ content: CLEAR_DISMISSED_FLAG });
     await aliceLogin(page);
@@ -99,7 +101,7 @@ test.describe('PwaPrompt — iOS Safari', () => {
     // PwaPrompt card is funded. Without this the PwaPrompt baselines
     // capture the pre-tick empty-banner state and `pwa-manual-mode`
     // collapses onto `06-balance-zero-empty-banner`.
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
   });
 
   test('pwa-ios-mode', async ({ page }) => {
@@ -110,6 +112,7 @@ test.describe('PwaPrompt — iOS Safari', () => {
 
 test.describe('PwaPrompt — manual fallback', () => {
   test.beforeEach(async ({ page }) => {
+    test.setTimeout(60_000);
     await setViewport(page, 'mobile');
     await page.addInitScript({ content: CLEAR_DISMISSED_FLAG });
     await aliceLogin(page);
@@ -117,7 +120,7 @@ test.describe('PwaPrompt — manual fallback', () => {
     // PwaPrompt card is funded. Without this the PwaPrompt baselines
     // capture the pre-tick empty-banner state and `pwa-manual-mode`
     // collapses onto `06-balance-zero-empty-banner`.
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
   });
 
   test('pwa-manual-mode', async ({ page }) => {

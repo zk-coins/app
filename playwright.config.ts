@@ -3,19 +3,21 @@ import { defineConfig, devices } from '@playwright/test';
 // E2E target selector. Two modes share the *same* spec files and the
 // same `*-chromium-linux.png` baselines:
 //
-//   dev   (default, CI): run against the hosted DEV stack
+//   local:              served standalone PR build + info-proxy. This is what
+//                        CI runs (`E2E_TARGET=local`, `E2E_NODE_URL=https://ci.zkcoins.app`).
+//                        Also `npm run test:e2e:local` / `scripts/e2e-local.sh`
+//                        (dev box default upstream: host.docker.internal:4242).
+//                        Builds with the proxy host baked into
+//                        NEXT_PUBLIC_API_URL (CORS; Next serves UI only),
+//                        starts the standalone server + the test-only
+//                        `/v1/info` capability-normalisation proxy, then
+//                        invokes Playwright.
+//                        See e2e/README.md § 4.2.
+//
+//   dev   (default when E2E_TARGET is unset): historical hosted-stack smoke
 //                        (https://dev.zkcoins.app + https://dev-api.zkcoins.app).
 //                        No webServer — Playwright drives the live deployment.
-//                        This is the historical behaviour; leaving E2E_TARGET
-//                        unset reproduces it exactly, so CI is untouched.
-//
-//   local:              run against a locally-served standalone PR build plus
-//                        a local zkCoins node (default host.docker.internal:4242).
-//                        Orchestrated by `scripts/e2e-local.sh`, which builds the
-//                        app with the same-origin proxy config, starts the
-//                        standalone server + the test-only `/api/info`
-//                        capability-normalisation proxy, then invokes Playwright.
-//                        See e2e/README.md § 4.2.
+//                        Not what CI runs.
 const E2E_TARGET = process.env.E2E_TARGET === 'local' ? 'local' : 'dev';
 
 // In local mode `scripts/e2e-local.sh` has already started the standalone

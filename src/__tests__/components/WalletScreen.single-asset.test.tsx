@@ -1,25 +1,19 @@
 /**
- * Single-asset surface of `src/components/screens/WalletScreen.tsx`
- * (capability-adaptive client, `multi_asset:false`).
+ * Single-asset surface of WalletScreen when MULTI_ASSET is false.
  *
- * Against a single-asset node the home screen renders the BTC balance hero
- * (USD/BTC value + eye toggle), the empty-wallet banner with the testnet
- * faucet, and a single-asset transaction list — NOT the per-asset portfolio.
- * These tests cover:
- *   - balance hero renders the polled `api.walletBalance` value
- *   - the eye toggle hides/shows the value
- *   - empty wallet (balance 0) shows the faucet, which mints + re-polls
- *   - the create-coin entry is NOT shown (multi-asset only)
+ * Balance reads are not available in this build — the hero must show an
+ * honest "not available" state, never a fabricated 0 / empty wallet.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { act, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { render } from '@/__tests__/_helpers/intl';
 import { WalletScreen } from '@/components/screens/WalletScreen';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
-import { api } from '@/lib/api/client';
+import { useCapabilities } from '@/stores/capabilities';
+import { ApiError, api } from '@/lib/api/client';
 
 const FEATURES_STATE = vi.hoisted(() => ({
   APPS_DIRECTORY: false,
@@ -29,7 +23,6 @@ const FEATURES_STATE = vi.hoisted(() => ({
   ADDRESS_ROTATION: false,
   TOR_ROUTING: false,
   USERNAME_CLAIM: false,
-  // Runtime multi-asset capability OFF → single-asset surface.
   MULTI_ASSET: false,
 }));
 
@@ -38,12 +31,15 @@ vi.mock('@/lib/features', () => ({
   useFeatures: () => FEATURES_STATE,
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 
-let balanceSpy: ReturnType<typeof vi.spyOn>;
 let infoSpy: ReturnType<typeof vi.spyOn>;
 let historySpy: ReturnType<typeof vi.spyOn>;
-let mintSpy: ReturnType<typeof vi.spyOn>;
 
 beforeEach(() => {
   Object.assign(FEATURES_STATE, {
@@ -53,12 +49,13 @@ beforeEach(() => {
   });
   useNetworkStore.setState({
     apiUrl: 'https://test.api',
-    networkName: 'Mutinynet',
-    bitcoinNetwork: 'mutinynet',
+    network: 'regtest',
+    infoError: null,
+    infoLoaded: true,
+    usernameDomain: 'local.zkcoins.test',
   });
   useWalletStore.setState({
     account: ALICE,
-    balance: null,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
@@ -66,89 +63,143 @@ beforeEach(() => {
     storedAuthMethod: null,
     error: null,
   });
-  infoSpy = vi
-    .spyOn(api, 'info')
-    .mockResolvedValue({ network: 'Mutinynet', username_domain: 'local.zkcoins.test' });
-  balanceSpy = vi.spyOn(api, 'walletBalance');
+  useCapabilities.setState({
+    capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: false },
+    loaded: false,
+  });
+  infoSpy = vi.spyOn(api, 'info').mockResolvedValue({
+    network: 'regtest',
+    features: [],
+    protocol_version: 'v1',
+    username_domain: 'local.zkcoins.test',
+    capabilities: {
+      address_list: false,
+      username_claim: false,
+      lnurl: false,
+      multi_asset: false,
+    },
+  });
+  vi.spyOn(api, 'walletBalance').mockRejectedValue(
+    new ApiError(501, 'wallet balance not available in this build'),
+  );
   historySpy = vi
     .spyOn(api, 'getHistory')
     .mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
-  mintSpy = vi.spyOn(api, 'mint');
 });
 
 afterEach(() => {
   vi.useRealTimers();
-  balanceSpy.mockRestore();
-  infoSpy.mockRestore();
-  historySpy.mockRestore();
-  mintSpy.mockRestore();
+  vi.restoreAllMocks();
 });
 
-describe('WalletScreen — single-asset balance hero', () => {
-  it('polls walletBalance on mount and renders the BTC/USD hero', async () => {
-    balanceSpy.mockResolvedValue({ balance: 100_000, num_sends: 0 });
-    const { findByTestId } = render(<WalletScreen />);
-
+describe('WalletScreen — single-asset balance unavailable', () => {
+  it('shows the honest not-available hero, not a $0 empty wallet', async () => {
+    const { findByTestId, queryByTestId } = render(<WalletScreen />);
     const usd = await findByTestId('balance-amount-usd');
-    await waitFor(() => {
-      expect(usd).not.toHaveAttribute('data-loading', 'true');
-    });
-    expect(balanceSpy).toHaveBeenCalledWith(ALICE.address);
-    // The portfolio / create-coin entry must NOT render on the single-asset surface.
-    expect(document.querySelector('[data-testid="asset-list"]')).toBeNull();
-    expect(document.querySelector('[data-testid="create-coin-btn"]')).toBeNull();
+    expect(usd).toHaveAttribute('data-unavailable', 'true');
+    expect(await findByTestId('balance-unavailable-banner')).toBeInTheDocument();
+    // Empty-wallet faucet path must NOT appear (that implies balance === 0 truth).
+    expect(queryByTestId('faucet-btn')).toBeNull();
+    expect(queryByTestId('wallet-empty-banner')).toBeNull();
+    expect(queryByTestId('asset-list')).toBeNull();
+    expect(queryByTestId('create-coin-btn')).toBeNull();
+    void infoSpy;
+    void historySpy;
   });
 
-  it('hides the value when the eye toggle is pressed', async () => {
-    balanceSpy.mockResolvedValue({ balance: 100_000, num_sends: 0 });
+  it('hides the not-available text when the eye toggle is pressed', async () => {
     const user = userEvent.setup();
     const { findByTestId } = render(<WalletScreen />);
-
     const toggle = await findByTestId('balance-toggle-btn');
     await user.click(toggle);
     expect(toggle).toHaveAttribute('data-hidden', 'true');
   });
 
-  it('shows the faucet on an empty wallet and re-polls after minting', async () => {
-    // First tick: empty. After mint: funded.
-    balanceSpy
-      .mockResolvedValueOnce({ balance: 0, num_sends: 0 })
-      .mockResolvedValue({ balance: 10_000, num_sends: 0 });
-    mintSpy.mockResolvedValue({
-      job_id: 'mint-1',
-      status: 'completed',
-      phase: 'completed',
-      result: { success: true },
-    });
-    const user = userEvent.setup();
-    const { findByTestId } = render(<WalletScreen />);
-
-    const faucet = await findByTestId('faucet-btn');
-    await act(async () => {
-      await user.click(faucet);
-    });
-    // The faucet is a creator-signed self-mint — it signs with the wallet
-    // key instead of posting the old server-mediated `{account_address}`.
-    expect(mintSpy).toHaveBeenCalledWith({
-      account_address: ALICE.address,
-      xpriv: ALICE.xpriv,
-    });
-    await waitFor(() => {
-      expect(balanceSpy.mock.calls.length).toBeGreaterThanOrEqual(2);
-    });
+  it('hides name claim and shows the unavailable note', async () => {
+    const { findByTestId, queryByTestId } = render(<WalletScreen />);
+    expect(await findByTestId('name-claim-unavailable')).toBeInTheDocument();
+    expect(queryByTestId('username-claim-btn')).toBeNull();
+    expect(queryByTestId('name-setup-input')).toBeNull();
   });
 
-  it('surfaces a faucet ApiError inline without re-throwing', async () => {
-    const { ApiError } = await import('@/lib/api/client');
-    balanceSpy.mockResolvedValue({ balance: 0, num_sends: 0 });
-    mintSpy.mockRejectedValue(new ApiError(503, 'faucet unavailable', '{}'));
-    const user = userEvent.setup();
-    const { findByTestId } = render(<WalletScreen />);
-
-    const faucet = await findByTestId('faucet-btn');
-    await act(async () => {
-      await user.click(faucet);
+  it('copies a configured display name, shows feedback, then clears it', async () => {
+    vi.useFakeTimers();
+    useWalletStore.setState({ account: { ...ALICE, username: 'alice' } });
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText },
+      configurable: true,
     });
-    expect(await findByTestId('wallet-mint-error')).toBeInTheDocument();
+    render(<WalletScreen />);
+    await vi.runAllTicks();
+    fireEvent.click(screen.getByTestId('address-copy-btn'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(0);
+    });
+    expect(writeText).toHaveBeenCalledWith('alice@local.zkcoins.test');
+    expect(screen.getByTestId('address-copied-feedback')).toBeInTheDocument();
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1500);
+    });
+    expect(screen.queryByTestId('address-copied-feedback')).not.toBeInTheDocument();
+  });
+
+  it('leaves copy feedback hidden when clipboard access rejects', async () => {
+    useWalletStore.setState({ account: { ...ALICE, username: 'alice' } });
+    Object.defineProperty(navigator, 'clipboard', {
+      value: { writeText: vi.fn().mockRejectedValue(new Error('denied')) },
+      configurable: true,
+    });
+    render(<WalletScreen />);
+    fireEvent.click(await screen.findByTestId('address-copy-btn'));
+    await waitFor(() => expect(screen.queryByTestId('address-copied-feedback')).toBeNull());
+  });
+
+  it('removes the copy button when the account-gated claim row unmounts', async () => {
+    useWalletStore.setState({ account: { ...ALICE, username: 'alice' } });
+    render(<WalletScreen />);
+    await screen.findByTestId('address-copy-btn');
+
+    act(() => useWalletStore.setState({ account: null }));
+
+    expect(screen.queryByTestId('address-copy-btn')).not.toBeInTheDocument();
+  });
+
+  it('formats a numeric history amount as BTC in single-asset mode', async () => {
+    historySpy.mockResolvedValue({
+      items: [
+        {
+          id: 7,
+          kind: 'send',
+          amount: 50_000,
+          status: 'pending',
+          created_at: 1_780_000_000,
+        },
+      ],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+
+    render(<WalletScreen />);
+    expect(await screen.findByTestId('tx-row-amount')).toHaveTextContent('BTC');
+  });
+
+  it('maps a non-Error info rejection to the fail-closed fallback message', async () => {
+    infoSpy.mockRejectedValue('offline');
+    render(<WalletScreen />);
+    expect(await screen.findByTestId('network-info-error')).toHaveTextContent(
+      'failed to load /v1/info',
+    );
+  });
+
+  it('runs disabled and enabled primary-button click handlers', async () => {
+    render(<WalletScreen />);
+    const send = await screen.findByTestId('wallet-send-btn');
+    const receive = screen.getByTestId('wallet-receive-btn');
+    fireEvent.click(send);
+    fireEvent.click(receive);
+    expect(send).toHaveAttribute('aria-disabled', 'true');
+    expect(receive).toHaveAttribute('aria-disabled', 'false');
   });
 });

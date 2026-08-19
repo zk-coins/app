@@ -5,9 +5,9 @@
 
 **Private Bitcoin payments via Shielded CSV** — no new chain, no token, no consensus change, no trusted operator. Only Bitcoin, zero-knowledge proofs, and the user's own keys.
 
-The end-user **wallet** for zkCoins — a Next.js 15 PWA. The seed is encrypted on-device (IndexedDB); BIP-32 derivation and Schnorr signing run in an on-device Rust→WASM crate. Installable, LNURL receive.
+The end-user **wallet** for zkCoins — a Next.js 15 PWA. The seed is encrypted on-device (IndexedDB); BIP-32 derivation and Schnorr signing run via `@zkcoins/sdk` pure-TS crypto on-device. Installable PWA; Send/Receive are honestly marked not-available in this build (no live LNURL or send path).
 
-> Live: [zkcoins.app](https://zkcoins.app) (PRD) · [dev.zkcoins.app](https://dev.zkcoins.app) (DEV) — Full system docs: **[docs.zkcoins.app](https://docs.zkcoins.app)** · Specification: **[docs.zkcoins.app/specification](https://docs.zkcoins.app/specification)**
+> Live: [zkcoins.app](https://zkcoins.app) (PRD) · [dev.zkcoins.app](https://dev.zkcoins.app) (DEV) — Full system docs: **[docs.zkcoins.com](https://docs.zkcoins.com)** · Specification: **[docs.zkcoins.com/specification](https://docs.zkcoins.com/specification)**
 
 Container images: **[hub.docker.com/r/zkcoins/app](https://hub.docker.com/r/zkcoins/app)**
 
@@ -17,13 +17,13 @@ zkCoins lets you send value on Bitcoin without anyone seeing the amount, the ass
 
 ## The system, end to end
 
-| Layer                      | What it is                                                                     | Repo                                                                                                        |
-| -------------------------- | ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
-| **App · Explorer**         | end-user wallet (LNURL receive) · public explorer web-app                      | **[`zk-coins/app`](https://github.com/zk-coins/app)** ← this repo · `zk-coins/explorer` _(planned)_         |
-| **SDK**                    | thin TypeScript client — on-device keys, signing, node/API calls               | [`zk-coins/sdk`](https://github.com/zk-coins/sdk)                                                           |
-| **zkCoins API**            | public REST + LNURL, hosted-wallet service (optional)                          | currently in [`zk-coins/node`](https://github.com/zk-coins/node); a separate API layer is the target design |
-| **zkCoins node**           | trustless kernel — scan · accumulator · verify · prove · store · publisher     | [`zk-coins/node`](https://github.com/zk-coins/node)                                                         |
-| **bitcoind · Nostr relay** | Bitcoin L1 settlement and ordering · off-chain transport and data availability | upstream (own or external)                                                                                  |
+| Layer                      | What it is                                                                     | Repo                                                                                                                            |
+| -------------------------- | ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
+| **App · Explorer**         | end-user wallet · public explorer web-app (scaffold / preview)                 | **[`zk-coins/app`](https://github.com/zk-coins/app)** ← this repo · [`zk-coins/explorer`](https://github.com/zk-coins/explorer) |
+| **SDK**                    | thin TypeScript client — on-device keys, signing, node/API calls               | [`zk-coins/sdk`](https://github.com/zk-coins/sdk)                                                                               |
+| **zkCoins API**            | public REST + LNURL, hosted-wallet service (optional)                          | currently in [`zk-coins/node`](https://github.com/zk-coins/node); a separate API layer is the target design                     |
+| **zkCoins node**           | trustless kernel — scan · accumulator · verify · prove · store · publisher     | [`zk-coins/node`](https://github.com/zk-coins/node)                                                                             |
+| **bitcoind · Nostr relay** | Bitcoin L1 settlement and ordering · off-chain transport and data availability | upstream (own or external)                                                                                                      |
 
 Supporting repos: [`zk-coins/research`](https://github.com/zk-coins/research), [`zk-coins/plonky2`](https://github.com/zk-coins/plonky2), [`zk-coins/docs`](https://github.com/zk-coins/docs).
 
@@ -33,23 +33,23 @@ The zkCoins **wallet** — a thin, installable web client. It holds the keys; th
 
 ### Stack
 
-| Layer     | Technology                | Why                                                                |
-| --------- | ------------------------- | ------------------------------------------------------------------ |
-| Framework | Next.js 15 (App Router)   | SSR, standalone Docker output, largest React ecosystem             |
-| Language  | TypeScript (strict)       | Type safety                                                        |
-| Styling   | Tailwind CSS              | Dark theme (#0a0a0a), Bitcoin orange (#f7931a)                     |
-| State     | Zustand                   | Minimal boilerplate, encrypted IndexedDB persistence               |
-| Crypto    | Rust → WASM               | secp256k1 + BIP-32 from the `bitcoin` crate (same as Bitcoin Core) |
-| Client    | `@zkcoins/sdk`            | Typed REST/LNURL client, shared response schemas                   |
-| PWA       | Service Worker + Manifest | Installable, offline-capable, standalone mode                      |
+| Layer     | Technology                | Why                                                            |
+| --------- | ------------------------- | -------------------------------------------------------------- |
+| Framework | Next.js 15 (App Router)   | SSR, standalone Docker output, largest React ecosystem         |
+| Language  | TypeScript (strict)       | Type safety                                                    |
+| Styling   | Tailwind CSS              | Dark theme (#000000), Bitcoin orange (#f7931a)                 |
+| State     | Zustand                   | Minimal boilerplate, encrypted IndexedDB persistence           |
+| Crypto    | `@zkcoins/sdk` (pure TS)  | BIP-39/32 + BIP-340 via `@scure/*` / noble — on-device custody |
+| Client    | `@zkcoins/sdk`            | Typed `/v1/*` client, shared response schemas                  |
+| PWA       | Service Worker + Manifest | Installable, offline-capable, standalone mode                  |
 
-Full rationale: [docs.zkcoins.app/tech-decisions](https://docs.zkcoins.app/tech-decisions)
+Full rationale: [docs.zkcoins.com/tech-decisions](https://docs.zkcoins.com/tech-decisions)
 
 ### Trust model — your keys on-device, proving on the node
 
-The wallet itself lives **on-device**: seed material is encrypted in IndexedDB (AES-256-GCM), and signing + BIP-32 derivation run inside this app's on-device WASM crate (`secp256k1` from the `bitcoin` crate, in `rust/client`). Wallet creation, restore, unlock, and key custody are local operations — the master xpriv never leaves the device.
+The wallet itself lives **on-device**: seed material is encrypted in IndexedDB (AES-256-GCM), and signing + BIP-32 derivation run via `@zkcoins/sdk` pure-TS crypto. Wallet creation, restore, unlock, and key custody are local operations — the mnemonic never leaves the device unencrypted.
 
-**Send / Receive / Mint reach the node.** ZK proof generation runs on the configured zkCoins node (default `https://api.zkcoins.app`, read from `NEXT_PUBLIC_API_URL` in `src/stores/network.ts`). The app posts the full private witness — sender, recipient, amount, in-coin / out-coin slot layout, source aggregator data, account state — and the node returns a proof. The node that proves for you therefore sees your transaction in cleartext.
+**Send and Receive are not available in the current UI.** The wallet Send CTA is disabled (no input-coin inventory selection yet); `/send` shows an unavailable banner and never posts `/v1/tx`. `/receive` shows `receive-not-available` (no NIP-05/name-claim, no QR; Send also rejects raw `zk1` addresses). Create-coin/mint can reach the node when multi-asset is enabled. A future live send path would post the full private witness — sender, recipient, amount, in-coin / out-coin slot layout, source aggregator data, account state — to the configured zkCoins node (default `https://api.zkcoins.app`, from `NEXT_PUBLIC_API_URL` in `src/stores/network.ts`) for ZK proof generation; that node would therefore see the transaction in cleartext.
 
 This is the **Bitcoin full-node model**: your wallet trusts _your_ node, exactly as a Bitcoin wallet trusts your own `bitcoind`. A foreign operator can never steal, forge, or double-spend your coins — that is enforced cryptographically (recursive proofs + Bitcoin-anchored nullifiers). What it can see is your privacy, and it can affect liveness — the same spectrum as using an Electrum/SPV server instead of your own Bitcoin node. The **on-chain footprint stays private regardless**: nullifiers and Taproot inscriptions carry no readable transaction data. The trust boundary is the **node operator**, not the chain.
 
@@ -64,9 +64,9 @@ This is the **Bitcoin full-node model**: your wallet trusts _your_ node, exactly
 
 ### Thin-client architecture
 
-**The App is a thin client. All authoritative state lives on the node.** Its only jobs are (1) private-key custody — generate/restore the BIP-32 master xpriv, store it encrypted, sign locally with WASM helpers — and (2) UI rendering.
+**The App is a thin client. All authoritative state lives on the node.** Its only jobs are (1) private-key custody — generate/restore the BIP-39 mnemonic, store it encrypted, sign locally via `@zkcoins/sdk` — and (2) UI rendering.
 
-Every other piece of state — balance, send-counter (`num_sends`), transaction history, server capabilities, account proofs — is owned by [`zk-coins/node`](https://github.com/zk-coins/node). Before any signed request (`/api/send`, `/api/commit`, `/api/username/claim`), the app fetches the authoritative `num_sends` from `api.balance(address)` to drive BIP-32 derivation; the Zustand store holds only the cryptographic identity (`xpriv`, `address`) and transient UI state, never a parallel source of truth that can drift. New features go server-side first. Full rationale and the canonical incident that motivated the rule are in [`CONTRIBUTING.md`](CONTRIBUTING.md#architecture-principle--thin-client).
+Every other piece of state — balance, send-counter, transaction history, server capabilities, account proofs — is owned by [`zk-coins/node`](https://github.com/zk-coins/node). Signed transitions hydrate the send counter from an ownership pull (`getAccountState`) immediately before signing; the Zustand store holds only the cryptographic identity (`mnemonic`, `nkCommit`, `address`) and transient UI state, never a parallel source of truth that can drift. New features go server-side first. Full rationale and the canonical incident that motivated the rule are in [`CONTRIBUTING.md`](CONTRIBUTING.md#architecture-principle--thin-client).
 
 ### Develop & build
 
@@ -78,16 +78,16 @@ npm run lint     # ESLint + Prettier check (run before every commit)
 npm run lint:fix # auto-fix
 ```
 
-| Command                 | Description                                                                                                       |
-| ----------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `npm run dev`           | Start dev server (port 3090)                                                                                      |
-| `npm run build`         | Production build (standalone Next.js output)                                                                      |
-| `npm run lint`          | ESLint + Prettier check                                                                                           |
-| `npm run test`          | Vitest unit tests (`src/lib/**`, `src/stores/**`)                                                                 |
-| `npm run test:coverage` | v8 coverage — CI enforces 100% on the default-active surface (everything not behind a `NEXT_PUBLIC_ENABLE_*` flag)   |
-| `npm run test:e2e`      | Playwright E2E against `E2E_BASE_URL`                                                                             |
+| Command                 | Description                                                                                                        |
+| ----------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `npm run dev`           | Start dev server (port 3090)                                                                                       |
+| `npm run build`         | Production build (standalone Next.js output)                                                                       |
+| `npm run lint`          | ESLint + Prettier check                                                                                            |
+| `npm run test`          | Vitest unit tests (`src/lib/**`, `src/stores/**`)                                                                  |
+| `npm run test:coverage` | v8 coverage — CI enforces 100% on the default-active surface (everything not behind a `NEXT_PUBLIC_ENABLE_*` flag) |
+| `npm run test:e2e`      | Playwright E2E against `E2E_BASE_URL`                                                                              |
 
-**Prerequisites:** Node 20+, npm 10+. Rebuilding the WASM crypto crate (`rust/client`) additionally needs Rust 1.81+ and LLVM 21+ with the `wasm32` target — the committed `pkg/` lets you skip this unless you change Rust code. A JS fallback runs if WASM fails to load. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for the full setup, code style, and WASM build steps.
+**Prerequisites:** Node 22+, npm 10+. The `@zkcoins/sdk` dependency is the Git dependency `github:zk-coins/sdk#d1f0bc8a26ea92940ced9bbc8eddaa91f3eb0099` ([`zk-coins/sdk`](https://github.com/zk-coins/sdk), commit `d1f0bc8a26ea92940ced9bbc8eddaa91f3eb0099`). No sibling checkout is required. See [`CONTRIBUTING.md`](CONTRIBUTING.md) for setup and code style.
 
 ### Configuration
 
@@ -98,11 +98,14 @@ Both `_URL` variables are injected at **runtime** by `entrypoint.sh`, so one Doc
 | `NEXT_PUBLIC_API_URL`      | container start | `https://api.zkcoins.app` | zkCoins node API base URL (`src/stores/network.ts`)                               |
 | `NEXT_PUBLIC_EXPLORER_URL` | container start | _(empty)_                 | Live network-activity / tx-detail source; empty → `/network` shows simulated data |
 
-Build-time `NEXT_PUBLIC_ENABLE_*` flags exist for local-dev previews of gated UI only — they are not set in the deployed images. Faucet and username UIs are driven at runtime by the node's `GET /api/info.capabilities`, so the same shipped bundle matches whatever Cargo features the connected node was built with. Full table and gating details in [`CONTRIBUTING.md`](CONTRIBUTING.md).
+Build-time `NEXT_PUBLIC_ENABLE_*` flags exist for local-dev previews of gated UI only — they are not set in the deployed images. Server-gated UI is driven at runtime by `GET /v1/info.features`, so the same shipped bundle matches whatever the connected node advertises. Flag definitions live in [`src/lib/features.ts`](src/lib/features.ts): build-time `PASSKEY`, `APPS_DIRECTORY`, `DEV_ROUTES`, `AUTO_LOCK`, `ADDRESS_ROTATION`, `TOR_ROUTING`; runtime `USERNAME_CLAIM` / `MULTI_ASSET` from `GET /v1/info.features`.
 
 ### Docker
 
+Build from the app repo root (`npm ci` resolves the Git SDK dependency during the image build):
+
 ```bash
+# from the app repository root
 docker build -t zkcoins/app .
 docker run -p 3090:3090 \
   -e NEXT_PUBLIC_API_URL=https://api.zkcoins.app \
@@ -110,20 +113,20 @@ docker run -p 3090:3090 \
   zkcoins/app
 ```
 
+Image base: Node 22 (matches `@zkcoins/sdk` engines). The SDK is fetched as a Git dependency — no sibling `zk-coins/sdk` checkout is required.
+
 ### Project layout
 
 ```
 src/
 ├── app/                # Next.js App Router (pages: send, receive, network, settings, tx/[id], …)
 ├── components/         # React components (render-only)
-├── hooks/useZkCoins.ts # WASM integration hook
+├── hooks/              # Portfolio / history / transaction hooks
 ├── lib/
-│   ├── api/            # @zkcoins/sdk-backed REST client + schemas
+│   ├── api/            # @zkcoins/sdk-backed /v1 client
 │   └── crypto/         # encryption (AES-GCM), key-derivation, passkey, IndexedDB storage
 └── stores/             # Zustand: auth, network, wallet, capabilities
 
-packages/zkcoins-wasm/  # local TS wrapper for the Rust WASM crypto module (on-device signing)
-rust/client/            # Rust WASM crate (BIP-32, Schnorr, secp256k1)
 public/                 # PWA manifest, service worker, icons
 e2e/                    # Playwright specs + visual baselines
 ```
@@ -134,7 +137,7 @@ Feature PRs target **`staging`** (the integration buffer), which is auto-promote
 
 ## Protocol
 
-Based on [Shielded CSV](https://eprint.iacr.org/2025/068) by Jonas Nick, Liam Eagen, and Robin Linus, building on the zkCoins concept. See [`zk-coins/research`](https://github.com/zk-coins/research) and [docs.zkcoins.app/specification](https://docs.zkcoins.app/specification).
+Based on [Shielded CSV](https://eprint.iacr.org/2025/068) by Jonas Nick, Liam Eagen, and Robin Linus, building on the zkCoins concept. See [`zk-coins/research`](https://github.com/zk-coins/research) and [docs.zkcoins.com/specification](https://docs.zkcoins.com/specification).
 
 ## License
 

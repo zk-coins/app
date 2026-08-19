@@ -1,17 +1,18 @@
 /**
- * Transaction-list rendering in `WalletScreen` from server `/api/history`
- * truth (issue #175). Complements `WalletScreen.polling.test.tsx`
+ * Transaction-list rendering in `WalletScreen` from the ownership-pull
+ * `getHistory` adapter (issue #175). Complements `WalletScreen.polling.test.tsx`
  * (portfolio cadence) by exercising the list/empty-state gating and the
- * per-row mapping of the node's `HistoryItem` shape (direction → label,
- * Unix-seconds timestamp). Labels are German (the default locale).
+ * per-row mapping of the node's `HistoryItem` shape (kind → label,
+ * created_at as Unix-seconds or ISO). Labels are German (the default locale).
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { render } from '@/__tests__/_helpers/intl';
 import { WalletScreen } from '@/components/screens/WalletScreen';
 import { useWalletStore } from '@/stores/wallet';
 import { useNetworkStore } from '@/stores/network';
+import { useCapabilities } from '@/stores/capabilities';
 import { api, type HistoryItem, type OwnerBalanceResponse } from '@/lib/api/client';
 
 const FEATURES_STATE = vi.hoisted(() => ({
@@ -31,19 +32,20 @@ vi.mock('@/lib/features', () => ({
   useFeatures: () => FEATURES_STATE,
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 
 function row(over: Partial<HistoryItem> = {}): HistoryItem {
   return {
     id: 1,
-    txid: null,
-    timestamp: 1_780_000_000,
-    direction: 'mint',
+    kind: 'mint',
     amount: 10_000,
-    counterparty: null,
     status: 'pending',
-    block_height: null,
-    memo: null,
+    created_at: 1_780_000_000,
     ...over,
   };
 }
@@ -60,12 +62,12 @@ let historySpy: ReturnType<typeof vi.spyOn>;
 beforeEach(() => {
   useNetworkStore.setState({
     apiUrl: 'https://test.api',
-    networkName: 'Mutinynet',
-    bitcoinNetwork: 'mutinynet',
+    network: 'regtest',
+    infoError: null,
+    infoLoaded: true,
   });
   useWalletStore.setState({
     account: ALICE,
-    balance: 10_000,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
@@ -73,7 +75,21 @@ beforeEach(() => {
     storedAuthMethod: null,
     error: null,
   });
-  vi.spyOn(api, 'info').mockResolvedValue({ network: 'Mutinynet', bitcoin_network: 'mutinynet' });
+  useCapabilities.setState({
+    capabilities: { address_list: false, username_claim: false, lnurl: false, multi_asset: false },
+    loaded: false,
+  });
+  vi.spyOn(api, 'info').mockResolvedValue({
+    network: 'regtest',
+    features: ['wallet'],
+    protocol_version: 'v1',
+    capabilities: {
+      address_list: false,
+      username_claim: false,
+      lnurl: false,
+      multi_asset: true,
+    },
+  });
   vi.spyOn(api, 'ownerBalances').mockResolvedValue(FUNDED);
   historySpy = vi.spyOn(api, 'getHistory');
 });
@@ -92,14 +108,16 @@ describe('WalletScreen — transaction list from server history', () => {
     expect(await screen.findByText('Erstellt')).toBeInTheDocument();
     expect(screen.queryByText('Noch keine Transaktionen')).not.toBeInTheDocument();
     expect(screen.getByTestId('tx-row-amount')).toBeInTheDocument();
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-loaded', 'true');
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-state', 'items');
   });
 
-  it('maps direction to label (mint, receive, send)', async () => {
+  it('maps kind to label (mint, receive, send)', async () => {
     historySpy.mockResolvedValue({
       items: [
-        row({ id: 1, direction: 'mint', amount: 10_000 }),
-        row({ id: 2, direction: 'receive', amount: 25_000 }),
-        row({ id: 3, direction: 'send', amount: 5_000 }),
+        row({ id: 1, kind: 'mint', amount: 10_000 }),
+        row({ id: 2, kind: 'receive', amount: 25_000 }),
+        row({ id: 3, kind: 'send', amount: 5_000 }),
       ],
       total: 3,
       limit: 50,
@@ -121,6 +139,30 @@ describe('WalletScreen — transaction list from server history', () => {
     expect(amounts.filter((t) => t.trim().startsWith('-'))).toHaveLength(1);
   });
 
+  it('maps unknown history kinds to neutral unknown label, not receive', async () => {
+    historySpy.mockResolvedValue({
+      items: [row({ id: 1, kind: 'burn', amount: 7 })],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+
+    render(<WalletScreen />);
+
+    const rowEl = await screen.findByTestId('tx-row');
+    expect(rowEl).toHaveTextContent('Unbekannt');
+    expect(rowEl).not.toHaveTextContent('Empfangen');
+    const amount = screen.getByTestId('tx-row-amount');
+    expect(amount.textContent).not.toMatch(/[−-]/);
+    expect(amount.className).toContain('text-ink');
+    expect(amount.className).not.toContain('text-bitcoin');
+    const iconWrap = rowEl.querySelector('div.flex.h-9');
+    expect(iconWrap).not.toBeNull();
+    expect(iconWrap?.className).toContain('bg-line');
+    expect(iconWrap?.className).toContain('text-ink2');
+    expect(iconWrap?.className).not.toContain('bg-bitcoin/10');
+  });
+
   it('renders the row time from a Unix-seconds timestamp (not raw ms)', async () => {
     historySpy.mockResolvedValue({ items: [row()], total: 1, limit: 50, offset: 0 });
 
@@ -137,6 +179,40 @@ describe('WalletScreen — transaction list from server history', () => {
     render(<WalletScreen />);
 
     expect(await screen.findByText('Noch keine Transaktionen')).toBeInTheDocument();
+    expect(screen.getByTestId('tx-list-empty')).toBeInTheDocument();
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-loaded', 'true');
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-state', 'empty');
+  });
+
+  it('shows a history error banner instead of empty copy when the read fails', async () => {
+    historySpy.mockRejectedValue(new Error('network down'));
+
+    render(<WalletScreen />);
+
+    expect(await screen.findByTestId('history-error-banner')).toBeInTheDocument();
+    expect(screen.queryByText('Noch keine Transaktionen')).not.toBeInTheDocument();
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-loaded', 'true');
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-state', 'error');
+  });
+
+  it('shows the first portfolio error message when no stale assets exist', async () => {
+    vi.mocked(api.ownerBalances).mockRejectedValue(new Error('network down'));
+    historySpy.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+
+    render(<WalletScreen />);
+
+    expect(await screen.findByTestId('portfolio-error-banner')).toHaveTextContent('network down');
+  });
+
+  it('uses translated portfolio copy when a failed read has no message', async () => {
+    vi.mocked(api.ownerBalances).mockRejectedValue(new Error(''));
+    historySpy.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
+
+    render(<WalletScreen />);
+
+    expect(await screen.findByTestId('portfolio-unavailable-banner')).toHaveTextContent(
+      'Asset-Guthaben sind in diesem Build noch nicht verfügbar',
+    );
   });
 
   it('holds the empty state back while the first history fetch is in flight', async () => {
@@ -147,15 +223,81 @@ describe('WalletScreen — transaction list from server history', () => {
     await waitFor(() => expect(screen.getByTestId('create-coin-btn')).toBeInTheDocument());
     expect(screen.queryByText('Noch keine Transaktionen')).not.toBeInTheDocument();
     expect(screen.queryByTestId('tx-row-amount')).not.toBeInTheDocument();
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-loaded', 'false');
+    expect(screen.getByTestId('tx-list')).toHaveAttribute('data-state', 'loading');
   });
 
   it('prompts to create a wallet when there is no account', async () => {
-    useWalletStore.setState({ account: null, balance: null });
+    useWalletStore.setState({ account: null });
     historySpy.mockResolvedValue({ items: [], total: 0, limit: 50, offset: 0 });
 
     render(<WalletScreen />);
 
     expect(await screen.findByText('Erstelle ein Wallet, um zu starten.')).toBeInTheDocument();
     expect(historySpy).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByTestId('create-coin-btn'));
+    fireEvent.click(screen.getByTestId('wallet-send-btn'));
+    fireEvent.click(screen.getByTestId('wallet-receive-btn'));
+    expect(screen.getByTestId('create-coin-btn')).toHaveAttribute('aria-disabled', 'true');
+  });
+
+  it('renders unknown asset metadata, missing transaction amount, and invalid time defensively', async () => {
+    vi.mocked(api.ownerBalances).mockResolvedValue({
+      address: ALICE.address,
+      assets: [{ asset_id: 'd'.repeat(64), balance: 7, num_sends: 0 }],
+    });
+    historySpy.mockResolvedValue({
+      items: [row({ amount: undefined, created_at: 'not-a-date' })],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    render(<WalletScreen />);
+    expect(await screen.findByTestId('asset-row-name')).toHaveTextContent('Unbekanntes Asset');
+    expect(screen.getByTestId('tx-row-amount')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-row-time')).toHaveTextContent('—');
+  });
+
+  it('renders an em-dash for a non-safe transaction amount', async () => {
+    historySpy.mockResolvedValue({
+      items: [row({ amount: Number.NaN })],
+      total: 1,
+      limit: 50,
+      offset: 0,
+    });
+    render(<WalletScreen />);
+    expect(await screen.findByTestId('tx-row-amount')).toHaveTextContent('—');
+  });
+
+  it('marks retained portfolio and history data stale after later poll failures', async () => {
+    vi.useFakeTimers();
+    historySpy.mockResolvedValueOnce({ items: [row()], total: 1, limit: 50, offset: 0 });
+    vi.mocked(api.ownerBalances).mockResolvedValueOnce(FUNDED);
+    render(<WalletScreen />);
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    historySpy.mockRejectedValue(new Error('history refresh failed'));
+    vi.mocked(api.ownerBalances).mockRejectedValue(new Error('portfolio refresh failed'));
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(5_000);
+    });
+    expect(screen.getByTestId('history-stale-note')).toBeInTheDocument();
+    // usePortfolio couples stale:true to available:false after a failed poll,
+    // so portfolio staleness is rendered in the blocking error-banner body.
+    expect(screen.getByTestId('portfolio-error-banner')).toHaveTextContent(
+      /Letzte bekannte Assets|fehlgeschlagen|last known assets|latest refresh failed/i,
+    );
+  });
+
+  it('renders unavailable and history banners for API errors with no server message', async () => {
+    vi.mocked(api.ownerBalances).mockRejectedValue(
+      new (await import('@/lib/api/client')).ApiError(501),
+    );
+    historySpy.mockRejectedValue(new (await import('@/lib/api/client')).ApiError(500, ''));
+    render(<WalletScreen />);
+    expect(await screen.findByTestId('portfolio-unavailable-banner')).toBeInTheDocument();
+    expect(await screen.findByTestId('history-error-banner')).toBeInTheDocument();
   });
 });

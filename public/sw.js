@@ -1,4 +1,4 @@
-const CACHE_NAME = 'zkcoins-v1';
+const CACHE_NAME = 'zkcoins-v2';
 const PRECACHE = ['/', '/manifest.json'];
 
 self.addEventListener('install', (event) => {
@@ -18,8 +18,8 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Network-first for API calls
-  if (event.request.url.includes('/api/')) {
+  // Network-first for node API calls (closed /v1 surface)
+  if (event.request.url.includes('/v1/')) {
     event.respondWith(fetch(event.request).catch(() => caches.match(event.request)));
     return;
   }

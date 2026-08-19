@@ -38,7 +38,6 @@
 
 import { expect, test, type Page } from '@playwright/test';
 import { aliceLogin } from './_helpers/fixtures';
-import { getUsernameDomain, zkAddressRegex } from './_helpers/api';
 import { snap, setViewport } from './_helpers/screenshot';
 
 const PASSWORD = 'TestPass123!';
@@ -51,9 +50,10 @@ const PASSWORD = 'TestPass123!';
  */
 async function arriveAtUnlock(page: Page): Promise<void> {
   await aliceLogin(page, PASSWORD);
-  // Force `Home` to re-evaluate: clear the in-memory account but leave
-  // IDB intact. A reload achieves this — checkForStoredWallet on mount
-  // sees the encrypted blob and sets hasStoredWallet=true, isLocked=true.
+  // Force `Home` to re-evaluate: drop the tab session so reload is locked,
+  // but leave IDB intact. checkForStoredWallet then sets hasStoredWallet
+  // and renders UnlockScreen.
+  await page.evaluate(() => sessionStorage.removeItem('zkcoins.wallet.session.v2'));
   await page.goto('/?reload=1');
   await expect(page.getByTestId('unlock-heading')).toBeVisible({ timeout: 15_000 });
 }
@@ -100,14 +100,11 @@ test.describe('Unlock wallet — password', () => {
     await arriveAtUnlock(page);
     await page.getByTestId('unlock-password-input').fill(PASSWORD);
     await page.getByTestId('unlock-submit-btn').click();
-    // Suffix is server-reported via /api/info.username_domain (per-stage).
-    const chip = zkAddressRegex(await getUsernameDomain());
-    await expect(page.locator(`text=${chip}`).first()).toBeVisible({
-      timeout: 30_000,
-    });
+    // Wait for the wallet shell — create-coin-btn marks a settled WalletScreen.
+    await expect(page.getByTestId('create-coin-btn')).toBeVisible({ timeout: 30_000 });
     // Wait for Alice's first balance-poll tick — see comment in
     // 02-create-seed.spec.ts::wallet-after-create.
-    await expect(page.getByTestId('wallet-empty-banner')).not.toBeVisible({ timeout: 30_000 });
+    await expect(page.getByTestId('portfolio-unavailable-banner')).toBeVisible({ timeout: 30_000 });
     await snap(page, '04-unlock-success-wallet', { fullPage: true });
   });
 

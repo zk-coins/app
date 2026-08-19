@@ -70,6 +70,18 @@ const STABILIZE_CSS = `
   [data-testid="balance-amount-btc"] { display: inline-block; min-width: 220px; }
   [data-testid="tx-row-amount"] { display: inline-block; min-width: 96px; text-align: right; }
   [data-testid="proof-id"] { display: inline-block; min-width: 80px; }
+  /* History is leftover-node-dependent (empty / error / mint row) and
+     changes fullPage height. Collapse it for the shot so wallet-home
+     goldens stay on the 375×812 chrome; specs still assert the live
+     state (06 waits for tx-list-empty) before calling snap(). */
+  [data-testid="tx-list"] {
+    height: 0 !important;
+    max-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: hidden !important;
+    visibility: hidden !important;
+  }
   /* Transaction-detail value cells: pin every masked value to a uniform
      width so the mask box is identical regardless of the per-run value
      (id, timestamp, circuit digest, amounts) — see the tx-detail spec. */
@@ -95,13 +107,18 @@ async function applyStabilizer(page: Page): Promise<void> {
  * Always:
  *   - waits for `domcontentloaded` (initial render landed)
  *   - waits for web fonts (`document.fonts.ready`)
+ *   - collapses `tx-list` (see STABILIZE_CSS) so leftover history
+ *     cannot change fullPage height
  *   - applies the default mask set, then any spec-specific masks
  *
- * **Why not `networkidle`**: WalletScreen polls `/api/balance` every 5 s
- * and we have other periodic fetches too. `waitForLoadState('networkidle')`
- * requires 500 ms of network silence and can deadlock under sustained
- * polling. `domcontentloaded` is enough for visual stability once the
- * caller has already asserted a marker locator is visible.
+ * **Why not `networkidle`**: There is no GET balance endpoint under v1 —
+ * v1 has no legacy portfolio REST route. `api.ownerBalances` /
+ * `api.walletBalance` throw locally (501). Home settles on
+ * `portfolio-unavailable-banner`. Funding is a completed `POST /v1/tx`
+ * kind=mint. Other periodic fetches still exist, so
+ * `waitForLoadState('networkidle')` requires 500 ms of network silence
+ * and can deadlock. `domcontentloaded` is enough for visual stability
+ * once the caller has already asserted a marker locator is visible.
  */
 export async function snap(page: Page, name: string, opts: SnapOptions = {}): Promise<void> {
   await page.waitForLoadState('domcontentloaded');

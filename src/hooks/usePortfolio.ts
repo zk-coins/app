@@ -1,66 +1,112 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { api, type AssetBalance } from '@/lib/api/client';
+import { useEffect, useRef, useState } from 'react';
+import { ApiError, api, type AssetBalance } from '@/lib/api/client';
 
-/**
- * Poll cadence for `GET /api/balance/:address`. Matched to the history
- * tick in `useHistory` so balance and history advance in lock-step.
- */
 const PORTFOLIO_POLL_MS = 5_000;
 
 export interface UsePortfolioResult {
-  /** One entry per asset the owner holds, in the node's order. */
   assets: AssetBalance[];
-  /**
-   * `false` until the first `/api/balance/:address` round-trip settles
-   * (success *or* failure). Lets the caller hold the empty state back
-   * during the initial fetch instead of flashing "No assets yet".
-   */
   loaded: boolean;
+  /**
+   * true only after a successful portfolio read. false when the path is
+   * not wired (501) or any other read failure prevents a trustworthy list.
+   * Distinguishes "not available / error" from a real empty wallet.
+   */
+  available: boolean;
+  /** Human-readable reason when the path is intentionally unavailable (501). */
+  unavailableReason: string | null;
+  /**
+   * Transport/auth/parse/server error message when a read failed for a
+   * reason other than intentional unavailability. Empty-state UI must not
+   * render while this is set (unless a prior successful list is kept as stale).
+   */
+  error: string | null;
+  /**
+   * true when `assets` comes from an earlier successful read and a later
+   * poll failed — list may be outdated.
+   */
+  stale: boolean;
 }
 
 /**
- * Server-truth multi-asset portfolio for `address`.
+ * Multi-asset portfolio for `address`.
  *
- * Fetches `GET /api/balance/:address` on mount and re-polls on a 5 s
- * cadence so a fresh create-coin mint, an inbound receive, or a send from
- * any tab/device surfaces without local bookkeeping (thin-client). A
- * failed fetch is swallowed and never clears already-rendered rows —
- * drift always resolves toward server truth on the next poll. Passing
- * `undefined` (no account yet) parks the hook: no fetch, empty list,
- * `loaded` stays `false`.
+ * v1 does not expose a legacy portfolio REST route; without an
+ * AccountState balances decoder the API refuses (501). The hook surfaces
+ * that as `available: false` so screens show an honest "not available"
+ * state instead of an empty portfolio. Other failures set `error` and
+ * never masquerade as a confirmed empty wallet.
  */
 export function usePortfolio(address: string | undefined): UsePortfolioResult {
   const [assets, setAssets] = useState<AssetBalance[]>([]);
   const [loaded, setLoaded] = useState(false);
+  const [available, setAvailable] = useState(false);
+  const [unavailableReason, setUnavailableReason] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [stale, setStale] = useState(false);
+  const hadSuccessRef = useRef(false);
 
   useEffect(() => {
     setAssets([]);
     setLoaded(false);
+    setAvailable(false);
+    setUnavailableReason(null);
+    setError(null);
+    setStale(false);
+    hadSuccessRef.current = false;
 
     if (!address) return;
 
     let cancelled = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
     const tick = async () => {
       try {
         const res = await api.ownerBalances(address);
         if (cancelled) return;
         setAssets(res.assets);
+        setAvailable(true);
+        setUnavailableReason(null);
+        setError(null);
+        setStale(false);
+        hadSuccessRef.current = true;
         setLoaded(true);
-      } catch {
+      } catch (err) {
         if (cancelled) return;
+        if (err instanceof ApiError && err.status === 501) {
+          setAvailable(false);
+          setUnavailableReason(err.serverError ?? err.message);
+          setError(null);
+          if (!hadSuccessRef.current) {
+            setAssets([]);
+          } else {
+            setStale(true);
+          }
+        } else {
+          const message = err instanceof Error ? err.message : String(err);
+          setAvailable(false);
+          setUnavailableReason(null);
+          setError(message);
+          if (!hadSuccessRef.current) {
+            setAssets([]);
+          } else {
+            setStale(true);
+          }
+        }
         setLoaded(true);
       }
     };
-
-    tick();
-    const interval = setInterval(tick, PORTFOLIO_POLL_MS);
+    const schedule = () => {
+      void tick().finally(() => {
+        if (!cancelled) timeout = setTimeout(schedule, PORTFOLIO_POLL_MS);
+      });
+    };
+    void schedule();
     return () => {
       cancelled = true;
-      clearInterval(interval);
+      if (timeout !== undefined) clearTimeout(timeout);
     };
   }, [address]);
 
-  return { assets, loaded };
+  return { assets, loaded, available, unavailableReason, error, stale };
 }

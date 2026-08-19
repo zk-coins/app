@@ -8,7 +8,7 @@
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@/__tests__/_helpers/intl';
 import TransactionDetailPage from '@/app/tx/[id]/page';
 import { ApiError, api, type TxDetail } from '@/lib/api/client';
 import { useWalletStore } from '@/stores/wallet';
@@ -19,25 +19,23 @@ vi.mock('next/navigation', () => ({
   useParams: () => ({ id: route.id }),
 }));
 
-const ALICE = { address: 'a'.repeat(64), numPubkeys: 0, xpriv: 'xprv-alice' };
+const ALICE = {
+  address: 'a'.repeat(64),
+  mnemonic:
+    'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+  nkCommit: '00'.repeat(32),
+};
 
 const MINT: TxDetail = {
   id: 7,
+  kind: 'mint',
   address: 'a'.repeat(64),
-  txid: null,
-  timestamp: 1_780_000_000,
-  direction: 'mint',
+  created_at: 1_780_000_000,
   amount: 10_000,
-  counterparty: null,
   status: 'pending',
-  block_height: null,
-  memo: null,
   balance_after: 10_000,
-  balance_before: null,
   num_sends_after: 0,
-  commitment_public_key: null,
   circuit_digest: 'cd'.repeat(32),
-  commit_output_value: null,
 };
 
 let spy: ReturnType<typeof vi.spyOn>;
@@ -47,7 +45,6 @@ beforeEach(() => {
   useNetworkStore.setState({ usernameDomain: 'dev.zkcoins.app' });
   useWalletStore.setState({
     account: ALICE,
-    balance: 10_000,
     isLoading: false,
     isLocked: false,
     hasStoredWallet: false,
@@ -74,24 +71,35 @@ describe('TransactionDetailPage', () => {
     render(<TransactionDetailPage />);
 
     expect(await screen.findByTestId('tx-detail-body')).toBeInTheDocument();
-    expect(screen.getByTestId('tx-detail-label')).toHaveTextContent('Faucet');
-    expect(screen.getByTestId('tx-detail-status')).toHaveTextContent('pending');
+    expect(screen.getByTestId('tx-detail-label')).toHaveTextContent('Erstellt');
+    expect(screen.getByTestId('tx-detail-status')).toHaveTextContent('ausstehend');
     expect(screen.getByTestId('tx-detail-v-balance-after')).toHaveTextContent('BTC');
     // First-row mint: no prior balance, no commitment key, not broadcast.
     expect(screen.getByTestId('tx-detail-v-balance-before')).toHaveTextContent('—');
     expect(screen.getByTestId('tx-detail-v-num-sends')).toHaveTextContent('0');
     expect(screen.getByTestId('tx-detail-txid')).toHaveTextContent('Not yet broadcast');
-    expect(screen.getByTestId('tx-detail-counterparty')).toHaveTextContent('Private');
+    expect(screen.getByTestId('tx-detail-counterparty')).toHaveTextContent('—');
     expect(screen.getByTestId('tx-detail-source')).toHaveTextContent('Your node');
-    // Pending → awaiting confirmation (no verified marker).
-    expect(screen.getByTestId('tx-detail-verification')).toHaveTextContent('Awaiting confirmation');
-    expect(spy).toHaveBeenCalledWith(7, ALICE.address);
+    // Pending records stay explicitly unconfirmed.
+    expect(screen.getByTestId('tx-detail-confirmation')).toHaveTextContent(
+      'Wartet auf Bestätigung',
+    );
+    expect(spy).toHaveBeenCalledWith(
+      '7',
+      {
+        address: ALICE.address,
+        mnemonic: ALICE.mnemonic,
+        nkCommit: ALICE.nkCommit,
+        accountIndex: 0,
+      },
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
+    );
   });
 
-  it('renders a confirmed send: signed amount, verified marker, raw txid (no explorer)', async () => {
+  it('renders a confirmed send: signed amount, confirmation state, raw txid', async () => {
     spy.mockResolvedValue({
       ...MINT,
-      direction: 'send',
+      kind: 'send',
       status: 'confirmed',
       amount: 6_000,
       balance_after: 4_000,
@@ -104,10 +112,10 @@ describe('TransactionDetailPage', () => {
     });
     render(<TransactionDetailPage />);
 
-    expect(await screen.findByTestId('tx-detail-label')).toHaveTextContent('Sent');
+    expect(await screen.findByTestId('tx-detail-label')).toHaveTextContent('Gesendet');
     // Debit → Unicode-minus signed amount.
     expect(screen.getByTestId('tx-detail-v-amount')).toHaveTextContent('−');
-    expect(screen.getByTestId('tx-detail-verification')).toHaveTextContent('Proof verified');
+    expect(screen.getByTestId('tx-detail-confirmation')).toHaveTextContent('Bestätigt');
     expect(screen.getByTestId('tx-detail-v-txid')).toBeInTheDocument();
     // No explorer env in unit tests → plain txid span, no outbound link.
     expect(screen.queryByTestId('tx-detail-explorer-link')).not.toBeInTheDocument();
@@ -115,9 +123,94 @@ describe('TransactionDetailPage', () => {
   });
 
   it('renders a receive detail label', async () => {
-    spy.mockResolvedValue({ ...MINT, direction: 'receive' });
+    spy.mockResolvedValue({ ...MINT, kind: 'receive' });
     render(<TransactionDetailPage />);
-    expect(await screen.findByTestId('tx-detail-label')).toHaveTextContent('Received');
+    expect(await screen.findByTestId('tx-detail-label')).toHaveTextContent('Empfangen');
+  });
+
+  it('maps unknown kinds to Unknown with neutral chrome, not receive credit', async () => {
+    spy.mockResolvedValue({ ...MINT, kind: 'burn', amount: 10_000 });
+    render(<TransactionDetailPage />);
+
+    expect(await screen.findByTestId('tx-detail-label')).toHaveTextContent('Unbekannt');
+    expect(screen.getByTestId('tx-detail-direction')).toHaveTextContent('Unbekannt');
+    const amount = screen.getByTestId('tx-detail-v-amount');
+    expect(amount.textContent).not.toMatch(/^\+/);
+    expect(amount.textContent).not.toMatch(/[−-]/);
+    const iconCircle = screen.getByTestId('tx-detail-body').querySelector('div.flex.h-14');
+    expect(iconCircle).not.toBeNull();
+    expect(iconCircle?.className).toContain('bg-line');
+    expect(iconCircle?.className).not.toContain('bg-bitcoin/10');
+    expect(screen.queryByText('Empfangen')).not.toBeInTheDocument();
+  });
+
+  it('renders a sparse record with every unavailable-field fallback and invalid date', async () => {
+    spy.mockResolvedValue({
+      id: 'sparse',
+      kind: 'receive',
+      created_at: 'invalid-date',
+      status: 'mystery',
+    } as TxDetail);
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-v-amount')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-time')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-account')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-amount-full')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-balance-after')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-num-sends')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-block-height')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-v-commit-value')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-memo')).toHaveTextContent('—');
+    expect(screen.getByTestId('tx-detail-status')).toHaveTextContent('unbekannt');
+    expect(screen.getByTestId('tx-detail-confirmation')).toHaveTextContent('Status unbekannt');
+  });
+
+  it.each([Number.NaN, Infinity, -5, Number.MAX_SAFE_INTEGER + 1])(
+    'renders em-dash for non-safe amount %s',
+    async (badAmount) => {
+      spy.mockResolvedValue({ ...MINT, amount: badAmount });
+      render(<TransactionDetailPage />);
+      expect(await screen.findByTestId('tx-detail-v-amount')).toHaveTextContent('—');
+      expect(screen.getByTestId('tx-detail-v-amount-full')).toHaveTextContent('—');
+    },
+  );
+
+  it('renders em-dash for non-safe balance_after', async () => {
+    spy.mockResolvedValue({ ...MINT, balance_after: Number.NaN });
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-v-balance-after')).toHaveTextContent('—');
+  });
+
+  it('renders a detail without status as unknown', async () => {
+    const { status: _status, ...withoutStatus } = MINT;
+    void _status;
+    spy.mockResolvedValue(withoutStatus as TxDetail);
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-status')).toHaveTextContent('unbekannt');
+    expect(screen.getByTestId('tx-detail-confirmation')).toHaveTextContent('Status unbekannt');
+  });
+
+  it.each(['failed', 'cancelled'])('renders %s as not confirmed', async (status) => {
+    spy.mockResolvedValue({ ...MINT, status });
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-confirmation')).toHaveTextContent(
+      'Nicht bestätigt',
+    );
+  });
+
+  it('treats completed as confirmed and renders supplied privacy fields', async () => {
+    spy.mockResolvedValue({
+      ...MINT,
+      status: 'completed',
+      address: 'alice',
+      counterparty: 'bob',
+      memo: 'invoice 7',
+    });
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-confirmation')).toHaveTextContent('Bestätigt');
+    expect(screen.getByTestId('tx-detail-account')).toHaveTextContent('alice@dev.zkcoins.app');
+    expect(screen.getByTestId('tx-detail-counterparty')).toHaveTextContent('bob');
+    expect(screen.getByTestId('tx-detail-memo')).toHaveTextContent('invoice 7');
   });
 
   it('falls back to a truncated raw address when the username domain is unset', async () => {
@@ -130,43 +223,84 @@ describe('TransactionDetailPage', () => {
     expect(account).toHaveTextContent('aaaaaaaaaa...aaaaaaaa');
   });
 
-  it('shows an em-dash for a null circuit digest', async () => {
-    spy.mockResolvedValue({ ...MINT, circuit_digest: null });
+  it('shows an em-dash when circuit digest is absent', async () => {
+    const { circuit_digest: _omit, ...rest } = MINT;
+    void _omit;
+    spy.mockResolvedValue(rest);
     render(<TransactionDetailPage />);
     expect(await screen.findByTestId('tx-detail-v-circuit-digest')).toHaveTextContent('—');
   });
 
-  it('shows not-found for a non-integer route id without fetching', async () => {
-    route.id = 'not-a-number';
+  it('shows not-found for an empty route id without fetching', async () => {
+    route.id = '';
     render(<TransactionDetailPage />);
     expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
-      'Transaction not found',
+      'Transaktion nicht gefunden',
     );
     expect(spy).not.toHaveBeenCalled();
   });
 
-  it('shows not-found when there is no unlocked account', async () => {
-    useWalletStore.setState({ account: null });
+  it('rejects a non-string route id without fetching', async () => {
+    (route as { id: unknown }).id = 7;
     render(<TransactionDetailPage />);
     expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
-      'Transaction not found',
+      'Transaktion nicht gefunden',
+    );
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('shows wallet-unavailable when there is no unlocked account', async () => {
+    useWalletStore.setState({ account: null });
+    render(<TransactionDetailPage />);
+    const surface = await screen.findByTestId('tx-detail-wallet-unavailable');
+    expect(surface).toHaveTextContent('Wallet entsperren, um diese Transaktion zu sehen');
+    expect(screen.queryByTestId('tx-detail-missing')).not.toBeInTheDocument();
+    expect(screen.queryByText('Transaktion nicht gefunden')).not.toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('shows wallet-unavailable when the account lacks mnemonic or nkCommit signing material', async () => {
+    useWalletStore.setState({ account: { ...ALICE, mnemonic: '' } });
+    render(<TransactionDetailPage />);
+    const surface = await screen.findByTestId('tx-detail-wallet-unavailable');
+    expect(surface).toHaveTextContent('Wallet entsperren, um diese Transaktion zu sehen');
+    expect(screen.queryByTestId('tx-detail-missing')).not.toBeInTheDocument();
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  it('shows wallet-unavailable when nkCommit is missing', async () => {
+    useWalletStore.setState({ account: { ...ALICE, nkCommit: '' } });
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-wallet-unavailable')).toHaveTextContent(
+      'Wallet entsperren, um diese Transaktion zu sehen',
     );
     expect(spy).not.toHaveBeenCalled();
   });
 
   it('shows not-found when the node 404s the row', async () => {
-    spy.mockRejectedValue(new ApiError(404, 'Transaction not found'));
+    spy.mockRejectedValue(
+      new ApiError(404, 'transaction not found', undefined, 'transaction_not_found'),
+    );
     render(<TransactionDetailPage />);
     expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
-      'Transaction not found',
+      'Transaktion nicht gefunden',
     );
+  });
+
+  it('shows generic error when 404 is account not_found, not tx-missing', async () => {
+    spy.mockRejectedValue(new ApiError(404, 'Unknown account address', undefined, 'not_found'));
+    render(<TransactionDetailPage />);
+    expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
+      'Transaktion konnte nicht geladen werden',
+    );
+    expect(screen.queryByText('Transaktion nicht gefunden')).not.toBeInTheDocument();
   });
 
   it('shows the generic error state on a non-404 failure', async () => {
     spy.mockRejectedValue(new ApiError(500, 'Database error'));
     render(<TransactionDetailPage />);
     expect(await screen.findByTestId('tx-detail-missing')).toHaveTextContent(
-      'Could not load transaction',
+      'Transaktion konnte nicht geladen werden',
     );
   });
 });
@@ -179,7 +313,7 @@ describe('TransactionDetailPage — explorer link', () => {
   });
 
   it('links the txid to the configured block explorer', async () => {
-    vi.stubEnv('NEXT_PUBLIC_EXPLORER_URL', 'https://zkcoins.space');
+    vi.stubEnv('NEXT_PUBLIC_EXPLORER_URL', 'https://zkcoins.space/');
     vi.resetModules();
     const { default: FreshPage } = await import('@/app/tx/[id]/page');
     const freshApi = (await import('@/lib/api/client')).api;
@@ -188,7 +322,6 @@ describe('TransactionDetailPage — explorer link', () => {
     net.setState({ usernameDomain: 'dev.zkcoins.app' });
     store.setState({
       account: ALICE,
-      balance: 10_000,
       isLoading: false,
       isLocked: false,
       hasStoredWallet: false,
@@ -198,7 +331,7 @@ describe('TransactionDetailPage — explorer link', () => {
     });
     vi.spyOn(freshApi, 'getTransaction').mockResolvedValue({
       ...MINT,
-      direction: 'send',
+      kind: 'send',
       status: 'confirmed',
       txid: 'ab'.repeat(32),
     });

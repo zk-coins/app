@@ -20,7 +20,7 @@ export const UNLOCK_RESET_CONFIRM =
 
 /**
  * Surface message when `onReset` throws. The caller's reset chain
- * (deleteWallet → deleteCredential → resetAuth) is mostly idempotent,
+ * (deleteCredential → resetAuth → deleteWallet) is mostly idempotent,
  * but a partial failure can leave IDB in a half-wiped state — telling
  * the user to reload is the safest recovery path.
  *
@@ -66,8 +66,14 @@ export function UnlockScreen({
     setError(null);
     try {
       await onUnlockPassword(password);
-    } catch {
-      setError('Incorrect password');
+    } catch (err) {
+      if (err instanceof Error && err.name === 'IncompatibleWalletError') {
+        setError(
+          `${err.message} Use “Forgot password? Reset wallet”, then restore with your 12-word seed.`,
+        );
+      } else {
+        setError('Incorrect password');
+      }
     } finally {
       setUnlocking(false);
     }
@@ -80,6 +86,12 @@ export function UnlockScreen({
       const result = await authenticatePasskey(credentialId ?? undefined);
       await onUnlockPrf(result.prfOutput);
     } catch (err) {
+      if (err instanceof Error && err.name === 'IncompatibleWalletError') {
+        setError(
+          `${err.message} Use “Forgot password? Reset wallet”, then restore with your 12-word seed.`,
+        );
+        return;
+      }
       const cancelled =
         err instanceof Error && (err.name === 'NotAllowedError' || err.name === 'AbortError');
       setError(cancelled ? 'Authentication cancelled.' : 'Failed to unlock wallet');
@@ -89,7 +101,9 @@ export function UnlockScreen({
   }, [credentialId, onUnlockPrf]);
 
   const handleReset = useCallback(async () => {
+    /* v8 ignore start -- handleReset is invoked only by a click on a button rendered after this client component mounts in a browser realm; the SSR guard and its return cannot run in that realm. */
     if (typeof window === 'undefined') return;
+    /* v8 ignore stop */
     if (!window.confirm(UNLOCK_RESET_CONFIRM)) {
       // User backed out — clear any previous "Incorrect password" /
       // "Reset failed" banner so the screen is back to its idle state.

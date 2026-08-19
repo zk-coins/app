@@ -1,16 +1,17 @@
+/**
+ * v1 API adapter — info, idempotency, capabilities mapping, fail-closed paths.
+ */
+
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   ApiError,
   JobFailedError,
+  V1ApiError,
   api,
+  isAccountNotFoundError,
   newIdempotencyKey,
-  buildMintMessage,
-  BalanceResponseSchema,
-  OwnerBalanceResponseSchema,
-  type OwnerBalanceResponse,
+  capabilitiesFromV1Features,
 } from '@/lib/api/client';
-import { KNOWN_SERVER_ERRORS } from '@/lib/api/errorMessages';
-import { InfoResponseSchema } from '@zkcoins/sdk';
 import { useNetworkStore } from '@/stores/network';
 
 const mockFetch = vi.fn();
@@ -19,15 +20,19 @@ const originalFetch = globalThis.fetch;
 beforeEach(() => {
   globalThis.fetch = mockFetch;
   mockFetch.mockReset();
-  useNetworkStore.setState({ apiUrl: 'https://test-api.zkcoins.app' });
+  useNetworkStore.setState({
+    apiUrl: 'https://test-api.zkcoins.app',
+    network: 'regtest',
+    infoError: null,
+    infoLoaded: true,
+  });
 });
 
 afterEach(() => {
   globalThis.fetch = originalFetch;
-  vi.useRealTimers();
 });
 
-function mockJsonResponse<T>(data: T, status = 200, headers: Record<string, string> = {}): void {
+function mockJsonResponse(data: unknown, status = 200, headers: Record<string, string> = {}): void {
   mockFetch.mockResolvedValueOnce({
     ok: status >= 200 && status < 300,
     status,
@@ -35,25 +40,6 @@ function mockJsonResponse<T>(data: T, status = 200, headers: Record<string, stri
     text: () => Promise.resolve(JSON.stringify(data)),
     headers: new Headers(headers),
   });
-}
-
-interface JobAccepted {
-  job_id: string;
-  status: string;
-}
-interface JobStatus {
-  job_id?: string;
-  kind?: string;
-  status: string;
-  phase: string;
-  proof_id?: number;
-  result?: {
-    success?: boolean;
-    proof_id?: number;
-    account_state_hash?: string;
-    output_coins_root?: string;
-  };
-  error?: string;
 }
 
 describe('newIdempotencyKey', () => {
@@ -67,745 +53,210 @@ describe('newIdempotencyKey', () => {
   });
 });
 
-describe('buildMintMessage byte layout', () => {
-  const PUBKEY = '02' + 'ab'.repeat(32); // 33 bytes, 66 hex chars
-
-  it('concatenates creator_pubkey ‖ name ‖ decimals ‖ amount_le ‖ ts_le', () => {
-    const bytes = buildMintMessage({
-      creatorPubkey: PUBKEY,
-      name: 'AB', // 2 UTF-8 bytes
-      decimals: 8,
-      amount: 1,
-      timestamp: 0,
+describe('capabilitiesFromV1Features', () => {
+  it('maps closed v1 feature strings', () => {
+    expect(capabilitiesFromV1Features(['wallet', 'explorer'])).toEqual({
+      address_list: true,
+      username_claim: true,
+      lnurl: false,
+      multi_asset: true,
     });
-    // 33 (pubkey) + 2 (name) + 1 (decimals) + 8 (amount) + 8 (ts) = 52
-    expect(bytes.length).toBe(52);
-    // decimals byte sits right after the 33-byte pubkey + 2-byte name.
-    expect(bytes[35]).toBe(8);
-    // amount LE64: 1 → 0x01 at offset 36, rest zero.
-    expect(bytes[36]).toBe(1);
-    expect(bytes[37]).toBe(0);
   });
 
-  it('throws on a non-33-byte creator pubkey', () => {
-    expect(() =>
-      buildMintMessage({ creatorPubkey: 'aa', name: 'x', decimals: 0, amount: 1, timestamp: 0 }),
-    ).toThrow(/33-byte/);
-  });
-
-  it('throws on out-of-range decimals', () => {
-    expect(() =>
-      buildMintMessage({
-        creatorPubkey: PUBKEY,
-        name: 'x',
-        decimals: 999,
-        amount: 1,
-        timestamp: 0,
-      }),
-    ).toThrow(/decimals/);
-  });
-
-  it('throws on odd-length hex', () => {
-    expect(() =>
-      buildMintMessage({
-        creatorPubkey: PUBKEY.slice(0, 65),
-        name: 'x',
-        decimals: 0,
-        amount: 1,
-        timestamp: 0,
-      }),
-    ).toThrow();
-  });
-
-  it('throws on even-length but non-hex characters', () => {
-    expect(() =>
-      buildMintMessage({
-        creatorPubkey: 'gg'.repeat(33),
-        name: 'x',
-        decimals: 0,
-        amount: 1,
-        timestamp: 0,
-      }),
-    ).toThrow(/invalid hex/);
-  });
-
-  it('throws on an amount beyond u64', () => {
-    expect(() =>
-      buildMintMessage({
-        creatorPubkey: PUBKEY,
-        name: 'x',
-        decimals: 0,
-        amount: Number.MAX_SAFE_INTEGER * 1e6,
-        timestamp: 0,
-      }),
-    ).toThrow();
-  });
-});
-
-describe('api.mintJob', () => {
-  it('POSTs /api/jobs/mint with the creator-signed body + Idempotency-Key header', async () => {
-    mockJsonResponse<JobAccepted>({ job_id: 'job-1', status: 'queued' }, 202);
-    const accepted = await api.mintJob(
-      {
-        creator_pubkey: '02' + 'aa'.repeat(32),
-        name: 'Coin',
-        decimals: 2,
-        amount: 1000,
-        next_public_key: '02' + 'bb'.repeat(32),
-        signature: 'sig',
-        timestamp: 1700000000,
-      },
-      'idem-1',
-    );
-    const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe('https://test-api.zkcoins.app/api/jobs/mint');
-    expect(init.method).toBe('POST');
-    expect((init.headers as Record<string, string>)['Idempotency-Key']).toBe('idem-1');
-    const body = JSON.parse(init.body);
-    expect(body.creator_pubkey).toBe('02' + 'aa'.repeat(32));
-    expect(body.name).toBe('Coin');
-    expect(accepted.job_id).toBe('job-1');
-  });
-});
-
-describe('api.sendJob', () => {
-  it('POSTs /api/jobs/send with asset_id + Idempotency-Key', async () => {
-    mockJsonResponse<JobAccepted>({ job_id: 'send-admit', status: 'queued' }, 202);
-    const accepted = await api.sendJob(
-      {
-        account_address: 'aa'.repeat(32),
-        recipient: 'bb'.repeat(32),
-        amount: 1000,
-        asset_id: 'cc'.repeat(32),
-        public_key: 'pk',
-        next_public_key: 'npk',
-        signature: 'sig',
-        timestamp: 1700000000,
-      },
-      'idem-send-1',
-    );
-    const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe('https://test-api.zkcoins.app/api/jobs/send');
-    expect(JSON.parse(init.body).asset_id).toBe('cc'.repeat(32));
-    expect(accepted.job_id).toBe('send-admit');
-  });
-});
-
-describe('api.createCoin (lifecycle)', () => {
-  const PARAMS = {
-    account_address: 'aa'.repeat(32),
-    name: 'MyCoin',
-    decimals: 2,
-    amount: 1000,
-    xpriv: 'xprv_test',
-  };
-
-  it('signs the mint, admits, commits, and polls to completed', async () => {
-    // 1. mint admit
-    mockJsonResponse<JobAccepted>({ job_id: 'mint-1', status: 'queued' }, 202);
-    // 2. poll → awaiting_signature with ash/ocr (node #195 shape)
-    mockJsonResponse<JobStatus>({
-      job_id: 'mint-1',
-      kind: 'mint',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      proof_id: 7,
-      result: { account_state_hash: 'abc', output_coins_root: 'def' },
-    });
-    // 3. commit accept
-    mockJsonResponse({ status: 'broadcasting' });
-    // 4. poll → completed
-    mockJsonResponse<JobStatus>({
-      job_id: 'mint-1',
-      kind: 'mint',
-      status: 'completed',
-      phase: 'completed',
-      result: { success: true, proof_id: 7 },
-    });
-
-    const phases: string[] = [];
-    const terminal = await api.createCoin(PARAMS, { onPhase: (s) => phases.push(s.phase) });
-    expect(terminal.status).toBe('completed');
-
-    const mintCall = mockFetch.mock.calls.find(([u]) => String(u).endsWith('/api/jobs/mint'));
-    const mintBody = JSON.parse(mintCall![1].body);
-    expect(mintBody.name).toBe('MyCoin');
-    expect(mintBody.decimals).toBe(2);
-    expect(typeof mintBody.signature).toBe('string');
-    expect(typeof mintBody.creator_pubkey).toBe('string');
-
-    const commitCall = mockFetch.mock.calls.find(([u]) => String(u).includes('/commit'));
-    expect(JSON.parse(commitCall![1].body).proof_id).toBe(7);
-    expect(phases).toContain('awaiting_signature');
-  });
-
-  it('throws JobFailedError when the mint job fails', async () => {
-    mockJsonResponse<JobAccepted>({ job_id: 'mint-2', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'mint-2',
-      kind: 'mint',
-      status: 'failed',
-      phase: 'failed',
-      error: 'mint exploded',
-    });
-    const err = await api.createCoin(PARAMS).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(JobFailedError);
-    expect((err as JobFailedError).serverError).toBe('mint exploded');
-  });
-
-  it('throws ApiError on a non-2xx admit', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 422,
-      text: () => Promise.resolve(JSON.stringify({ error: 'bad name' })),
-      headers: new Headers(),
-    });
-    await expect(api.createCoin(PARAMS)).rejects.toThrow(ApiError);
-  });
-
-  it('hard-fails when awaiting_signature carries no ash/ocr', async () => {
-    mockJsonResponse<JobAccepted>({ job_id: 'mint-3', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'mint-3',
-      kind: 'mint',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      proof_id: 1,
-    });
-    const err = await api.createCoin(PARAMS).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(JobFailedError);
-    expect((err as JobFailedError).serverError).toContain('account_state_hash');
-    expect(mockFetch.mock.calls.some(([u]) => String(u).includes('/commit'))).toBe(false);
-  });
-
-  it('throws when awaiting_signature carries no proof_id', async () => {
-    mockJsonResponse<JobAccepted>({ job_id: 'mint-4', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'mint-4',
-      kind: 'mint',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      result: { account_state_hash: 'a', output_coins_root: 'b' },
-    });
-    await expect(api.createCoin(PARAMS)).rejects.toThrow(/did not carry a proof_id/);
-  });
-
-  it('throws when the mint completes before commit', async () => {
-    mockJsonResponse<JobAccepted>({ job_id: 'mint-5', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'mint-5',
-      kind: 'mint',
-      status: 'completed',
-      phase: 'completed',
-      result: { success: true, proof_id: 1 },
-    });
-    await expect(api.createCoin(PARAMS)).rejects.toThrow(/before commit/);
-  });
-});
-
-describe('api.send (lifecycle)', () => {
-  const ASSET = 'cc'.repeat(32);
-  const SEND_PARAMS = {
-    account_address: 'aa'.repeat(32),
-    recipient: 'bb'.repeat(32),
-    amount: 1000,
-    asset_id: ASSET,
-    xpriv: 'xprv_test',
-  };
-
-  function mockOwner(over: Partial<OwnerBalanceResponse> = {}): void {
-    mockJsonResponse<OwnerBalanceResponse>({
-      address: 'aa'.repeat(32),
-      assets: [{ asset_id: ASSET, balance: 50_000, num_sends: 2 }],
-      ...over,
-    });
-  }
-
-  it('hydrates the index from summed num_sends, signs, admits, commits, polls', async () => {
-    mockOwner(); // num_sends total = 2 → prev pubkey set
-    mockJsonResponse<JobAccepted>({ job_id: 'send-1', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'send-1',
-      kind: 'send',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      proof_id: 99,
-      result: { account_state_hash: 'abc', output_coins_root: 'def' },
-    });
-    mockJsonResponse({ status: 'broadcasting' });
-    mockJsonResponse<JobStatus>({
-      job_id: 'send-1',
-      kind: 'send',
-      status: 'completed',
-      phase: 'completed',
-      result: { success: true, proof_id: 99 },
-    });
-
-    const result = await api.send(SEND_PARAMS);
-    expect(result.status).toBe('completed');
-
-    const sendCall = mockFetch.mock.calls.find(([u]) => String(u).endsWith('/api/jobs/send'));
-    const sendBody = JSON.parse(sendCall![1].body);
-    expect(sendBody.asset_id).toBe(ASSET);
-    expect(sendBody.amount).toBe(1000);
-    expect(sendBody.prev_commitment_pubkey).toBeDefined();
-    expect(typeof sendBody.signature).toBe('string');
-  });
-
-  it('omits prev_commitment_pubkey when the wallet has never sent', async () => {
-    mockOwner({ assets: [{ asset_id: ASSET, balance: 50_000, num_sends: 0 }] });
-    mockJsonResponse<JobAccepted>({ job_id: 'send-2', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'send-2',
-      kind: 'send',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      proof_id: 1,
-      result: { account_state_hash: 'a', output_coins_root: 'b' },
-    });
-    mockJsonResponse({ status: 'broadcasting' });
-    mockJsonResponse<JobStatus>({
-      job_id: 'send-2',
-      kind: 'send',
-      status: 'completed',
-      phase: 'completed',
-      result: { success: true, proof_id: 1 },
-    });
-
-    await api.send(SEND_PARAMS);
-    const sendBody = JSON.parse(
-      mockFetch.mock.calls.find(([u]) => String(u).endsWith('/api/jobs/send'))![1].body,
-    );
-    expect(sendBody.prev_commitment_pubkey).toBeUndefined();
-  });
-
-  it('refuses to send more than the asset balance', async () => {
-    mockOwner({ assets: [{ asset_id: ASSET, balance: 500, num_sends: 0 }] });
-    const err = await api.send(SEND_PARAMS).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(ApiError);
-    expect((err as ApiError).serverError).toBe('Insufficient funds');
-    // No admit was attempted.
-    expect(mockFetch.mock.calls.some(([u]) => String(u).endsWith('/api/jobs/send'))).toBe(false);
-  });
-
-  it('treats a not-held asset as zero balance', async () => {
-    mockOwner({ assets: [] });
-    await expect(api.send(SEND_PARAMS)).rejects.toThrow(ApiError);
-  });
-
-  it('hard-fails when ash/ocr are missing', async () => {
-    mockOwner({ assets: [{ asset_id: ASSET, balance: 50_000, num_sends: 0 }] });
-    mockJsonResponse<JobAccepted>({ job_id: 'send-3', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'send-3',
-      kind: 'send',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      proof_id: 5,
-    });
-    const err = await api.send(SEND_PARAMS).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(JobFailedError);
-    expect((err as JobFailedError).serverError).toContain('account_state_hash');
-  });
-
-  it('throws when awaiting_signature carries no proof_id', async () => {
-    mockOwner({ assets: [{ asset_id: ASSET, balance: 50_000, num_sends: 0 }] });
-    mockJsonResponse<JobAccepted>({ job_id: 'send-4', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'send-4',
-      kind: 'send',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      result: { account_state_hash: 'a', output_coins_root: 'b' },
-    });
-    await expect(api.send(SEND_PARAMS)).rejects.toThrow(/did not carry a proof_id/);
-  });
-
-  it('throws JobFailedError when the send job fails during proving', async () => {
-    mockOwner({ assets: [{ asset_id: ASSET, balance: 50_000, num_sends: 0 }] });
-    mockJsonResponse<JobAccepted>({ job_id: 'send-5', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'send-5',
-      kind: 'send',
-      status: 'failed',
-      phase: 'failed',
-      error: 'prove failed',
-    });
-    await expect(api.send(SEND_PARAMS)).rejects.toThrow(/prove failed/);
-  });
-
-  it('throws when the send completes before commit', async () => {
-    mockOwner({ assets: [{ asset_id: ASSET, balance: 50_000, num_sends: 0 }] });
-    mockJsonResponse<JobAccepted>({ job_id: 'send-6', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'send-6',
-      kind: 'send',
-      status: 'completed',
-      phase: 'completed',
-      result: { success: true, proof_id: 1 },
-    });
-    await expect(api.send(SEND_PARAMS)).rejects.toThrow(/before commit/);
-  });
-});
-
-describe('api.walletBalance (single-asset, native)', () => {
-  it('GETs /api/balance?address= via the SDK single-arg balance', async () => {
-    mockJsonResponse({ balance: 100_000, num_sends: 3 });
-    const res = await api.walletBalance('aa'.repeat(32));
-    const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe(`https://test-api.zkcoins.app/api/balance?address=${'aa'.repeat(32)}`);
-    expect(res.balance).toBe(100_000);
-    expect(res.num_sends).toBe(3);
-  });
-});
-
-describe('api.mint (faucet self-mint)', () => {
-  const PARAMS = { account_address: 'aa'.repeat(32), xpriv: 'xprv_test' };
-
-  it('runs the creator-signed two-phase mint with a generated FAUCET asset name', async () => {
-    // Same lifecycle as `api.createCoin` — `api.mint` delegates to it.
-    mockJsonResponse<JobAccepted>({ job_id: 'mint-fc', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'mint-fc',
-      kind: 'mint',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      proof_id: 9,
-      result: { account_state_hash: 'abc', output_coins_root: 'def' },
-    });
-    mockJsonResponse({ status: 'broadcasting' });
-    mockJsonResponse<JobStatus>({
-      job_id: 'mint-fc',
-      kind: 'mint',
-      status: 'completed',
-      phase: 'completed',
-      result: { success: true, proof_id: 9 },
-    });
-
-    const job = await api.mint(PARAMS, 10_000);
-    expect(job.status).toBe('completed');
-
-    const admit = mockFetch.mock.calls.find(([u]) => String(u).endsWith('/api/jobs/mint'));
-    expect(admit).toBeDefined();
-    const body = JSON.parse(admit![1].body);
-    // The old server-mediated `{account_address, amount}` faucet body is
-    // gone — the node 422s it ("missing field creator_pubkey"). The faucet
-    // is now a creator-signed self-mint of a uniquely-named asset.
-    expect(body.account_address).toBeUndefined();
-    expect(body.name).toMatch(/^FAUCET-\d+$/);
-    expect(body.decimals).toBe(0);
-    expect(body.amount).toBe(10_000);
-    expect(typeof body.creator_pubkey).toBe('string');
-    expect(typeof body.signature).toBe('string');
-    expect((admit![1].headers as Record<string, string>)['Idempotency-Key']).toBeTruthy();
-
-    const commitCall = mockFetch.mock.calls.find(([u]) => String(u).includes('/commit'));
-    expect(JSON.parse(commitCall![1].body).proof_id).toBe(9);
-  });
-
-  it('throws JobFailedError when the faucet mint fails', async () => {
-    mockJsonResponse<JobAccepted>({ job_id: 'mint-bad', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'mint-bad',
-      kind: 'mint',
-      status: 'failed',
-      phase: 'failed',
-      error: 'faucet drained',
-    });
-    await expect(api.mint(PARAMS)).rejects.toThrow(/faucet drained/);
-  });
-});
-
-describe('api.walletSend (single-asset lifecycle)', () => {
-  const SEND_PARAMS = {
-    account_address: 'aa'.repeat(32),
-    recipient: 'bb'.repeat(32),
-    amount: 1000,
-    xpriv: 'xprv_test',
-  };
-
-  it('hydrates the index from single-asset num_sends, signs (no asset_id), commits, polls', async () => {
-    mockJsonResponse({ balance: 50_000, num_sends: 2 }); // client().balance(address)
-    mockJsonResponse<JobAccepted>({ job_id: 'wsend-1', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'wsend-1',
-      kind: 'send',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      proof_id: 7,
-      result: { account_state_hash: 'abc', output_coins_root: 'def' },
-    });
-    mockJsonResponse({ status: 'broadcasting' });
-    mockJsonResponse<JobStatus>({
-      job_id: 'wsend-1',
-      kind: 'send',
-      status: 'completed',
-      phase: 'completed',
-      result: { success: true, proof_id: 7 },
-    });
-
-    const result = await api.walletSend(SEND_PARAMS);
-    expect(result.status).toBe('completed');
-
-    const sendCall = mockFetch.mock.calls.find(([u]) => String(u).endsWith('/api/jobs/send'));
-    const sendBody = JSON.parse(sendCall![1].body);
-    // Single-asset wire shape carries NO asset_id.
-    expect(sendBody.asset_id).toBeUndefined();
-    expect(sendBody.amount).toBe(1000);
-    expect(sendBody.prev_commitment_pubkey).toBeDefined(); // num_sends=2 → prev set
-    expect(typeof sendBody.signature).toBe('string');
-  });
-
-  it('omits prev_commitment_pubkey when the wallet has never sent', async () => {
-    mockJsonResponse({ balance: 50_000, num_sends: 0 });
-    mockJsonResponse<JobAccepted>({ job_id: 'wsend-2', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'wsend-2',
-      kind: 'send',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      proof_id: 1,
-      result: { account_state_hash: 'a', output_coins_root: 'b' },
-    });
-    mockJsonResponse({ status: 'broadcasting' });
-    mockJsonResponse<JobStatus>({
-      job_id: 'wsend-2',
-      kind: 'send',
-      status: 'completed',
-      phase: 'completed',
-      result: { success: true, proof_id: 1 },
-    });
-    await api.walletSend(SEND_PARAMS);
-    const sendBody = JSON.parse(
-      mockFetch.mock.calls.find(([u]) => String(u).endsWith('/api/jobs/send'))![1].body,
-    );
-    expect(sendBody.prev_commitment_pubkey).toBeUndefined();
-  });
-
-  it('hard-fails when ash/ocr are missing', async () => {
-    mockJsonResponse({ balance: 50_000, num_sends: 0 });
-    mockJsonResponse<JobAccepted>({ job_id: 'wsend-3', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'wsend-3',
-      kind: 'send',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      proof_id: 5,
-    });
-    const err = await api.walletSend(SEND_PARAMS).catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(JobFailedError);
-    expect((err as JobFailedError).serverError).toContain('account_state_hash');
-  });
-
-  it('throws when awaiting_signature carries no proof_id', async () => {
-    mockJsonResponse({ balance: 50_000, num_sends: 0 });
-    mockJsonResponse<JobAccepted>({ job_id: 'wsend-4', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'wsend-4',
-      kind: 'send',
-      status: 'awaiting_signature',
-      phase: 'awaiting_signature',
-      result: { account_state_hash: 'a', output_coins_root: 'b' },
-    });
-    await expect(api.walletSend(SEND_PARAMS)).rejects.toThrow(/did not carry a proof_id/);
-  });
-
-  it('throws JobFailedError when the send completes before commit', async () => {
-    mockJsonResponse({ balance: 50_000, num_sends: 0 });
-    mockJsonResponse<JobAccepted>({ job_id: 'wsend-5', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'wsend-5',
-      kind: 'send',
-      status: 'completed',
-      phase: 'completed',
-      result: { success: true, proof_id: 1 },
-    });
-    await expect(api.walletSend(SEND_PARAMS)).rejects.toThrow(/before commit/);
-  });
-
-  it('throws JobFailedError when the send job fails during proving', async () => {
-    mockJsonResponse({ balance: 50_000, num_sends: 0 });
-    mockJsonResponse<JobAccepted>({ job_id: 'wsend-6', status: 'queued' }, 202);
-    mockJsonResponse<JobStatus>({
-      job_id: 'wsend-6',
-      kind: 'send',
-      status: 'failed',
-      phase: 'failed',
-      error: 'prove failed',
-    });
-    await expect(api.walletSend(SEND_PARAMS)).rejects.toThrow(/prove failed/);
-  });
-});
-
-describe('api.waitForJob retry backoff', () => {
-  it('honours the Retry-After header floor before re-polling', async () => {
-    vi.useFakeTimers();
-    mockJsonResponse<JobStatus>(
-      { job_id: 'w-1', kind: 'mint', status: 'proving', phase: 'proving' },
-      200,
-      { 'retry-after': '2' },
-    );
-    mockJsonResponse<JobStatus>({
-      job_id: 'w-1',
-      kind: 'mint',
-      status: 'completed',
-      phase: 'completed',
-      result: { success: true },
-    });
-
-    const promise = api.waitForJob('w-1', new Set(['completed', 'failed', 'cancelled']));
-    await vi.advanceTimersByTimeAsync(2_000);
-    const job = await promise;
-    expect(job.status).toBe('completed');
-    expect(mockFetch).toHaveBeenCalledTimes(2);
-  });
-
-  it('ignores a malformed Retry-After and falls back to the poll floor', async () => {
-    vi.useFakeTimers();
-    mockJsonResponse<JobStatus>(
-      { job_id: 'w-2', kind: 'mint', status: 'proving', phase: 'proving' },
-      200,
-      { 'retry-after': 'not-a-number' },
-    );
-    mockJsonResponse<JobStatus>({
-      job_id: 'w-2',
-      kind: 'mint',
-      status: 'completed',
-      phase: 'completed',
-    });
-
-    const promise = api.waitForJob('w-2', new Set(['completed', 'failed', 'cancelled']));
-    await vi.advanceTimersByTimeAsync(1_500);
-    expect((await promise).status).toBe('completed');
-  });
-
-  it('throws JobFailedError on a cancelled job', async () => {
-    mockJsonResponse<JobStatus>({
-      job_id: 'w-3',
-      kind: 'mint',
-      status: 'cancelled',
-      phase: 'cancelled',
-    });
-    await expect(api.waitForJob('w-3', new Set(['completed']))).rejects.toThrow(/cancelled/);
-  });
-});
-
-describe('api.getJob', () => {
-  it('returns the parsed job status', async () => {
-    mockJsonResponse<JobStatus>({ job_id: 'g-1', kind: 'send', status: 'queued', phase: 'queued' });
-    const job = await api.getJob('g-1');
-    expect(job.status).toBe('queued');
-    expect(mockFetch).toHaveBeenCalledWith(
-      'https://test-api.zkcoins.app/api/jobs/g-1',
-      expect.any(Object),
-    );
-  });
-});
-
-describe('api.commitJob', () => {
-  it('POSTs the commit body and tolerates a partial accept envelope', async () => {
-    mockJsonResponse({ status: 'broadcasting' });
-    await api.commitJob('c-1', { proof_id: 1, public_key: 'pk', signature: 'sig', message: 'msg' });
-    const [url, init] = mockFetch.mock.calls[0];
-    expect(url).toBe('https://test-api.zkcoins.app/api/jobs/c-1/commit');
-    expect(JSON.parse(init.body).proof_id).toBe(1);
-  });
-});
-
-describe('api.balance (per-asset)', () => {
-  it('GETs /api/balance with address + asset_id query params', async () => {
-    mockJsonResponse({ balance: 42000, num_sends: 0 });
-    const result = await api.balance('myaddr', 'asset123');
-    const [url] = mockFetch.mock.calls[0];
-    expect(url).toBe('https://test-api.zkcoins.app/api/balance?address=myaddr&asset_id=asset123');
-    expect(result.balance).toBe(42000);
-    expect(() => BalanceResponseSchema.parse(result)).not.toThrow();
-  });
-
-  it('throws ApiError on a server error', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 422,
-      text: () => Promise.resolve(JSON.stringify({ error: 'asset_id required' })),
-      headers: new Headers(),
-    });
-    const err = await api.balance('a', 'b').catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(ApiError);
-    expect((err as ApiError).serverError).toBe('asset_id required');
-  });
-});
-
-describe('api.ownerBalances (portfolio)', () => {
-  it('GETs /api/balance/:address and parses the portfolio', async () => {
-    mockJsonResponse<OwnerBalanceResponse>({
-      address: 'addr',
-      assets: [{ asset_id: 'x'.repeat(64), name: 'X', decimals: 0, balance: 5, num_sends: 1 }],
-    });
-    const res = await api.ownerBalances('addr');
-    expect(mockFetch.mock.calls[0][0]).toBe('https://test-api.zkcoins.app/api/balance/addr');
-    expect(res.assets).toHaveLength(1);
-    expect(() => OwnerBalanceResponseSchema.parse(res)).not.toThrow();
-  });
-
-  it('parses an empty portfolio for an unobserved address', async () => {
-    mockJsonResponse<OwnerBalanceResponse>({ address: 'unseen', assets: [] });
-    const res = await api.ownerBalances('unseen');
-    expect(res.assets).toEqual([]);
-  });
-
-  it('throws ApiError when the node errors', async () => {
-    mockFetch.mockResolvedValueOnce({
-      ok: false,
-      status: 500,
-      text: () => Promise.resolve('down'),
-      headers: new Headers(),
-    });
-    await expect(api.ownerBalances('a')).rejects.toThrow(ApiError);
+  it('is multi-asset even with empty features', () => {
+    expect(capabilitiesFromV1Features([]).multi_asset).toBe(true);
   });
 });
 
 describe('api.info', () => {
-  it('GETs /api/info and parses the response', async () => {
-    mockJsonResponse({ network: 'Mutinynet', username_domain: 'local.zkcoins.test' });
-    const result = await api.info();
-    expect(result.network).toBe('Mutinynet');
-    expect(() => InfoResponseSchema.parse(result)).not.toThrow();
+  it('GETs /v1/info (not /v1/info)', async () => {
+    mockJsonResponse({
+      network: 'regtest',
+      protocol_version: 'v1',
+      features: ['wallet'],
+    });
+    const info = await api.info();
+    expect(mockFetch.mock.calls[0]![0]).toBe('https://test-api.zkcoins.app/v1/info');
+    expect(info.network).toBe('regtest');
+    expect(info.capabilities?.username_claim).toBe(true);
   });
-});
 
-describe('ApiError contract (lockstep round-trip)', () => {
-  it.each(KNOWN_SERVER_ERRORS)(
-    'produces ApiError.serverError === %j for the matching server response',
-    async (errString) => {
-      mockFetch.mockResolvedValueOnce({
-        ok: false,
-        status: 422,
-        text: () => Promise.resolve(JSON.stringify({ error: errString })),
-        headers: new Headers(),
-      });
-      const err = await api.ownerBalances('a').catch((e: unknown) => e);
-      expect(err).toBeInstanceOf(ApiError);
-      expect((err as ApiError).serverError).toBe(errString);
-    },
-  );
-
-  it('preserves the raw body when not JSON', async () => {
+  it('maps V1ApiError to ApiError', async () => {
     mockFetch.mockResolvedValueOnce({
       ok: false,
-      status: 502,
-      text: () => Promise.resolve('Bad Gateway'),
+      status: 500,
+      text: () => Promise.resolve(JSON.stringify({ error: 'internal_error', message: 'boom' })),
       headers: new Headers(),
     });
-    const err = await api.ownerBalances('a').catch((e: unknown) => e);
-    expect((err as ApiError).serverError).toBe('Bad Gateway');
+    await expect(api.info()).rejects.toBeInstanceOf(ApiError);
   });
 });
 
-describe('api url from store', () => {
-  it('uses apiUrl from network store', async () => {
-    useNetworkStore.setState({ apiUrl: 'https://custom-api.example.com' });
-    mockJsonResponse<OwnerBalanceResponse>({ address: 'a', assets: [] });
-    await api.ownerBalances('a');
-    expect(mockFetch.mock.calls[0][0]).toBe('https://custom-api.example.com/api/balance/a');
+describe('api without resolved network', () => {
+  it('refuses send when network is unset (no silent assumption)', async () => {
+    useNetworkStore.setState({ network: '' });
+    await expect(
+      api.send({
+        account_address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+        recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+        amount: '1',
+        asset_id: 'aa'.repeat(32),
+        mnemonic:
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+        nkCommit: '00'.repeat(32),
+        accountIndex: 0,
+        delivery: {
+          type: 'invoice',
+          invoice: {
+            amount: '1',
+            recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+            asset_id: 'aa'.repeat(32),
+            pk0: 'bb'.repeat(32),
+            nk_commit: 'cc'.repeat(32),
+            ivpk: 'dd'.repeat(32),
+            op_pubkey: 'ee'.repeat(32),
+            relays: ['wss://r.example'],
+            addr_sig: '11'.repeat(64),
+            sig: '22'.repeat(64),
+          },
+        },
+        input_coins: ['ff'.repeat(32)],
+      }),
+    ).rejects.toThrow(/network not resolved/);
+  });
+});
+
+describe('ApiError / JobFailedError shape', () => {
+  it('ApiError carries status and serverError', () => {
+    const e = new ApiError(422, 'Insufficient funds', '{}');
+    expect(e.status).toBe(422);
+    expect(e.serverError).toBe('Insufficient funds');
+    expect(e).toBeInstanceOf(Error);
+  });
+
+  it('JobFailedError carries jobId', () => {
+    const e = new JobFailedError('j1', 'failed', 'prove failed');
+    expect(e.jobId).toBe('j1');
+    expect(e.serverError).toBe('prove failed');
+  });
+});
+
+describe('name endpoints refuse closed surface gaps', () => {
+  it('resolveUsername is not a legacy route — 501', async () => {
+    await expect(api.resolveUsername('alice')).rejects.toMatchObject({ status: 501 });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('claimUsername is not a legacy route — 501', async () => {
+    await expect(
+      api.claimUsername({
+        username: 'alice',
+        address: 'zk1test',
+        mnemonic:
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+      }),
+    ).rejects.toMatchObject({ status: 501 });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('isAccountNotFoundError', () => {
+  it('is true only for a typed 404 carrying the generic not_found machine code', () => {
+    expect(isAccountNotFoundError(new ApiError(404, 'not_found', undefined, 'not_found'))).toBe(
+      true,
+    );
+    expect(isAccountNotFoundError(new V1ApiError(404, 'not_found', 'missing'))).toBe(true);
+    // A 404 without the not_found machine code (e.g. a different resource's
+    // 404, or one relayed without a code) must NOT be treated as
+    // "account does not exist".
+    expect(isAccountNotFoundError(new ApiError(404, 'not_found'))).toBe(false);
+    expect(isAccountNotFoundError(new V1ApiError(404, 'job_not_found', 'missing'))).toBe(false);
+    expect(isAccountNotFoundError(new ApiError(500, 'boom'))).toBe(false);
+    expect(isAccountNotFoundError(new ApiError(401, 'unauthorized'))).toBe(false);
+    expect(isAccountNotFoundError(new Error('network'))).toBe(false);
+    expect(isAccountNotFoundError(new TypeError('fetch failed'))).toBe(false);
+  });
+});
+
+describe('api.createCoin account-state fail-loud', () => {
+  it('does not POST /v1/tx when account-state read fails auth', async () => {
+    // openOwnershipPullSession → first fetch returns 401
+    mockFetch.mockResolvedValueOnce({
+      ok: false,
+      status: 401,
+      text: () =>
+        Promise.resolve(JSON.stringify({ error: 'unauthorized', message: 'chan_bind mismatch' })),
+      headers: new Headers(),
+    });
+
+    await expect(
+      api.createCoin({
+        account_address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+        name: 'Test',
+        decimals: 0,
+        amount: '100',
+        mnemonic:
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+        nkCommit: '00'.repeat(32),
+        accountIndex: 0,
+      }),
+    ).rejects.toBeTruthy();
+
+    // No successful transition submit — at most the failed pull, never a mint body.
+    const postTx = mockFetch.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && String(c[0]).includes('/v1/tx'),
+    );
+    expect(postTx).toHaveLength(0);
+  });
+});
+
+describe('read paths refuse invented empty wallets', () => {
+  it('ownerBalances is 501 not an empty assets list', async () => {
+    await expect(api.ownerBalances('zk1test')).rejects.toMatchObject({ status: 501 });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('walletBalance is 501 not balance:0', async () => {
+    await expect(
+      api.walletBalance({
+        address: 'zk1test',
+        mnemonic:
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+        nkCommit: '00'.repeat(32),
+      }),
+    ).rejects.toMatchObject({ status: 501 });
+    expect(mockFetch).not.toHaveBeenCalled();
+  });
+
+  it('send with empty input_coins is 501 (no network hop)', async () => {
+    await expect(
+      api.send({
+        account_address: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+        recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+        amount: '1',
+        asset_id: 'aa'.repeat(32),
+        mnemonic:
+          'abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon about',
+        nkCommit: '00'.repeat(32),
+        accountIndex: 0,
+        delivery: {
+          type: 'invoice',
+          invoice: {
+            amount: '1',
+            recipient: 'zk1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq',
+            asset_id: 'aa'.repeat(32),
+            pk0: 'bb'.repeat(32),
+            nk_commit: 'cc'.repeat(32),
+            ivpk: 'dd'.repeat(32),
+            op_pubkey: 'ee'.repeat(32),
+            relays: ['wss://r.example'],
+            addr_sig: '11'.repeat(64),
+            sig: '22'.repeat(64),
+          },
+        },
+        input_coins: [],
+      }),
+    ).rejects.toMatchObject({ status: 501 });
+    expect(mockFetch).not.toHaveBeenCalled();
   });
 });

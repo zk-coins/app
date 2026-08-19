@@ -1,105 +1,215 @@
 'use client';
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect, useRef } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations } from 'next-intl';
 import { ArrowLeft, Check, CircleDollarSign, Wallet } from 'lucide-react';
 import { AppShell } from '@/components/AppShell';
 import { useWalletStore } from '@/stores/wallet';
-import { ApiError, JobFailedError, api, type JobStatus } from '@/lib/api/client';
+import { useNetworkStore } from '@/stores/network';
+import {
+  ApiError,
+  JobFailedError,
+  api,
+  isCanonicalIssuanceAmount,
+  parseIssuanceDecimals,
+  type JobStatus,
+} from '@/lib/api/client';
 import { userMessageFor } from '@/lib/api/errorMessages';
-import { formatAssetAmount } from '@/lib/format';
+import { formatAssetAmountString } from '@/lib/format';
 import { useFeatures } from '@/lib/features';
+import { useCapabilities } from '@/stores/capabilities';
 
-const MAX_DECIMALS = 18;
+function createLockKey(address: string): string {
+  return `zkcoins.create.lock.${address}`;
+}
+
+/** Fail-closed: storage read error → treat as locked. */
+function readCreateLock(address: string): boolean {
+  try {
+    return localStorage.getItem(createLockKey(address)) === '1';
+  } catch {
+    return true;
+  }
+}
+
+/** Fail-closed: returns false when already locked or when storage access fails; caller must keep React state locked. */
+function writeCreateLock(address: string): boolean {
+  try {
+    /* v8 ignore next -- already-locked is a TOCTOU duplicate of the create() readCreateLock guard */
+    if (localStorage.getItem(createLockKey(address)) === '1') {
+      return false; // already locked — do not start a second mint
+    }
+    localStorage.setItem(createLockKey(address), '1');
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function clearCreateLock(address: string): void {
+  try {
+    localStorage.removeItem(createLockKey(address));
+  } catch {
+    // ignore clear failures
+  }
+}
 
 export default function CreateCoinPage() {
   const router = useRouter();
   const t = useTranslations('createCoin');
   const tErrors = useTranslations('errors');
   const account = useWalletStore((s) => s.account);
-  const { MULTI_ASSET: multiAssetRuntime } = useFeatures();
+  const infoError = useNetworkStore((s) => s.infoError);
+  const { MULTI_ASSET: multiAssetRuntime, loaded } = useFeatures();
+
+  useEffect(() => {
+    void useCapabilities.getState().fetch();
+  }, []);
 
   // Runtime gate: a capability-adaptive bundle (build flag ON) talking to a
   // single-asset node has no create-coin flow — redirect home, mirroring the
-  // `!account` redirect below.
+  // `!account` redirect below. Wait for capabilities so fail-closed defaults
+  // do not bounce before /v1/info lands. Do not redirect on infoError: fail-closed
+  // multi_asset:false after a failed GET /v1/info is not "feature missing".
   useEffect(() => {
-    if (!multiAssetRuntime && typeof window !== 'undefined') {
+    if (
+      loaded &&
+      !multiAssetRuntime &&
+      !infoError &&
+      /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+      typeof window !== 'undefined'
+    ) {
       router.replace('/');
     }
-  }, [multiAssetRuntime, router]);
+  }, [loaded, multiAssetRuntime, infoError, router]);
 
   // Redirect to home (which handles unlock) if no account in memory.
   useEffect(() => {
-    if (!account && typeof window !== 'undefined') {
-      const id = setTimeout(() => {
-        if (!useWalletStore.getState().account) router.replace('/');
-      }, 100);
-      return () => clearTimeout(id);
-    }
+    if (account) return;
+    /* v8 ignore next -- This useEffect runs only after this client component mounts in a browser realm. */
+    if (typeof window === 'undefined') return;
+    useWalletStore.getState().restoreUnlockedSession();
+    if (useWalletStore.getState().account) return;
+    const id = setTimeout(() => {
+      if (!useWalletStore.getState().account) router.replace('/');
+    }, 100);
+    return () => clearTimeout(id);
   }, [account, router]);
 
   const [name, setName] = useState('');
   const [decimals, setDecimals] = useState('0');
   const [amount, setAmount] = useState('');
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(() =>
+    account ? readCreateLock(account.address) : false,
+  );
   const [phase, setPhase] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [success, setSuccess] = useState<{ name: string; amount: number; decimals: number } | null>(
+  const [success, setSuccess] = useState<{ name: string; amount: string; decimals: number } | null>(
     null,
   );
+  const mintInFlight = useRef(false);
+
+  // Restore remount lock from localStorage (survives Back navigation).
+  useEffect(() => {
+    if (!account) return;
+    const lockKey = createLockKey(account.address);
+    if (readCreateLock(account.address)) {
+      setCreating(true);
+    }
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key !== lockKey) return;
+      if (event.newValue === '1') {
+        setCreating(true);
+        return;
+      }
+      // Another tab cleared the lock. Do not unlock this tab mid-mint.
+      if (mintInFlight.current) return;
+      setCreating(false);
+      mintInFlight.current = false;
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [account]);
 
   const create = useCallback(async () => {
+    /* v8 ignore next -- The form and its submit callback unmount synchronously whenever account becomes null. */
     if (!account) return;
+    if (mintInFlight.current || creating || readCreateLock(account.address)) return;
     const trimmedName = name.trim();
     if (!trimmedName) {
       setError(t('errInvalidName'));
       return;
     }
-    const dec = Number(decimals);
-    if (!Number.isInteger(dec) || dec < 0 || dec > MAX_DECIMALS) {
-      setError(t('errInvalidDecimals'));
-      return;
-    }
-    const amt = Number(amount);
-    if (!Number.isInteger(amt) || amt <= 0) {
+    const trimmedAmount = amount.trim();
+    if (!trimmedAmount) {
       setError(t('errInvalidAmount'));
       return;
     }
-    if (!account.xpriv) {
-      setError(t('errInvalidName'));
+    if (!isCanonicalIssuanceAmount(trimmedAmount)) {
+      setError(t('errInvalidAmount'));
+      return;
+    }
+    const dec = parseIssuanceDecimals(decimals);
+    if (dec === null) {
+      setError(t('errInvalidDecimals'));
+      return;
+    }
+    if (!account.mnemonic || !account.nkCommit) {
+      setError(t('errMissingSigningMaterial'));
       return;
     }
 
     setCreating(true);
     setPhase(null);
     setError(null);
+    let keepCreatingLocked = false;
+    if (!writeCreateLock(account.address)) {
+      keepCreatingLocked = true;
+      setError(t('errUnexpected'));
+      mintInFlight.current = false;
+      return;
+    }
+    mintInFlight.current = true;
     try {
       await api.createCoin(
         {
           account_address: account.address,
           name: trimmedName,
           decimals: dec,
-          amount: amt,
-          xpriv: account.xpriv,
+          amount: trimmedAmount,
+          mnemonic: account.mnemonic,
+          nkCommit: account.nkCommit,
+          accountIndex: 0,
         },
-        { onPhase: (job: JobStatus) => setPhase(job.phase) },
+        { onPhase: (job: JobStatus) => setPhase(job.phase ?? job.status ?? null) },
       );
-      setSuccess({ name: trimmedName, amount: amt, decimals: dec });
+      clearCreateLock(account.address);
+      setSuccess({ name: trimmedName, amount: trimmedAmount, decimals: dec });
     } catch (err) {
+      const isProvenPreAdmit = err instanceof ApiError && !(err instanceof JobFailedError);
+      const isDefiniteTerminalJob =
+        err instanceof JobFailedError && (err.status === 'failed' || err.status === 'cancelled');
+      if (!isProvenPreAdmit && !isDefiniteTerminalJob) {
+        keepCreatingLocked = true;
+      }
       if (err instanceof ApiError || err instanceof JobFailedError) {
         setError(userMessageFor(err, tErrors));
       } else if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError(t('errInvalidAmount'));
+        setError(t('errUnexpected'));
       }
     } finally {
-      setCreating(false);
+      if (!keepCreatingLocked) {
+        clearCreateLock(account.address);
+        setCreating(false);
+        mintInFlight.current = false;
+      }
       setPhase(null);
     }
-  }, [account, name, decimals, amount, t, tErrors]);
+  }, [account, name, decimals, amount, creating, t, tErrors]);
 
   if (!account) {
     return (
@@ -129,7 +239,7 @@ export default function CreateCoinPage() {
           </h1>
           <p className="mt-2 text-[14px] text-ink2">
             {t('successBody', {
-              amount: formatAssetAmount(success.amount, success.decimals),
+              amount: formatAssetAmountString(success.amount, success.decimals),
               name: success.name,
             })}
           </p>
@@ -231,7 +341,11 @@ export default function CreateCoinPage() {
             type="text"
             inputMode="numeric"
             value={amount}
-            onChange={(e) => setAmount(e.target.value.replace(/[^0-9]/g, ''))}
+            onChange={(e) => {
+              const digitsOnly = e.target.value.replace(/[^0-9]/g, '');
+              const normalized = digitsOnly.replace(/^0+(?=\d)/, '');
+              setAmount(normalized);
+            }}
             spellCheck={false}
             autoComplete="off"
             placeholder={t('amountPlaceholder')}
